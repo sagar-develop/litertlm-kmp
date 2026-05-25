@@ -1,3 +1,7 @@
+/*
+ * Copyright (C) 2026 Sagar Gupta
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
 package com.sagar.aicore.di
 
 import me.tatarka.inject.annotations.Scope
@@ -5,7 +9,7 @@ import me.tatarka.inject.annotations.Scope
 /**
  * Singleton-per-AppComponent scope.
  *
- * kotlin-inject does NOT share instances across the DI graph by default — every
+ * kotlin-inject does NOT share instances across the DI graph by default â€” every
  * constructor-injection consumer of `EmbeddingEngine` etc. would otherwise get
  * its own fresh `MediaPipeEmbeddingEngine`. With `@AppScope` on both the
  * component and the heavy engine classes, kotlin-inject caches one instance per

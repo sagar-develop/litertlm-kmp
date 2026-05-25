@@ -1,13 +1,18 @@
+/*
+ * Copyright (C) 2026 Sagar Gupta
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
 package com.sagar.aicore
 
 /**
- * Typed catalog of downloadable model files. Replaces the loose
- * URL/filename string constants previously held in
- * `SetupViewModel` so the [EngineRegistry], setup flow, and model
- * management UI all read from one source of truth.
+ * Typed catalog of downloadable model files. Consumers wire this so the
+ * [EngineRegistry], their setup flow, and any management UI all read from
+ * one source of truth â€” without scattering URL/filename string constants
+ * across the codebase.
  *
- * In Phase 1 backed by an in-code static list; eventually backed by a
- * Supabase Storage row once the backend ships.
+ * The built-in [InMemoryModelCatalog] is a sample implementation; for
+ * production, back it with whichever remote config service you use so new
+ * model versions ship without an APK update.
  */
 data class ModelDescriptor(
     val id: String,
@@ -28,7 +33,7 @@ enum class ModelFormat {
 }
 
 enum class ModelRole {
-    /** Primary on-device LLM for quiz + chat. Exactly one active descriptor per RAM tier has this role. */
+    /** Primary on-device LLM. Exactly one active descriptor per RAM tier has this role. */
     LLM_PRIMARY,
     /** Embedding model for RAG retrieval. */
     EMBEDDING,

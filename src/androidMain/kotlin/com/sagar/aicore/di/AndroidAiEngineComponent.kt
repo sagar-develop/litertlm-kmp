@@ -1,3 +1,7 @@
+/*
+ * Copyright (C) 2026 Sagar Gupta
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
 package com.sagar.aicore.di
 
 import com.sagar.aicore.AndroidHardwareProvider
@@ -22,7 +26,7 @@ import me.tatarka.inject.annotations.Provides
 interface AndroidAiEngineComponent : AiEngineComponent {
     // Production orchestrator + agents inject EngineRegistry directly and
     // read the active engine via `registry.active()`. This binding stays for
-    // any future consumer that injects LocalAiEngine — they get the
+    // any future consumer that injects LocalAiEngine â€” they get the
     // currently-active engine selected by the registry's RAM-tier + on-disk
     // policy.
     @Provides

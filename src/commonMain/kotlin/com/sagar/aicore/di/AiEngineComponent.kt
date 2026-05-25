@@ -1,3 +1,7 @@
+/*
+ * Copyright (C) 2026 Sagar Gupta
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
 package com.sagar.aicore.di
 
 import com.sagar.aicore.EmbeddingEngine
@@ -26,10 +30,10 @@ interface AiEngineComponent {
      */
     val engineRegistry: EngineRegistry
     /**
-     * Catalog of downloadable models. Single source of truth for what
-     * Setup can download — replaces the previously-hardcoded URL/filename
-     * constants in `SetupViewModel`. Phase 1 backed by [InMemoryModelCatalog];
-     * eventually Supabase-backed (see docs/plans/supabase-backend.md §5.1).
+     * Catalog of downloadable models. Single source of truth for what the
+     * consumer's setup flow can download. Defaults to [InMemoryModelCatalog]
+     * (a sample with placeholder URLs); production consumers bind their own
+     * implementation backed by a remote config / CDN.
      */
     val modelCatalog: ModelCatalog
 

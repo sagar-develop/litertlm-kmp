@@ -1,3 +1,7 @@
+/*
+ * Copyright (C) 2026 Sagar Gupta
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
 package com.sagar.aicore
 
 import kotlinx.serialization.json.Json
@@ -19,23 +23,23 @@ class ToolSchemaConverterTest {
     @Test
     fun emits_OpenAPI_function_shape_with_name_description_parameters() {
         val def = ToolSchema.Definition(
-            name = "submit_quiz_question",
-            description = "Submit one MCQ.",
+            name = "extract_event_details",
+            description = "Extract structured event details from a sentence.",
             parameters = listOf(
-                ToolParameter("question_text", ToolParameterType.StringT, "The question.", required = true),
-                ToolParameter("correct_answer_index", ToolParameterType.IntegerT, "0..3.", required = true),
+                ToolParameter("title", ToolParameterType.StringT, "Event title.", required = true),
+                ToolParameter("duration_minutes", ToolParameterType.IntegerT, "Length in minutes.", required = true),
             ),
         )
 
         val parsed = json.parseToJsonElement(def.toOpenApiJson()).jsonObject
 
-        assertEquals("submit_quiz_question", parsed["name"]?.jsonPrimitive?.content)
-        assertEquals("Submit one MCQ.", parsed["description"]?.jsonPrimitive?.content)
+        assertEquals("extract_event_details", parsed["name"]?.jsonPrimitive?.content)
+        assertEquals("Extract structured event details from a sentence.", parsed["description"]?.jsonPrimitive?.content)
         val params = parsed["parameters"]!!.jsonObject
         assertEquals("object", params["type"]!!.jsonPrimitive.content)
         val props = params["properties"]!!.jsonObject
-        assertTrue("question_text" in props)
-        assertTrue("correct_answer_index" in props)
+        assertTrue("title" in props)
+        assertTrue("duration_minutes" in props)
     }
 
     @Test

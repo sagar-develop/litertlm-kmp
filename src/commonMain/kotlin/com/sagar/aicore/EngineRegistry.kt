@@ -1,3 +1,7 @@
+/*
+ * Copyright (C) 2026 Sagar Gupta
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
 package com.sagar.aicore
 
 /**
@@ -8,7 +12,7 @@ package com.sagar.aicore
  *
  * `selectDefault()` applies an opinionated RAM-tier + on-disk-presence
  * policy and returns the best engine for the current device.
- * `fallbackChain()` returns engines in priority order — if
+ * `fallbackChain()` returns engines in priority order â€” if
  * `initializeEngine()` on the first returns `EngineState.Error`, the
  * caller can try the next.
  *
@@ -33,13 +37,13 @@ interface EngineRegistry {
      * [selectDefault] on first call if neither has run yet.
      *
      * Late-binding consumers (orchestrator + agents) read this on every
-     * inference call — that way the active engine can change after first
+     * inference call â€” that way the active engine can change after first
      * launch (Setup downloads a model the registry didn't know about at
      * DI time) without restarting the app.
      */
     fun active(): LocalAiEngine
     /**
-     * Replace the active engine — Setup calls this once the user-chosen
+     * Replace the active engine â€” Setup calls this once the user-chosen
      * model has been downloaded + `initializeEngine`'d, so subsequent
      * inference calls route to it. Also releases native resources on every
      * other engine.

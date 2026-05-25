@@ -1,3 +1,7 @@
+/*
+ * Copyright (C) 2026 Sagar Gupta
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
 package com.sagar.aicore
 
 import android.Manifest
@@ -26,7 +30,7 @@ import me.tatarka.inject.annotations.Inject
  * Caller must hold `RECORD_AUDIO`; emit [SpeechRecognizerState.NotAvailable]
  * if not granted so the UI can route to a permission request.
  *
- * The Android STT API is callback-based on the main looper — we marshal
+ * The Android STT API is callback-based on the main looper â€” we marshal
  * lifecycle calls to the main thread, then surface state via a
  * [MutableStateFlow] for the ViewModel to collect.
  */
@@ -47,7 +51,7 @@ class AndroidSpeechRecognizer(
             _state.value = SpeechRecognizerState.Listening
         }
         override fun onBeginningOfSpeech() { /* covered by Listening */ }
-        override fun onRmsChanged(rmsdB: Float) { /* level meter — Phase 8 polish */ }
+        override fun onRmsChanged(rmsdB: Float) { /* surface this if you want a level meter */ }
         override fun onBufferReceived(buffer: ByteArray?) { /* unused */ }
         override fun onEndOfSpeech() { /* covered by FinalResult */ }
 
@@ -79,7 +83,7 @@ class AndroidSpeechRecognizer(
             _state.value = SpeechRecognizerState.NotAvailable
             return
         }
-        // Skip isRecognitionAvailable() — under Android 11+ package
+        // Skip isRecognitionAvailable() â€” under Android 11+ package
         // visibility rules it can return false even when a recognizer is
         // present and `setRecognitionListener` works fine. If creation
         // fails, the listener surfaces ERROR_CLIENT and we report that.
@@ -93,9 +97,9 @@ class AndroidSpeechRecognizer(
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE, languageTag)
                 putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-                // Long-form clinical dictation: allow up to 30s of silence
-                // before auto-stop (default ~1s is too aggressive for doctors
-                // pausing to think between facts).
+                // Long-form voice capture: allow up to 5s of silence before
+                // auto-stop (default ~1s is too aggressive when the speaker
+                // pauses to think).
                 putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 5_000)
                 putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 5_000)
                 putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 1_000)

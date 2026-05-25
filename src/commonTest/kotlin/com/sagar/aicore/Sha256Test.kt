@@ -1,3 +1,7 @@
+/*
+ * Copyright (C) 2026 Sagar Gupta
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
 package com.sagar.aicore
 
 import okio.Buffer
@@ -6,10 +10,9 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
 
 /**
- * Phase 7.12 — sha256 validation in KtorModelManager. Tests cover the
- * streaming SHA-256 helper used by the model download flow. Direct file
- * I/O is not exercised here (commonTest is platform-agnostic); the
- * source-level test proves the streaming path is correct, and the
+ * Tests for the streaming SHA-256 helper used by the model download flow.
+ * Direct file I/O is not exercised here (commonTest is platform-agnostic);
+ * the source-level test proves the streaming path is correct, and the
  * `sha256OfFile` wrapper is a one-line `fileSystem.source(path)` adapter.
  */
 class Sha256Test {

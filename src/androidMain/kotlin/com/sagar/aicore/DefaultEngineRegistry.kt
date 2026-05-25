@@ -1,3 +1,7 @@
+/*
+ * Copyright (C) 2026 Sagar Gupta
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
 package com.sagar.aicore
 
 import com.sagar.aicore.di.AppScope
@@ -11,7 +15,7 @@ import me.tatarka.inject.annotations.Inject
  * [selectDefault] policy: pick the first engine whose `descriptor.minDeviceRamMb`
  * fits this device AND whose `consumes` format has a model file on disk; else
  * fall back to the last engine and let `initializeEngine` surface a clear error.
- * `releaseResources()` runs on every non-chosen engine — a no-op with one
+ * `releaseResources()` runs on every non-chosen engine â€” a no-op with one
  * engine, but the helper stays for future multi-engine cases.
  */
 @AppScope
@@ -51,11 +55,11 @@ class DefaultEngineRegistry(
         } ?: engines.last().also {
             Napier.w(tag = TAG) {
                 "selectDefault: no engine had ramFits && fileOnDisk; " +
-                    "falling back to ${it.descriptor.id} — initializeEngine will likely error"
+                    "falling back to ${it.descriptor.id} â€” initializeEngine will likely error"
             }
         }
         setActiveInternal(chosen, calledFrom = "selectDefault")
-        Napier.d(tag = TAG) { "selectDefault → ${chosen.descriptor.id} (totalRamMb=$totalRam)" }
+        Napier.d(tag = TAG) { "selectDefault â†’ ${chosen.descriptor.id} (totalRamMb=$totalRam)" }
         return chosen
     }
 
@@ -83,7 +87,7 @@ class DefaultEngineRegistry(
     }
 
     /**
-     * Free native handles on every engine NOT chosen. Idempotent —
+     * Free native handles on every engine NOT chosen. Idempotent â€”
      * [LocalAiEngine.releaseResources] is safe to call on an uninitialised
      * engine (it just nulls already-null references).
      */

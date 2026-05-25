@@ -1,3 +1,7 @@
+/*
+ * Copyright (C) 2026 Sagar Gupta
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
 package com.sagar.aicore
 
 import android.app.ActivityManager
@@ -18,12 +22,12 @@ import me.tatarka.inject.annotations.Inject
  * A device marketed as 8 GB can report 11+ GB. Running a 3.6 GB E4B model
  * on a device whose "extra" RAM is disk-backed kills latency.
  *
- * The math `MemTotal − SwapTotal` doesn't recover physical RAM cleanly
+ * The math `MemTotal âˆ’ SwapTotal` doesn't recover physical RAM cleanly
  * because Realme et al. inflate `MemTotal` AND maintain a separate
- * `SwapTotal` of similar size — the relationship is OEM-specific. Instead
+ * `SwapTotal` of similar size â€” the relationship is OEM-specific. Instead
  * we use the *presence* of a large swap as a signal that expansion is in
  * play, and cap the effective number below the E4B tier threshold so the
- * device falls to E2B. Devices without expansion (`SwapTotal ≤ 1 GB`,
+ * device falls to E2B. Devices without expansion (`SwapTotal â‰¤ 1 GB`,
  * which covers zram-only configurations) pass through unchanged.
  */
 @Inject
@@ -60,7 +64,7 @@ class AndroidHardwareProvider(
 
     /**
      * Reads `SwapTotal` from `/proc/meminfo` in kB. Returns 0 if the file
-     * can't be read or the field is missing — falls back to the kernel's
+     * can't be read or the field is missing â€” falls back to the kernel's
      * `MemTotal` (which on devices without RAM expansion is physical RAM
      * anyway).
      */

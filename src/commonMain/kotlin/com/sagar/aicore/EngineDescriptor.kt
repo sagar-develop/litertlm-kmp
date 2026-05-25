@@ -1,3 +1,7 @@
+/*
+ * Copyright (C) 2026 Sagar Gupta
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
 package com.sagar.aicore
 
 /**
@@ -7,7 +11,7 @@ package com.sagar.aicore
  * future UI surfaces that gate features on engine capabilities (e.g. only
  * show "attach image" when `supportsVision == true`).
  *
- * `id` is the stable string used in DI + persistence + analytics — keep it
+ * `id` is the stable string used in DI + persistence + analytics â€” keep it
  * unique per (engine implementation, model) tuple. `displayName` is for
  * human-facing surfaces only.
  */

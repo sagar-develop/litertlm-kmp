@@ -1,0 +1,45 @@
+# Gradle
+.gradle/
+build/
+out/
+**/build/
+**/out/
+local.properties
+gradle-app.setting
+!gradle-wrapper.jar
+!gradle/wrapper/gradle-wrapper.jar
+
+# Kotlin / KMP
+.kotlin/
+*.klib
+kotlin-js-store/
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.fleet/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs / scratch
+*.log
+*.hprof
+*.swp
+*.swo
+*~
+
+# Local config
+.env
+.env.local
+local.properties
+
+# Maven local publishing artifacts
+publishing/
+
+# Sample-app scratch (added later)
+sample-app/local.properties

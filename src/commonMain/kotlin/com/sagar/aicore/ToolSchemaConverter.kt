@@ -1,3 +1,7 @@
+/*
+ * Copyright (C) 2026 Sagar Gupta
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
 package com.sagar.aicore
 
 import kotlinx.serialization.json.Json
@@ -14,24 +18,24 @@ import kotlinx.serialization.json.put
  * Output shape (matches the OpenAI / Google function-calling convention):
  * ```json
  * {
- *   "name": "submit_quiz_question",
+ *   "name": "extract_event_details",
  *   "description": "...",
  *   "parameters": {
  *     "type": "object",
  *     "properties": {
- *       "question_text": {"type": "string", "description": "..."},
- *       "options": {"type": "array", "items": {"type": "string"}, "description": "..."},
- *       "correct_answer_index": {"type": "integer", "description": "..."}
+ *       "title": {"type": "string", "description": "..."},
+ *       "attendees": {"type": "array", "items": {"type": "string"}, "description": "..."},
+ *       "duration_minutes": {"type": "integer", "description": "..."}
  *     },
- *     "required": ["question_text", "options", "correct_answer_index"]
+ *     "required": ["title", "attendees", "duration_minutes"]
  *   }
  * }
  * ```
  *
- * Parameter names pass through verbatim — orchestrator code uses snake_case
- * to match the schema Gemma 4 sees (LiteRT-LM also accepts camelCase but
+ * Parameter names pass through verbatim. Prefer snake_case in your
+ * [ToolSchema.Definition] params â€” LiteRT-LM also accepts camelCase but
  * snake_case keeps round-trip with [EngineState.ToolCallEmitted.arguments]
- * cleaner).
+ * cleaner.
  */
 internal val ToolSchemaJson: Json = Json { prettyPrint = false }
 

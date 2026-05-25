@@ -1,3 +1,7 @@
+/*
+ * Copyright (C) 2026 Sagar Gupta
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
 package com.sagar.aicore
 
 import kotlinx.coroutines.flow.Flow
@@ -29,10 +33,9 @@ interface ModelManager {
      * Updates are emitted as [DownloadState].
      *
      * @param expectedSha256 Optional lowercase-hex SHA-256. When non-null,
-     * the downloaded file is verified after the atomic temp→final move;
+     * the downloaded file is verified after the atomic tempâ†’final move;
      * mismatch deletes the file and emits [DownloadState.Error]. Validation
-     * is inert when null (current default for all descriptors that
-     * predate Phase 7.12).
+     * is inert when null.
      */
     fun downloadModel(
         url: String,

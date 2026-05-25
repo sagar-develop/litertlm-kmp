@@ -1,3 +1,7 @@
+/*
+ * Copyright (C) 2026 Sagar Gupta
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
 package com.sagar.aicore
 
 import kotlinx.coroutines.flow.Flow
@@ -19,9 +23,9 @@ interface LocalAiEngine {
 data class AiEngineRequest(
     val formattedPrompt: String,
     /**
-     * Multimodal inputs. Empty for text-only prompts (today's quiz + chat
-     * paths). Engines that don't support a given [Attachment] subclass
-     * MUST ignore those entries — they do not fail the request.
+     * Multimodal inputs. Empty for text-only prompts. Engines that don't
+     * support a given [Attachment] subclass MUST ignore those entries â€”
+     * they do not fail the request.
      */
     val attachments: List<Attachment> = emptyList(),
     val temperature: Float = 0.7f,
@@ -64,7 +68,7 @@ sealed class Attachment {
  * `requireStructuredOutput = true`.
  *
  * Always describe tools as [Definition] from business-logic code
- * (orchestrator) — primitives only, no engine SDK types. Each
+ * (orchestrator) â€” primitives only, no engine SDK types. Each
  * [LocalAiEngine] implementation converts [Definition] to its native
  * tool representation internally. [OpenApi] is an escape hatch for
  * engines that consume raw OpenAPI JSON directly; not used by the
@@ -106,9 +110,9 @@ sealed class EngineState<out T> {
     /**
      * Emitted when the model invoked a tool via structured output rather
      * than streaming free text. Only engines with [EngineDescriptor.supportsTools]
-     * = true ever emit this. The chat path can ignore it (only consumes
-     * [TokenGenerated]); the quiz path consumes it to read the structured
-     * question.
+     * = true ever emit this. Free-text callers can ignore it (they only
+     * consume [TokenGenerated]); structured-output callers consume this to
+     * read the constrained payload.
      *
      * `arguments` keys reflect what the engine's tool-call surface returns
      * (LiteRT-LM converts camelCase Kotlin params to snake_case schema

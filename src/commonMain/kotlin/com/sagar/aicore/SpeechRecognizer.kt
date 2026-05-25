@@ -1,15 +1,20 @@
+/*
+ * Copyright (C) 2026 Sagar Gupta
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
 package com.sagar.aicore
 
 import kotlinx.coroutines.flow.Flow
 
 /**
  * Platform speech-to-text. Android wraps `android.speech.SpeechRecognizer`
- * (uses the system recognizer that ships with Google services). iOS/desktop
- * not wired yet — those phases provide their own `actual`.
+ * (uses the system recognizer that ships with Google services). iOS / other
+ * platforms provide their own `actual`.
  *
- * MedGemma is Gemma 3-based and does NOT have native audio, so dictation
- * uses platform STT and feeds the transcript text into the LLM as a prompt
- * (per the source plan revision noted in CLAUDE.md context).
+ * Useful when feeding voice input into a text-only LLM: capture transcript
+ * here, then pass the text into [LocalAiEngine.generateStream]. Gemma-family
+ * models on LiteRT-LM are text-only at this writing, so audio prompts must
+ * route through platform STT.
  */
 interface SpeechRecognizer {
     /** Hot flow of recognizer lifecycle + transcript events. Replays the latest state to new collectors. */

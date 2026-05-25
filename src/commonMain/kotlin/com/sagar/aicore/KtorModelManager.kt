@@ -1,3 +1,7 @@
+/*
+ * Copyright (C) 2026 Sagar Gupta
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
 package com.sagar.aicore
 
 import io.github.aakira.napier.Napier
@@ -127,7 +131,7 @@ class KtorModelManager(
                         fileSystem.delete(destinationPath)
                         emit(
                             DownloadState.Error(
-                                "Checksum mismatch — model file may be corrupt or tampered. " +
+                                "Checksum mismatch â€” model file may be corrupt or tampered. " +
                                     "The bad copy was deleted; please retry the download."
                             )
                         )
