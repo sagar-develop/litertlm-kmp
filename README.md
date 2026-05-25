@@ -30,28 +30,99 @@ The common module (`lib/src/commonMain`) carries the engine state machine, model
 
 ## Quickstart — adding the library to your app
 
-### Gradle
+> **Works with plain Android (non-KMP) apps.** Even though the library is published as a Kotlin Multiplatform artifact, the Gradle Module Metadata routes Android consumers directly to the `litertlm-kmp-android` AAR variant — you don't need to apply the `kotlinMultiplatform` plugin or restructure your project. A standard `com.android.application` module with Kotlin (and optionally Compose) is enough.
+
+### 1. Add JitPack to your repositories
+
+In your **root `settings.gradle.kts`**:
 
 ```kotlin
-// settings.gradle.kts
 dependencyResolutionManagement {
     repositories {
-        maven { url = uri("https://jitpack.io") }
-        mavenCentral()
         google()
+        mavenCentral()
+        maven { url = uri("https://jitpack.io") }
     }
 }
+```
 
-// build.gradle.kts (Android or KMP module)
+### 2. Add the dependency
+
+In your **app module's `build.gradle.kts`**:
+
+```kotlin
 dependencies {
     implementation("com.github.sagar-develop:litertlm-kmp:v0.2.2")
 }
 ```
 
-### Streaming chat (Android)
+### 3. Project requirements
+
+The library compiles against modern Android tooling:
+
+| | Required |
+|---|---|
+| `minSdk` | 24 (Android 7.0) |
+| `compileSdk` | 34 or higher |
+| Gradle | 8.0+ |
+| Android Gradle Plugin | 8.0+ |
+| Kotlin | 2.0+ (project must be on K2) |
+| `android.useAndroidX` | `true` in `gradle.properties` (default for new projects) |
+
+If your project predates these, upgrade your toolchain before adding the dependency.
+
+### 4. Manifest permissions
+
+The library declares `ACCESS_NETWORK_STATE` in its own manifest, which merges into your app — no action needed there.
+
+Your app's manifest needs `INTERNET` (you almost certainly already have it):
+
+```xml
+<uses-permission android:name="android.permission.INTERNET" />
+```
+
+If you use the optional `SpeechRecognizer` surface for voice input, also add:
+
+```xml
+<uses-permission android:name="android.permission.RECORD_AUDIO" />
+<queries>
+    <intent>
+        <action android:name="android.speech.RecognitionService" />
+    </intent>
+</queries>
+```
+
+### 5. ProGuard / R8
+
+No additional rules required. The library's public API is annotation-free at the consumer surface, and its native dependencies (LiteRT-LM, MediaPipe) ship their own consumer ProGuard rules via their AARs.
+
+## Wiring the engine in a plain Android app
+
+The library is DI-agnostic. The `sample-app/` module shows the **manual instantiation** path — simplest way to integrate from a vanilla Android project:
 
 ```kotlin
-val engine: LocalAiEngine = appComponent.localAiEngine
+import com.sagar.aicore.AndroidHardwareProvider
+import com.sagar.aicore.AndroidPlatformFolders
+import com.sagar.aicore.KtorModelManager
+import com.sagar.aicore.LiteRtLmLocalAiEngine
+import io.ktor.client.HttpClient
+
+class MyEngineHolder(context: Context) {
+    private val httpClient = HttpClient()
+    private val hardware = AndroidHardwareProvider(context.applicationContext)
+    private val folders = AndroidPlatformFolders(context.applicationContext)
+
+    val modelManager = KtorModelManager(httpClient, folders)
+    val engine = LiteRtLmLocalAiEngine(hardware)
+}
+```
+
+Hold one instance for the app lifetime (typically in your `Application` subclass or your existing DI graph). If you use Hilt, declare these as `@Singleton @Provides` bindings; if you use Koin, the equivalent `single { ... }`. If you use **kotlin-inject** (the library's own DI graph), see [`AiEngineComponent`](lib/src/commonMain/kotlin/com/sagar/aicore/di/AiEngineComponent.kt) and [`AndroidAiEngineComponent`](lib/src/androidMain/kotlin/com/sagar/aicore/di/AndroidAiEngineComponent.kt) for the ready-made interface.
+
+### Streaming chat
+
+```kotlin
+val engine = myEngineHolder.engine
 
 engine.initializeEngine(modelPath = "/data/data/your.app/files/gemma-4-E2B-it.litertlm")
 
@@ -99,16 +170,18 @@ engine.generateStream(
 ### Embedding for RAG
 
 ```kotlin
-val embeddings: EmbeddingEngine = appComponent.embeddingEngine
+import com.sagar.aicore.MediaPipeEmbeddingEngine
+
+val embeddings = MediaPipeEmbeddingEngine(context)
 val vector: FloatArray = embeddings.embed("Your document chunk here")
-// → 512-dim float vector ready for cosine similarity against an in-memory store
+// → float vector ready for cosine similarity against an in-memory store
 ```
 
 ### Model download with progress + SHA-256
 
 ```kotlin
-val manager: ModelManager = appComponent.modelManager
-manager.downloadModel(
+// `modelManager` from MyEngineHolder above
+modelManager.downloadModel(
     url = "https://your-cdn/gemma-4-E2B-it.litertlm",
     modelName = "gemma-4-E2B-it.litertlm",
     expectedSha256 = "...",  // optional, fails atomically on mismatch
@@ -121,6 +194,8 @@ manager.downloadModel(
     }
 }
 ```
+
+The sample-app's [`SampleViewModel`](sample-app/src/main/java/com/sagar/litertlmsample/llm/SampleViewModel.kt) shows the full real-world flow: download → init → generate → emit metrics. Read it end-to-end for a working reference.
 
 ## Running the sample app
 
