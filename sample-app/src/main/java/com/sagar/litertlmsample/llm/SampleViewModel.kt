@@ -39,6 +39,7 @@ data class ChatMessage(
     val role: Role,
     val text: String,
     val isStreaming: Boolean = false,
+    val id: Long,
 ) {
     enum class Role { User, Assistant }
 }
@@ -74,6 +75,8 @@ class SampleViewModel(app: Application) : ViewModel() {
     val descriptorDisplayName: String get() = engineHolder.descriptor.displayName
 
     private var currentGeneration: Job? = null
+    private var nextChatMessageId: Long = 0L
+    private fun newChatMessageId(): Long = ++nextChatMessageId
 
     init {
         metrics.start(viewModelScope)
@@ -132,8 +135,11 @@ class SampleViewModel(app: Application) : ViewModel() {
         val input = _chat.value.input.trim()
         if (input.isBlank() || _chat.value.isGenerating) return
 
-        val userMsg = ChatMessage(ChatMessage.Role.User, input)
-        val assistantMsg = ChatMessage(ChatMessage.Role.Assistant, "", isStreaming = true)
+        val userMsg = ChatMessage(ChatMessage.Role.User, input, id = newChatMessageId())
+        val assistantMsg = ChatMessage(
+            ChatMessage.Role.Assistant, "", isStreaming = true,
+            id = newChatMessageId(),
+        )
         _chat.update {
             it.copy(
                 messages = it.messages + userMsg + assistantMsg,

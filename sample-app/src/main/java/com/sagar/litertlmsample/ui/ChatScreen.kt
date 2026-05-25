@@ -43,9 +43,14 @@ fun ChatScreen(vm: SampleViewModel) {
     val chat by vm.chat.collectAsState()
     val listState = rememberLazyListState()
 
-    LaunchedEffect(chat.messages.size, chat.messages.lastOrNull()?.text?.length) {
+    // Auto-scroll to the newest message ONLY when a new message is added
+    // (count changes), not on every token. With reverseLayout=true below,
+    // index 0 is the newest message, pinned at the bottom of the layout —
+    // streaming tokens extend the bubble upward without needing per-token
+    // scroll calls.
+    LaunchedEffect(chat.messages.size) {
         if (chat.messages.isNotEmpty()) {
-            listState.animateScrollToItem(chat.messages.size - 1)
+            listState.animateScrollToItem(0)
         }
     }
 
@@ -62,11 +67,18 @@ fun ChatScreen(vm: SampleViewModel) {
             } else {
                 LazyColumn(
                     state = listState,
+                    reverseLayout = true,
                     modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 12.dp),
                 ) {
-                    items(chat.messages, key = { it.role.name + it.text.length.hashCode() + chat.messages.indexOf(it) }) { msg ->
+                    items(
+                        items = chat.messages.asReversed(),
+                        // Stable key per message — survives streaming text growth
+                        // so Compose doesn't tear down + rebuild the bubble on
+                        // every token, which was the source of the scroll jank.
+                        key = { it.id },
+                    ) { msg ->
                         MessageBubble(msg)
                     }
                 }
