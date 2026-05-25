@@ -19,6 +19,27 @@ Shipping a production on-device LLM on Android is significantly harder than the 
 
 This library solves all six. The bundled `sample-app/` demonstrates the entire flow with a live CPU & RAM metrics overlay so you can see exactly what running Gemma on-device looks like.
 
+## What the sample app demonstrates
+
+Two features, both running fully on-device — no network, no API key, no cloud bill.
+
+<table>
+  <tr>
+    <td width="50%" align="center"><b>Streaming chat</b></td>
+    <td width="50%" align="center"><b>Function calling</b></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/chat-streaming.png" alt="Streaming chat mid-generation"></td>
+    <td><img src="docs/screenshots/function-calling.png" alt="Function calling structured extraction"></td>
+  </tr>
+  <tr>
+    <td>Token-by-token streaming via <code>LocalAiEngine.generateStream(...)</code>. Live metrics show <b>~13 tok/s</b>, <b>CPU 50%</b> across 8 cores, <b>TTFT 1088ms</b>, <b>RAM 1.8 GB</b> for Gemma 4 E2B.</td>
+    <td>Typed Kotlin <code>ToolSchema.Definition</code> → OpenAPI JSON → LiteRT-LM constrains output → <b>parsed arguments</b> arrive as <code>EngineState.ToolCallEmitted</code>. Here: <code>{"title": "Project Apollo kickoff", "duration_minutes": 30.0}</code>.</td>
+  </tr>
+</table>
+
+Per-core CPU bars, RAM, tokens/sec, and time-to-first-token update at 4 Hz throughout. The CPU history line shows the workload's full lifecycle: idle → spike → sustained inference → idle.
+
 ## Platform support
 
 | Platform | Core engine | Hardware acceleration | Status |
@@ -143,6 +164,8 @@ engine.generateStream(
 
 ### Function calling (structured output)
 
+You define the schema once in Kotlin. The library converts it to the OpenAPI 3.0 JSON LiteRT-LM expects, asks the model to *call* the function rather than reply in free text, and surfaces the parsed arguments back as a `Map<String, Any?>`.
+
 ```kotlin
 val toolSchema = ToolSchema.Definition(
     name = "extract_event_details",
@@ -162,10 +185,23 @@ engine.generateStream(
 ).collect { state ->
     if (state is EngineState.ToolCallEmitted) {
         println("Extracted: ${state.arguments}")
-        // → {title=Project Apollo kickoff, duration_minutes=30}
+        // → {title=Project Apollo kickoff, duration_minutes=30.0}
     }
 }
 ```
+
+**How it works under the hood:**
+
+1. [`ToolSchemaConverter.toOpenApiJson()`](lib/src/commonMain/kotlin/com/sagar/aicore/ToolSchemaConverter.kt) walks your typed `Definition` and emits canonical OpenAPI 3.0 JSON (`{"name": "...", "parameters": {"type": "object", "properties": {...}, "required": [...]}}`).
+2. [`LiteRtLmLocalAiEngine.runStructured(...)`](lib/src/androidMain/kotlin/com/sagar/aicore/LiteRtLmLocalAiEngine.kt) registers the JSON as a LiteRT-LM `OpenApiTool` with `automaticToolCalling = false`, then sends the prompt with the system instruction `"you MUST call the tool"`.
+3. The model is constrained at the token level to emit a valid tool call rather than free text. Each call comes back via `message.toolCalls[]` as `(name, arguments: Map<String, Any?>)`.
+4. The library re-emits each call as `EngineState.ToolCallEmitted` for your consumer to read.
+
+A few gotchas worth knowing:
+
+- **Numeric types come back as `Double`.** JSON has no integer/float distinction at the wire level, so an `IntegerT` parameter still arrives as `Double`. Coerce with `(it as Number).toInt()`.
+- **Snake_case is preferred for param names.** LiteRT-LM also accepts camelCase, but snake_case round-trips cleaner with the JSON schema vocabulary.
+- **Arrays nest.** `ToolParameterType.ArrayT(ToolParameterType.StringT)` becomes `{"type": "array", "items": {"type": "string"}}` — see [`ToolSchemaConverterTest`](lib/src/commonTest/kotlin/com/sagar/aicore/ToolSchemaConverterTest.kt) for the round-trip cases.
 
 ### Embedding for RAG
 
@@ -250,11 +286,56 @@ adb shell am start -n com.sagar.litertlmsample/.MainActivity
 
 First launch shows the Setup screen → **Download & initialize**. The download happens once (5–15 min depending on your network) and persists in `/data/data/com.sagar.litertlmsample/files/models/`. Subsequent launches skip straight to the Ready state.
 
-### 3. What you'll see
+### 3. What you'll see — and how to verify both features
 
-- **Chat tab** — streaming responses from on-device Gemma 4. No network, no API key, no cloud bill.
-- **Function calling tab** — typed schema → OpenAPI JSON → structured extraction round-trip in real time.
-- **Live metrics overlay** — flowing CPU% history line, per-core utilization bars (your phone's big.LITTLE cores at work), RAM PSS, tokens/sec, time-to-first-token. Updates every 250 ms.
+The app opens on the **Setup screen** the first time. Tap **Download & initialize** — the model downloads once (5–15 min on first launch, ~zero on subsequent launches because the file persists). When the Setup screen finishes, two tabs appear.
+
+#### Chat tab — verify streaming works
+
+1. Type any prompt in the text field. Example: *"Explain RoPE positional encodings in three short paragraphs."*
+2. Tap **Send**.
+3. Within ~1 second the assistant bubble appears with an ellipsis placeholder.
+4. Tokens start flowing — the bubble fills in, sentence by sentence.
+
+What confirms it's working:
+
+- The metrics overlay header switches from **"Idle"** to **"⏺ Generating · N t/s"** where N is the current tokens-per-second.
+- The **CPU total** line spikes from idle baseline (~5%) up to 40–60% depending on your device.
+- The per-core bars saturate — most cores will be at high frequency utilization.
+- **TTFT** shows the time-to-first-token in ms (typical: 800–1500 ms for the first prompt, ~200–500 ms for follow-ups thanks to the XNNPACK warm cache).
+- **RAM** climbs to ~1.5–2.0 GB and stays there (Gemma 4 E2B's KV cache + weights are resident).
+- When generation finishes, the indicator returns to **"Idle"** and tokens/sec drops to 0.
+
+#### Function calling tab — verify structured output works
+
+1. The tab opens with a pre-filled prompt: *"Schedule a 30-minute kickoff for Project Apollo on Tuesday."*
+2. The schema preview shows the typed `ToolSchema.Definition`: a tool named `extract_event_details` with `title: string` and `duration_minutes: integer`.
+3. Tap **Run extraction**.
+4. After ~10–15 seconds (LiteRT-LM's structured-output path is a bit slower than free-text streaming because it constrains decoding at the token level), the **Extracted** box populates with the parsed JSON.
+
+Expected result for the default prompt:
+
+```json
+{
+  "duration_minutes": 30.0,
+  "title": "Project Apollo kickoff"
+}
+```
+
+Edit the prompt and tap Run again to test other inputs. The schema preview is read-only — to change parameters, edit `SampleViewModel.runFunctionCall()` in [the source](sample-app/src/main/java/com/sagar/litertlmsample/llm/SampleViewModel.kt).
+
+#### Live metrics overlay — what each panel means
+
+| Element | Source | What it tells you |
+|---|---|---|
+| **CPU total** line | `Process.getElapsedCpuTime()` deltas, normalized by core count | Process-wide CPU usage as average per-core (0–100%). Spikes during inference. |
+| **Per-core 8×** bars | `/sys/devices/system/cpu/cpuN/cpufreq/scaling_cur_freq` ÷ max freq | Each core's current frequency as a percentage of its silicon max. big.LITTLE asymmetry visible — performance cores climb higher than efficiency cores. |
+| **RAM** | `Debug.MemoryInfo.totalPss` | Process proportional set size in MB/GB. Gemma 4 E2B sits around 1.8 GB resident. |
+| **tok/s** | rolling 1-second window over `EngineState.TokenGenerated` emissions | Real-time generation throughput. Higher = faster. |
+| **TTFT** | `SystemClock.elapsedRealtime()` from request submission to first token | Latency from "user tapped send" to "first token rendered". Cold first prompt = ~1.5 s; warm follow-ups = sub-second. |
+| **Generating · N t/s** badge | derived from `EngineState.TokenGenerated` activity | Live indicator while inference is in flight. Goes away when the stream completes. |
+
+All updated at 4 Hz so the chart flows smoothly while inference is running.
 
 ## Architecture at a glance
 
