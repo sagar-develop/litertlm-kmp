@@ -4,96 +4,88 @@
  */
 package com.sagar.litertlmsample.metrics
 
+import android.os.Process
+import android.os.SystemClock
 import io.github.aakira.napier.Napier
 import java.io.File
 
 /**
- * Reads `/proc/stat` to compute system-wide CPU usage (aggregate + per-core).
+ * App-friendly CPU usage sampling. Two sources:
  *
- * `/proc/stat` exposes cumulative jiffies per CPU since boot:
- *   cpu  user nice system idle iowait irq softirq steal guest guest_nice
- *   cpu0 user nice system idle ...
- *   cpu1 ...
+ * 1. Aggregate process CPU — `Process.getElapsedCpuTime()` (CLOCK_PROCESS_CPUTIME_ID
+ *    under the hood). Returns total CPU-ms consumed by all threads in this
+ *    process; deltas over wall-clock time give "fraction of one core busy".
+ *    Divided by [numCores] to land on a 0-100% scale representing average
+ *    per-core busy across the whole process.
  *
- * Usage% over a window = 100 * (Δactive) / (Δactive + Δidle)
- * where active = user + nice + system + irq + softirq + steal
- *       idle   = idle + iowait
+ *    Works without any permission on every Android version. (Earlier
+ *    `/proc/stat` approach returned EACCES from app UID on Android 11+ —
+ *    SELinux blocks system-wide CPU stats for non-system apps.)
  *
- * /proc/stat is world-readable on Android — no permission needed for own-pid
- * or system aggregate.
+ * 2. Per-core frequency — `/sys/devices/system/cpu/cpuN/cpufreq/scaling_cur_freq`
+ *    against `cpuinfo_max_freq`. This is the cpufreq governor's currently-set
+ *    frequency divided by the silicon's max frequency. When cores ramp up
+ *    under load, the percentage climbs; idle cores throttle down. It's a
+ *    *frequency-utilization* proxy, not a true CPU% per core — but on
+ *    Android's interactive governor (the default) it tracks real load
+ *    closely enough to look right during inference and is the best signal
+ *    available without root.
  */
 class CpuMonitor {
 
-    private var lastTotal: CoreTimes? = null
-    private var lastPerCore: List<CoreTimes> = emptyList()
+    private val numCores: Int = Runtime.getRuntime().availableProcessors()
 
-    /** Take a sample. Returns null on the very first call (no delta yet). */
-    fun sample(): CpuSnapshot? = try {
-        val raw = File("/proc/stat").readLines()
-        val totalLine = raw.firstOrNull { it.startsWith("cpu ") }
-            ?: return null
-        val coreLines = raw.filter { it.matches(CORE_LINE) }
+    private val maxFreqKHzPerCore: List<Long> = (0 until numCores).map { core ->
+        readLongOrZero(File("/sys/devices/system/cpu/cpu$core/cpufreq/cpuinfo_max_freq"))
+    }
 
-        val current = totalLine.toCoreTimes()
-        val currentPerCore = coreLines.map { it.toCoreTimes() }
+    private var lastCpuMs: Long = -1L
+    private var lastWallMs: Long = -1L
 
-        val totalPrev = lastTotal
-        val perCorePrev = lastPerCore
+    fun sample(): CpuSnapshot? {
+        val nowCpu = Process.getElapsedCpuTime()
+        val nowWall = SystemClock.elapsedRealtime()
 
-        lastTotal = current
-        lastPerCore = currentPerCore
+        val prevCpu = lastCpuMs
+        val prevWall = lastWallMs
 
-        if (totalPrev == null || perCorePrev.size != currentPerCore.size) {
-            // First sample or core count changed — no delta yet.
-            null
-        } else {
-            CpuSnapshot(
-                totalUsagePct = current.usagePctSince(totalPrev),
-                perCoreUsagePct = currentPerCore.mapIndexed { i, c ->
-                    c.usagePctSince(perCorePrev[i])
-                },
+        lastCpuMs = nowCpu
+        lastWallMs = nowWall
+
+        // Per-core scaling-frequency utilization is independent of the
+        // wall-clock delta and can be sampled on the very first call too.
+        val perCore = (0 until numCores).map { core ->
+            val maxFreq = maxFreqKHzPerCore[core]
+            if (maxFreq <= 0L) return@map 0f
+            val curFreq = readLongOrZero(
+                File("/sys/devices/system/cpu/cpu$core/cpufreq/scaling_cur_freq")
             )
+            if (curFreq <= 0L) 0f
+            else (100f * curFreq / maxFreq).coerceIn(0f, 100f)
         }
-    } catch (t: Throwable) {
-        Napier.w(throwable = t, tag = "CpuMonitor") { "Failed to read /proc/stat" }
-        null
-    }
 
-    private data class CoreTimes(
-        val user: Long, val nice: Long, val system: Long,
-        val idle: Long, val iowait: Long, val irq: Long,
-        val softirq: Long, val steal: Long,
-    ) {
-        val active = user + nice + system + irq + softirq + steal
-        val idleAll = idle + iowait
-
-        fun usagePctSince(prev: CoreTimes): Float {
-            val deltaActive = (active - prev.active).coerceAtLeast(0)
-            val deltaIdle = (idleAll - prev.idleAll).coerceAtLeast(0)
-            val total = deltaActive + deltaIdle
-            return if (total == 0L) 0f else (100f * deltaActive / total).coerceIn(0f, 100f)
+        // Aggregate needs a previous sample to delta against.
+        if (prevWall <= 0L) {
+            return CpuSnapshot(totalUsagePct = 0f, perCoreUsagePct = perCore)
         }
-    }
 
-    private fun String.toCoreTimes(): CoreTimes {
-        val parts = trim().split(WHITESPACE)
-        // parts[0] is "cpu" or "cpuN"; parts[1..] are jiffy counts
-        return CoreTimes(
-            user = parts.getOrZero(1),
-            nice = parts.getOrZero(2),
-            system = parts.getOrZero(3),
-            idle = parts.getOrZero(4),
-            iowait = parts.getOrZero(5),
-            irq = parts.getOrZero(6),
-            softirq = parts.getOrZero(7),
-            steal = parts.getOrZero(8),
+        val deltaCpu = (nowCpu - prevCpu).coerceAtLeast(0L)
+        val deltaWall = (nowWall - prevWall).coerceAtLeast(1L)
+        // 100 * (deltaCpu / deltaWall) is the process's total CPU usage as a
+        // fraction of one core. Divide by numCores to land on 0-100% scale
+        // representing average per-core occupancy across the process.
+        val avgPerCore = (100f * deltaCpu / deltaWall / numCores).coerceIn(0f, 100f)
+
+        return CpuSnapshot(
+            totalUsagePct = avgPerCore,
+            perCoreUsagePct = perCore,
         )
     }
 
-    private fun List<String>.getOrZero(i: Int): Long = getOrNull(i)?.toLongOrNull() ?: 0L
-
-    companion object {
-        private val WHITESPACE = "\\s+".toRegex()
-        private val CORE_LINE = "^cpu\\d+\\s+.*".toRegex()
+    private fun readLongOrZero(file: File): Long = try {
+        file.readText().trim().toLong()
+    } catch (t: Throwable) {
+        Napier.v(tag = "CpuMonitor") { "Could not read ${file.path}: ${t.message}" }
+        0L
     }
 }

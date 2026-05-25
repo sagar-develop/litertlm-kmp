@@ -44,7 +44,7 @@ dependencyResolutionManagement {
 
 // build.gradle.kts (Android or KMP module)
 dependencies {
-    implementation("com.github.sagar-develop:litertlm-kmp:v0.2.0")
+    implementation("com.github.sagar-develop:litertlm-kmp:v0.2.1")
 }
 ```
 

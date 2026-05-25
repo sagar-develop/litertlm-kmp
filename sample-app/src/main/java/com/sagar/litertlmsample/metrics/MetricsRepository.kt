@@ -32,12 +32,14 @@ class MetricsRepository(
         if (job?.isActive == true) return
         job = scope.launch {
             while (isActive) {
-                val cpuSample = cpu.sample()
+                // Always publish a new snapshot — memory and token rate are
+                // useful even if the CPU sample is unavailable (e.g. the very
+                // first sample has no delta yet). Preserve the previous CPU
+                // value when the new sample is null.
+                val cpuSample = cpu.sample() ?: _snapshot.value.cpu
                 val memSample = memory.sample()
                 val tokSample = tokens.snapshot()
-                if (cpuSample != null) {
-                    _snapshot.value = MetricsSnapshot(cpuSample, memSample, tokSample)
-                }
+                _snapshot.value = MetricsSnapshot(cpuSample, memSample, tokSample)
                 delay(SAMPLE_INTERVAL_MS)
             }
         }
