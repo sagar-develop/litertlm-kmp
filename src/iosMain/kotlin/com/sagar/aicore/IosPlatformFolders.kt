@@ -4,6 +4,7 @@
  */
 package com.sagar.aicore
 
+import kotlinx.cinterop.ExperimentalForeignApi
 import me.tatarka.inject.annotations.Inject
 import okio.Path
 import okio.Path.Companion.toPath
@@ -11,6 +12,7 @@ import platform.Foundation.NSDocumentDirectory
 import platform.Foundation.NSFileManager
 import platform.Foundation.NSUserDomainMask
 
+@OptIn(ExperimentalForeignApi::class)
 @Inject
 class IosPlatformFolders : PlatformFolders {
     override val modelDir: Path

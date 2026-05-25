@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+        Required by AndroidNetworkProvider to inspect connectivity before
+        starting a multi-GB model download. Install-time grant; no runtime
+        prompt. Manifest-merged into consuming apps.
+    -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!--
+        SpeechRecognizer is OPTIONAL. Consumers that use voice input must
+        ALSO declare:
+            <uses-permission android:name="android.permission.RECORD_AUDIO" />
+            <queries>
+                <intent>
+                    <action android:name="android.speech.RecognitionService" />
+                </intent>
+            </queries>
+        These are NOT declared here because most consumers won't use the
+        SpeechRecognizer surface, and declaring RECORD_AUDIO unconditionally
+        would trigger a Play Store sensitive-permission review for them.
+    -->
+
+</manifest>

@@ -14,14 +14,17 @@ import okio.buffer
 /**
  * Streams a [Source] through okio's [HashingSource] to produce a
  * lowercase-hex SHA-256. Streaming via [okio.blackholeSink] keeps the
- * full input out of memory â€” critical for the ~2.6 GB Gemma 4 E2B
- * `.litertlm`. Split out from [sha256OfFile] so it can be unit-tested
- * against an in-memory [okio.Buffer] without a real [FileSystem].
+ * full input out of memory — critical for multi-GB model weights.
+ * Split out from [sha256OfFile] so it can be unit-tested against an
+ * in-memory [okio.Buffer] without a real [FileSystem].
  */
 internal fun sha256OfSource(source: Source): String {
     val hashing = HashingSource.sha256(source)
-    hashing.buffer().use { bs ->
+    val bs = hashing.buffer()
+    try {
         bs.readAll(blackholeSink())
+    } finally {
+        bs.close()
     }
     return hashing.hash.hex()
 }
