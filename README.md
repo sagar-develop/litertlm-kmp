@@ -73,7 +73,7 @@ In your **app module's `build.gradle.kts`**:
 
 ```kotlin
 dependencies {
-    implementation("com.github.sagar-develop:litertlm-kmp:v0.2.2")
+    implementation("com.github.sagar-develop:litertlm-kmp:v0.2.3")
 }
 ```
 

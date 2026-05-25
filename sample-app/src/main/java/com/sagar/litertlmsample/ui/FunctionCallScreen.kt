@@ -12,7 +12,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -29,9 +31,18 @@ import com.sagar.litertlmsample.llm.SampleViewModel
 @Composable
 fun FunctionCallScreen(vm: SampleViewModel) {
     val state by vm.functionCall.collectAsState()
+    val scroll = rememberScrollState()
+
+    // Auto-scroll to bottom when extraction completes so the result is visible
+    // without manual scrolling. Triggers when extractedJson populates.
+    androidx.compose.runtime.LaunchedEffect(state.extractedJson, state.isGenerating) {
+        if (state.extractedJson.isNotEmpty() || state.isGenerating) {
+            scroll.animateScrollTo(scroll.maxValue)
+        }
+    }
 
     Column(
-        Modifier.fillMaxSize().padding(16.dp),
+        Modifier.fillMaxSize().padding(16.dp).verticalScroll(scroll),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(
