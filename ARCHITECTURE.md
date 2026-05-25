@@ -5,11 +5,14 @@ This document explains how the modules in `litertlm-kmp` fit together, the desig
 ## Module layout
 
 ```
-src/
-├── commonMain/    ← shared engine state machine, contracts, ModelManager, ToolSchemaConverter
-├── androidMain/   ← LiteRT-LM JNI bindings, MediaPipe Text Embedder, OEM-aware HardwareProvider
-├── iosMain/       ← iOS PlatformFolders stub (full engine actuals land in v0.2)
-└── commonTest/    ← unit tests for SHA-256 streaming + ToolSchemaConverter shape
+litertlm-kmp/
+├── lib/                       ← the library; published artifact com.sagar:litertlm-kmp
+│   └── src/
+│       ├── commonMain/        ← engine interfaces, ModelManager, ToolSchemaConverter
+│       ├── androidMain/       ← LiteRT-LM JNI, MediaPipe Text Embedder, OEM-aware HardwareProvider
+│       ├── iosMain/           ← iOS PlatformFolders stub (full engine actuals — v0.3)
+│       └── commonTest/        ← unit tests for SHA-256 streaming + ToolSchemaConverter shape
+└── sample-app/                ← Compose Android demo; depends on :lib via project()
 ```
 
 ## The four core abstractions
@@ -73,7 +76,7 @@ When enabled, these features inflate `MemoryInfo.totalMem` as reported by `Activ
 
 The 1 GB swap threshold filters out normal Linux swap (typically a few hundred MB) from OEM-induced swap (always 4 GB+).
 
-This is the most important practical lesson in this library. If you're rolling your own on-device LLM stack and read nothing else, read [`AndroidHardwareProvider.kt`](src/androidMain/kotlin/com/sagar/aicore/AndroidHardwareProvider.kt).
+This is the most important practical lesson in this library. If you're rolling your own on-device LLM stack and read nothing else, read [`AndroidHardwareProvider`](lib/src/androidMain/kotlin/com/sagar/aicore/AndroidHardwareProvider.kt).
 
 ## Function-calling: `ToolSchemaConverter`
 

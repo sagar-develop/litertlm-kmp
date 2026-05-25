@@ -20,3 +20,6 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "litertlm-kmp"
+
+include(":lib")
+include(":sample-app")

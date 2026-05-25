@@ -8,7 +8,13 @@ plugins {
 }
 
 group = "com.sagar"
-version = "0.1.0"
+version = "0.2.0"
+
+// Keep the published artifact id stable as "litertlm-kmp" even though the
+// Gradle module is now ":lib" (sample-app is a sibling subproject). Without
+// this, KMP would publish as "lib" / "lib-android" / "lib-iosarm64", which
+// would break v0.1.0 consumers.
+base.archivesName.set("litertlm-kmp")
 
 kotlin {
     androidTarget {
@@ -70,6 +76,22 @@ dependencies {
     add("kspIosX64", libs.kotlin.inject.compiler)
     add("kspIosArm64", libs.kotlin.inject.compiler)
     add("kspIosSimulatorArm64", libs.kotlin.inject.compiler)
+}
+
+// Override KMP-default artifactIds so they stay aligned with "litertlm-kmp"
+// rather than the ":lib" Gradle module name. Wrapped in afterEvaluate so this
+// runs AFTER the KMP plugin sets its own artifactIds — otherwise KMP overwrites
+// our override and consumers see :lib-android instead of :litertlm-kmp-android.
+afterEvaluate {
+    publishing {
+        publications.withType<MavenPublication>().configureEach {
+            artifactId = when (name) {
+                "kotlinMultiplatform" -> "litertlm-kmp"
+                "androidRelease" -> "litertlm-kmp-android"
+                else -> "litertlm-kmp-${name.lowercase()}"
+            }
+        }
+    }
 }
 
 publishing {

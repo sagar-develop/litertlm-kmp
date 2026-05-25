@@ -1,0 +1,16 @@
+# Copy this file to local.properties and fill in your own values.
+# local.properties is gitignored — your URL stays out of the repo.
+#
+# See ../README.md → "Running the sample app" for the full HuggingFace →
+# Firebase Storage walkthrough.
+
+# Public URL pointing to a .litertlm file you've hosted (Firebase Storage,
+# Cloudflare R2, S3, GCS, etc.). Required.
+model.url=https://YOUR_HOST/path/to/gemma-4-E2B-it.litertlm
+
+# File name to save the model under on the device. Optional; default below.
+model.fileName=gemma-4-E2B-it.litertlm
+
+# Expected file size in bytes. Used for download-progress display.
+# Optional; default is the Gemma 4 E2B size.
+model.sizeBytes=2588000000
