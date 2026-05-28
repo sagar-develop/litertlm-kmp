@@ -43,3 +43,9 @@ publishing/
 
 # Sample-app scratch (added later)
 sample-app/local.properties
+
+# Private planning + session-handoff files — not for public repo
+CLAUDE.md
+docs/NATIVELM_PLAN.md
+docs/ENGINE_SYNC.md
+docs/NEXT_SESSION.md
