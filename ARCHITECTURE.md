@@ -112,6 +112,42 @@ Tool arguments come back as `Map<String, Any?>`. LiteRT-LM converts camelCase Ko
 - `ModelManager` uses `Dispatchers.IO` internally for file I/O
 - All public suspend functions are safe to call from `Dispatchers.Main`
 
+### Production tip — re-throw `CancellationException` in your `collect`
+
+When you wrap `engine.generateStream(...).collect { ... }` in a `try/catch`, a
+broad `catch (e: Exception)` will also swallow the `CancellationException` that
+coroutine cancellation throws (e.g. when the user taps "Stop", or the
+`viewModelScope` is cleared). Swallowing it breaks structured-concurrency
+cancellation semantics and surfaces a *cancelled* generation as if it were a
+real engine fault. Always let cancellation propagate:
+
+```kotlin
+try {
+    engine.generateStream(request).collect { state -> /* ... */ }
+} catch (ce: CancellationException) {
+    throw ce                 // never swallow — let cancellation propagate
+} catch (e: Exception) {
+    showError(e)             // real faults only
+}
+```
+
+This is flow exception-transparency: catch only the exceptions you actually
+mean to handle.
+
+## Multimodal vision
+
+`LiteRtLmLocalAiEngine` reports `descriptor.supportsVision = true` and accepts
+image input. The engine is initialized with `EngineConfig(visionBackend =
+Backend.CPU(), maxNumImages = 1)`; `generateStream` filters
+`request.attachments` for `Attachment.Image` and, when present, sends the
+prompt as a `Contents` bundle of `Content.Text` + `Content.ImageBytes` instead
+of the plain-string overload. Both the free-text and structured-output paths
+route images through. The loaded `.litertlm` must carry vision-encoder weights
+(standard Gemma 4 E2B / E4B do) or init fails. CPU is the deliberate default:
+GPU vision delegates vary by device driver and aren't worth the support burden.
+Audio attachments are tolerated by the request API but dropped before
+inference.
+
 ## DI
 
 The library exposes its surface through a kotlin-inject component (`AiEngineComponent`). Consumers using kotlin-inject can extend the component; consumers using Hilt / Koin / manual wiring can ignore the component and instantiate the implementations directly — every implementation has a no-arg or simple-arg constructor.

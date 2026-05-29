@@ -4,6 +4,8 @@
  */
 package com.sagar.aicore
 
+import com.google.ai.edge.litertlm.Backend
+import com.google.ai.edge.litertlm.Content
 import com.google.ai.edge.litertlm.Contents
 import com.google.ai.edge.litertlm.ConversationConfig
 import com.google.ai.edge.litertlm.Engine
@@ -26,19 +28,19 @@ import kotlinx.coroutines.withTimeout
 import me.tatarka.inject.annotations.Inject
 
 /**
- * Gemma 4 (E2B / E4B) on Android via LiteRT-LM 0.11.0. Sole [LocalAiEngine]
- * after the 7c migration.
+ * Gemma 4 (E2B / E4B) on Android via LiteRT-LM 0.11.0. Sole [LocalAiEngine].
  *
  * - LiteRT-LM's `Engine.createConversation()` handles Gemma 4 chat
  *   templating internally; [formatPrompt] just composes system + context +
  *   user into one string and lets the engine wrap.
- * - Structured output goes through `automaticToolCalling = false` â€”
+ * - Multimodal: image attachments flow through `EngineConfig.visionBackend`
+ *   + `Content.ImageBytes` (see [runStreaming] / [runStructured]).
+ * - Structured output goes through `automaticToolCalling = false` —
  *   LiteRT-LM does NOT invoke the Kotlin `@Tool` method in that mode;
  *   args land in `message.toolCalls[].arguments` as `Map<String, Any?>`
  *   and are passed through verbatim via [EngineState.ToolCallEmitted].
- *   The orchestrator owns key conventions (LiteRT-LM emits snake_case
- *   keys and Doubles for Int params â€” see EngineState.ToolCallEmitted
- *   doc).
+ *   The caller owns key conventions (LiteRT-LM emits snake_case keys and
+ *   Doubles for Int params — see EngineState.ToolCallEmitted doc).
  */
 @AppScope
 @Inject
@@ -50,16 +52,19 @@ class LiteRtLmLocalAiEngine(
         id = "litert-lm-gemma-4",
         displayName = "Gemma 4 (LiteRT-LM)",
         supportsTools = true,
-        // Multimodal Gemma 4 exists but neither image/audio wiring nor UI
-        // ships in this branch. Flip when the multimodal surface lands.
-        supportsVision = false,
+        // Multimodal Gemma 4 (E2B / E4B) vision is wired through
+        // EngineConfig.visionBackend + Content.ImageBytes attachments below.
+        // The .litertlm bundles for these variants ship vision-encoder
+        // weights; a text-only Gemma 4 build would fail at init when
+        // visionBackend is non-null. Audio plumbing is not wired yet.
+        supportsVision = true,
         supportsAudio = false,
         maxContextTokens = 8192,
-        // 2.59â€“3.66 GB on disk depending on E2B/E4B; in-memory varies by
+        // 2.59–3.66 GB on disk depending on E2B/E4B; in-memory varies by
         // backend. Empirical headroom for the loaded engine + KV cache.
         approximateMemoryFootprintMb = 3800,
         // < 6 GB devices surface DeviceNotSupported; E2B serves the
-        // 6â€“9 GB tier, E4B serves 10+ GB.
+        // 6–9 GB tier, E4B serves 10+ GB.
         minDeviceRamMb = 6000,
         consumes = ModelFormat.LITERTLM,
     )
@@ -72,8 +77,22 @@ class LiteRtLmLocalAiEngine(
             mutex.withLock {
                 if (engine != null) return@withLock EngineState.TokenGenerated(Unit)
                 try {
-                    engine = Engine(EngineConfig(modelPath = modelPath)).also { it.initialize() }
-                    Napier.d(tag = TAG) { "Engine initialized at $modelPath" }
+                    // Wire vision. visionBackend = CPU is the safe default;
+                    // GPU vision delegates exist but vary by device driver and
+                    // aren't worth the support burden. The text backend stays
+                    // defaulted (the engine picks the best available).
+                    // maxNumImages = 1 matches a single-image-per-turn flow;
+                    // raise it if a UI ever needs multiple images per message.
+                    engine = Engine(
+                        EngineConfig(
+                            modelPath = modelPath,
+                            visionBackend = Backend.CPU(),
+                            maxNumImages = 1,
+                        ),
+                    ).also { it.initialize() }
+                    Napier.d(tag = TAG) {
+                        "Engine initialized at $modelPath with visionBackend=CPU, maxNumImages=1"
+                    }
                     EngineState.TokenGenerated(Unit)
                 } catch (t: Throwable) {
                     Napier.e(t, tag = TAG) { "Engine init failed" }
@@ -90,7 +109,7 @@ class LiteRtLmLocalAiEngine(
             return@callbackFlow
         }
 
-        // Single-tenant guard â€” serialize generateStream calls so native is
+        // Single-tenant guard — serialize generateStream calls so native is
         // never asked to handle overlapping requests. 60s upper bound.
         try {
             withTimeout(60_000L) { mutex.lock() }
@@ -104,13 +123,18 @@ class LiteRtLmLocalAiEngine(
 
         if (request.seed != null) {
             Napier.v(tag = TAG) {
-                "seed=${request.seed} received; LiteRT-LM doesn't expose a per-call seed â€” " +
+                "seed=${request.seed} received; LiteRT-LM doesn't expose a per-call seed — " +
                     "orchestrator inlines it into the prompt for variation."
             }
         }
-        if (request.attachments.isNotEmpty()) {
+        // Image attachments flow into LiteRT-LM via Content.ImageBytes wrapped
+        // in a Contents bundle alongside the text prompt. Non-image attachments
+        // (audio) still log + drop here — audio plumbing is not wired yet.
+        val imageAttachments = request.attachments.filterIsInstance<Attachment.Image>()
+        val nonImageDropped = request.attachments.size - imageAttachments.size
+        if (nonImageDropped > 0) {
             Napier.v(tag = TAG) {
-                "${request.attachments.size} attachment(s) ignored â€” multimodal not wired in v1."
+                "$nonImageDropped non-image attachment(s) ignored — only image input is wired."
             }
         }
 
@@ -119,9 +143,9 @@ class LiteRtLmLocalAiEngine(
         val job = launch(Dispatchers.IO) {
             try {
                 if (request.requireStructuredOutput && request.toolSchema != null) {
-                    runStructured(activeEngine, request) { trySend(it) }
+                    runStructured(activeEngine, request, imageAttachments) { trySend(it) }
                 } else {
-                    runStreaming(activeEngine, request) { trySend(it) }
+                    runStreaming(activeEngine, request, imageAttachments) { trySend(it) }
                 }
                 trySend(EngineState.Idle)
             } catch (t: Throwable) {
@@ -139,13 +163,25 @@ class LiteRtLmLocalAiEngine(
     private suspend fun runStreaming(
         activeEngine: Engine,
         request: AiEngineRequest,
+        images: List<Attachment.Image>,
         emit: (EngineState<String>) -> Unit,
     ) {
         activeEngine.createConversation().use { conv ->
-            conv.sendMessageAsync(request.formattedPrompt).collect { message ->
+            val flow = if (images.isEmpty()) {
+                // Text-only path stays on the String overload.
+                conv.sendMessageAsync(request.formattedPrompt)
+            } else {
+                // Multimodal — bundle text + image bytes into Contents.
+                val parts = buildList<Content> {
+                    add(Content.Text(request.formattedPrompt))
+                    for (img in images) add(Content.ImageBytes(img.bytes))
+                }
+                conv.sendMessageAsync(Contents.of(parts))
+            }
+            flow.collect { message ->
                 // sendMessageAsync emits Flow<Message>; toString() gives the
                 // text-token delta per emission (per LiteRT-LM Kotlin docs +
-                // verified in spike â€” accumulating these reproduces the full
+                // verified in spike — accumulating these reproduces the full
                 // response).
                 emit(EngineState.TokenGenerated<String>(message.toString()))
             }
@@ -155,6 +191,7 @@ class LiteRtLmLocalAiEngine(
     private fun runStructured(
         activeEngine: Engine,
         request: AiEngineRequest,
+        images: List<Attachment.Image>,
         emit: (EngineState<String>) -> Unit,
     ) {
         val jsonSpec: String = when (val schema = request.toolSchema) {
@@ -170,7 +207,7 @@ class LiteRtLmLocalAiEngine(
 
         val openApiTool = object : OpenApiTool {
             override fun getToolDescriptionJsonString(): String = jsonSpec
-            // Unused with automaticToolCalling=false â€” LiteRT-LM populates
+            // Unused with automaticToolCalling=false — LiteRT-LM populates
             // message.toolCalls instead of calling this.
             override fun execute(args: String): String = "ok"
         }
@@ -181,7 +218,15 @@ class LiteRtLmLocalAiEngine(
         )
 
         activeEngine.createConversation(config).use { conv ->
-            val message = conv.sendMessage(request.formattedPrompt, emptyMap())
+            val message = if (images.isEmpty()) {
+                conv.sendMessage(request.formattedPrompt, emptyMap())
+            } else {
+                val parts = buildList<Content> {
+                    add(Content.Text(request.formattedPrompt))
+                    for (img in images) add(Content.ImageBytes(img.bytes))
+                }
+                conv.sendMessage(Contents.of(parts), emptyMap())
+            }
             val calls = message.toolCalls
             if (calls.isEmpty()) {
                 Napier.w(tag = TAG) {
@@ -204,7 +249,7 @@ class LiteRtLmLocalAiEngine(
         systemInstruction: String?
     ): String {
         // LiteRT-LM's createConversation() applies Gemma 4 chat templating
-        // internally â€” we do NOT emit <start_of_turn> tags. Compose the
+        // internally — we do NOT emit <start_of_turn> tags. Compose the
         // pieces as plain text and let the engine wrap.
         val sb = StringBuilder()
         if (!systemInstruction.isNullOrBlank()) {

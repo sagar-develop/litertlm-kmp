@@ -73,7 +73,7 @@ In your **app module's `build.gradle.kts`**:
 
 ```kotlin
 dependencies {
-    implementation("com.github.sagar-develop:litertlm-kmp:v0.2.3")
+    implementation("com.github.sagar-develop:litertlm-kmp:v0.2.4")
 }
 ```
 
@@ -202,6 +202,25 @@ A few gotchas worth knowing:
 - **Numeric types come back as `Double`.** JSON has no integer/float distinction at the wire level, so an `IntegerT` parameter still arrives as `Double`. Coerce with `(it as Number).toInt()`.
 - **Snake_case is preferred for param names.** LiteRT-LM also accepts camelCase, but snake_case round-trips cleaner with the JSON schema vocabulary.
 - **Arrays nest.** `ToolParameterType.ArrayT(ToolParameterType.StringT)` becomes `{"type": "array", "items": {"type": "string"}}` — see [`ToolSchemaConverterTest`](lib/src/commonTest/kotlin/com/sagar/aicore/ToolSchemaConverterTest.kt) for the round-trip cases.
+
+### Vision (image input)
+
+Multimodal Gemma 4 (E2B / E4B) accepts an image alongside the text prompt. Attach an `Attachment.Image` to the request — the library bundles it as a LiteRT-LM `Content.ImageBytes` next to the prompt text. Engines that don't support vision ignore the attachment rather than failing, so the same call is safe across engines; gate your UI on `engine.descriptor.supportsVision` if you want to hide the affordance when unsupported.
+
+```kotlin
+val jpegBytes: ByteArray = /* a photo or screenshot */
+
+engine.generateStream(
+    AiEngineRequest(
+        formattedPrompt = "Summarize the text visible in this image.",
+        attachments = listOf(Attachment.Image(bytes = jpegBytes, mimeType = "image/jpeg")),
+    )
+).collect { state ->
+    if (state is EngineState.TokenGenerated) print(state.data)
+}
+```
+
+The engine is initialized with `visionBackend = Backend.CPU()` and `maxNumImages = 1`. The `.litertlm` bundle you load must include vision-encoder weights (the standard Gemma 4 E2B / E4B artifacts do) — a text-only build fails at init when a vision backend is set. Audio attachments are accepted by the API but not yet wired to inference.
 
 ### Embedding for RAG
 
@@ -375,7 +394,8 @@ Typical engagements:
 ## Roadmap
 
 - **v0.1** — initial library release. Android target production-ready, iOS targets compile but native engine bindings deferred.
-- **v0.2** (this release) — `sample-app/` Compose Android app with live CPU + RAM + tokens/sec metrics overlay. Library restructured into `:lib` subproject; published as `com.sagar:litertlm-kmp`.
+- **v0.2** — `sample-app/` Compose Android app with live CPU + RAM + tokens/sec metrics overlay. Library restructured into `:lib` subproject; published as `com.sagar:litertlm-kmp`.
+- **v0.2.4** (this release) — multimodal vision: image attachments flow through `EngineConfig.visionBackend` + `Content.ImageBytes`; `descriptor.supportsVision` is now `true`.
 - **v0.3** — iOS native engine implementation via LiteRT-LM's Swift Metal-accelerated APIs.
 - **v0.4** — Benchmark suite (tokens/sec, RAM ceiling, battery drain) across a representative device matrix.
 

@@ -50,11 +50,13 @@ data class AiEngineRequest(
 )
 
 /**
- * Inputs the engine can receive alongside a text prompt. Today only
- * `Document` is consumed (carried inline in [AiEngineRequest.formattedPrompt]
- * by the orchestrator); [Image] and [Audio] data classes exist so the
- * orchestrator + UI layers can start carrying them ahead of any engine
- * actually wiring vision/audio inference.
+ * Inputs the engine can receive alongside a text prompt. [Image] is consumed
+ * by engines whose [EngineDescriptor.supportsVision] is true (wired through
+ * LiteRT-LM `Content.ImageBytes`); `Document` is carried inline in
+ * [AiEngineRequest.formattedPrompt] by the caller. [Audio] exists so the
+ * caller + UI layers can carry it ahead of any engine wiring audio inference.
+ * Engines ignore attachment subclasses they don't support — they never fail
+ * the request.
  */
 sealed class Attachment {
     data class Image(val bytes: ByteArray, val mimeType: String) : Attachment()
