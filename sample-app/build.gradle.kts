@@ -8,11 +8,11 @@ plugins {
 }
 
 android {
-    namespace = "com.sagar.litertlmsample"
+    namespace = "com.nativelm.app"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
 
     defaultConfig {
-        applicationId = "com.sagar.litertlmsample"
+        applicationId = "com.nativelm.app"
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = 1
