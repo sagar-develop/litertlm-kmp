@@ -9,34 +9,55 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.graphics.Color
-
-private val DarkColors = darkColorScheme(
-    primary = Color(0xFF7AA2FF),
-    onPrimary = Color(0xFF0B1130),
-    primaryContainer = Color(0xFF1F2A55),
-    onPrimaryContainer = Color(0xFFD8E0FF),
-    secondary = Color(0xFFFFC36B),
-    onSecondary = Color(0xFF2E1A00),
-    background = Color(0xFF0A0E1F),
-    onBackground = Color(0xFFE4E7F0),
-    surface = Color(0xFF11162B),
-    onSurface = Color(0xFFE4E7F0),
-    surfaceVariant = Color(0xFF1B2342),
-    onSurfaceVariant = Color(0xFFB7BDD0),
-    outline = Color(0xFF3A4368),
-    error = Color(0xFFFF6B7A),
-)
 
 private val LightColors = lightColorScheme(
-    primary = Color(0xFF3F5BD9),
-    secondary = Color(0xFFB8741A),
-    background = Color(0xFFF5F6FB),
-    surface = Color(0xFFFFFFFF),
+    primary = Sage,
+    onPrimary = LightSurface,
+    primaryContainer = LightPrimaryContainer,
+    onPrimaryContainer = LightOnPrimaryContainer,
+    secondary = Sage,
+    onSecondary = LightSurface,
+    secondaryContainer = LightPrimaryContainer,
+    onSecondaryContainer = LightOnPrimaryContainer,
+    background = LightBackground,
+    onBackground = LightOnBackground,
+    surface = LightSurface,
+    onSurface = LightOnBackground,
+    surfaceVariant = LightSurfaceVariant,
+    onSurfaceVariant = LightOnSurfaceVariant,
+    outline = LightOutline,
+    outlineVariant = LightOutline,
+    error = LightError,
+)
+
+private val DarkColors = darkColorScheme(
+    primary = Sage,
+    onPrimary = DarkBackground,
+    primaryContainer = DarkPrimaryContainer,
+    onPrimaryContainer = DarkOnPrimaryContainer,
+    secondary = Sage,
+    onSecondary = DarkBackground,
+    secondaryContainer = DarkPrimaryContainer,
+    onSecondaryContainer = DarkOnPrimaryContainer,
+    background = DarkBackground,
+    onBackground = DarkOnBackground,
+    surface = DarkSurface,
+    onSurface = DarkOnBackground,
+    surfaceVariant = DarkSurfaceVariant,
+    onSurfaceVariant = DarkOnSurfaceVariant,
+    outline = DarkOutline,
+    outlineVariant = DarkOutline,
+    error = DarkError,
 )
 
 @Composable
-fun SampleTheme(content: @Composable () -> Unit) {
-    val colors = if (isSystemInDarkTheme()) DarkColors else LightColors
-    MaterialTheme(colorScheme = colors, content = content)
+fun NativeLmTheme(
+    darkTheme: Boolean = isSystemInDarkTheme(),
+    content: @Composable () -> Unit,
+) {
+    MaterialTheme(
+        colorScheme = if (darkTheme) DarkColors else LightColors,
+        typography = NativeLmTypography,
+        content = content,
+    )
 }

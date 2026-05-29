@@ -16,11 +16,11 @@ import io.ktor.client.HttpClient
 import kotlinx.coroutines.flow.Flow
 
 /**
- * Wires the library together manually for the sample. Real consumers would
- * use kotlin-inject (the library's own DI graph) or their preferred DI
- * framework (Hilt / Koin / etc). The library's `AiEngineComponent` interface
- * is the formal contract; this is a teaching-friendly direct-instantiation
- * version that shows what the dependency chain looks like.
+ * Wires the library together manually for NativeLM. Real consumers would use
+ * kotlin-inject (the library's own DI graph) or Hilt/Koin; this is a
+ * teaching-friendly direct-instantiation version. Generalized off any single
+ * hardcoded model: downloads/initializes whatever [com.sagar.aicore.ModelDescriptor]
+ * the Model Management UI selects, and supports auth headers (HF token).
  */
 class EngineHolder(context: Context) {
 
@@ -31,22 +31,31 @@ class EngineHolder(context: Context) {
     val modelManager = KtorModelManager(httpClient, platformFolders)
     val engine = LiteRtLmLocalAiEngine(hardwareProvider)
 
+    /** Total physical RAM in MB, for gating which model tiers a device can run. */
+    val deviceRamMb: Long get() = hardwareProvider.getDeviceCapabilities().totalRamMb
+
     val descriptor get() = engine.descriptor
 
-    /** True if the model file exists on disk; safe to call any time. */
     fun isModelDownloaded(fileName: String): Boolean =
         modelManager.isModelDownloaded(fileName)
 
-    /** Absolute path to the model file (whether or not it exists). */
     fun modelPath(fileName: String): String =
         modelManager.getModelPath(fileName)
 
-    fun downloadModel(url: String, fileName: String): Flow<DownloadState> =
-        modelManager.downloadModel(url, fileName)
+    fun deleteModel(fileName: String) = modelManager.deleteModel(fileName)
+
+    fun downloadModel(
+        url: String,
+        fileName: String,
+        sha256: String? = null,
+        headers: Map<String, String> = emptyMap(),
+    ): Flow<DownloadState> = modelManager.downloadModel(url, fileName, sha256, headers)
 
     suspend fun initializeEngine(modelPath: String): EngineState<Unit> =
         engine.initializeEngine(modelPath)
 
     fun generate(request: AiEngineRequest): Flow<EngineState<String>> =
         engine.generateStream(request)
+
+    fun release() = engine.releaseResources()
 }

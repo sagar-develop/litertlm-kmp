@@ -46,6 +46,7 @@ class KtorModelManager(
         url: String,
         modelName: String,
         expectedSha256: String?,
+        headers: Map<String, String>,
     ): Flow<DownloadState> = flow {
         Napier.d { "downloadModel: $modelName from $url (sha256=${expectedSha256 ?: "none"})" }
         val destinationPath = getModelPath(modelName).toPath()
@@ -68,6 +69,7 @@ class KtorModelManager(
             }
 
             val response = httpClient.prepareGet(url) {
+                headers.forEach { (name, value) -> header(name, value) }
                 if (existingBytes > 0) {
                     header(HttpHeaders.Range, "bytes=$existingBytes-")
                 }
@@ -79,6 +81,19 @@ class KtorModelManager(
                     // Recursive call might be dangerous if not handled, but for 1 retry it's okay
                     // Better to just fail and let user retry
                     emit(DownloadState.Error("Range not satisfiable. Deleted temp file. Please retry."))
+                    return@execute
+                }
+
+                if (httpResponse.status == HttpStatusCode.Unauthorized ||
+                    httpResponse.status == HttpStatusCode.Forbidden
+                ) {
+                    emit(
+                        DownloadState.Error(
+                            "Access denied (${httpResponse.status.value}). The download token is " +
+                                "missing or invalid, or you haven't accepted the model's license on " +
+                                "Hugging Face with the account that owns this token."
+                        )
+                    )
                     return@execute
                 }
 

@@ -23,6 +23,13 @@ data class ModelDescriptor(
     val format: ModelFormat,
     val role: ModelRole,
     val minDeviceRamMb: Long,
+    /**
+     * When true, downloading this model requires an auth token (e.g. a
+     * Hugging Face access token sent as `Authorization: Bearer …`). Consumers
+     * gate the download UI on a token being present and pass it through
+     * [ModelManager.downloadModel]'s `headers`. Defaults to false.
+     */
+    val requiresAuth: Boolean = false,
 )
 
 enum class ModelFormat {
