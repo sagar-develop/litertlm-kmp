@@ -7,17 +7,27 @@ package com.sagar.aicore
 import com.google.ai.edge.litertlm.Backend
 import com.google.ai.edge.litertlm.Content
 import com.google.ai.edge.litertlm.Contents
+import com.google.ai.edge.litertlm.Conversation
 import com.google.ai.edge.litertlm.ConversationConfig
 import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
+import com.google.ai.edge.litertlm.ExperimentalApi
+import com.google.ai.edge.litertlm.Message
 import com.google.ai.edge.litertlm.OpenApiTool
+import com.google.ai.edge.litertlm.SamplerConfig
 import com.google.ai.edge.litertlm.tool
 import com.sagar.aicore.di.AppScope
 import io.github.aakira.napier.Napier
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
@@ -72,6 +82,9 @@ class LiteRtLmLocalAiEngine(
     private var engine: Engine? = null
     private val mutex = Mutex()
 
+    /** The single live chat session; opening a new one closes this. */
+    private var currentSession: LiteRtLmChatSession? = null
+
     override suspend fun initializeEngine(modelPath: String): EngineState<Unit> =
         withContext(Dispatchers.IO) {
             mutex.withLock {
@@ -83,15 +96,23 @@ class LiteRtLmLocalAiEngine(
                     // defaulted (the engine picks the best available).
                     // maxNumImages = 1 matches a single-image-per-turn flow;
                     // raise it if a UI ever needs multiple images per message.
+                    // Text backend = CPU with 6 threads. Phase-0 on-device
+                    // benchmarking (CPH2723) showed GPU/NPU can't load the
+                    // litert-community .litertlm bundles (GPU executor errors;
+                    // NPU needs a TF_LITE_AUX section the bundle lacks), so CPU
+                    // is the only viable path. Among thread counts, 6 gave the
+                    // best decode tok/s while leaving the 2 prime cores free for
+                    // the UI. visionBackend stays CPU; maxNumImages = 1.
                     engine = Engine(
                         EngineConfig(
                             modelPath = modelPath,
+                            backend = Backend.CPU(numOfThreads = 6),
                             visionBackend = Backend.CPU(),
                             maxNumImages = 1,
                         ),
                     ).also { it.initialize() }
                     Napier.d(tag = TAG) {
-                        "Engine initialized at $modelPath with visionBackend=CPU, maxNumImages=1"
+                        "Engine initialized at $modelPath with backend=CPU(6), visionBackend=CPU, maxNumImages=1"
                     }
                     EngineState.TokenGenerated(Unit)
                 } catch (t: Throwable) {
@@ -121,12 +142,6 @@ class LiteRtLmLocalAiEngine(
             return@callbackFlow
         }
 
-        if (request.seed != null) {
-            Napier.v(tag = TAG) {
-                "seed=${request.seed} received; LiteRT-LM doesn't expose a per-call seed — " +
-                    "orchestrator inlines it into the prompt for variation."
-            }
-        }
         // Image attachments flow into LiteRT-LM via Content.ImageBytes wrapped
         // in a Contents bundle alongside the text prompt. Non-image attachments
         // (audio) still log + drop here — audio plumbing is not wired yet.
@@ -160,13 +175,169 @@ class LiteRtLmLocalAiEngine(
         awaitClose { job.cancel() }
     }
 
+    override fun openChatSession(
+        history: List<ChatTurn>,
+        systemInstruction: String?,
+        temperature: Float,
+    ): ChatSession {
+        // One KV cache at a time on a single native engine — close any prior session.
+        currentSession?.close()
+        val session = LiteRtLmChatSession(engine, history, systemInstruction, temperature)
+        currentSession = session
+        return session
+    }
+
+    /** Maps an [AiEngineRequest]'s sampling fields to LiteRT-LM's [SamplerConfig].
+     *  topK/topP use Gemma's standard values; the request drives temperature + seed. */
+    private fun samplerFor(request: AiEngineRequest): SamplerConfig =
+        SamplerConfig(SAMPLER_TOP_K, SAMPLER_TOP_P, request.temperature.toDouble(), request.seed?.toInt() ?: SAMPLER_SEED)
+
+    /**
+     * Stateful chat session over a persistent [Conversation]. The Conversation
+     * retains its KV cache across [sendTurn] calls, so each turn only prefills
+     * the new message. [history] is seeded as `ConversationConfig.initialMessages`
+     * and re-prefilled once while [state] is [SessionState.Warming].
+     */
+    private inner class LiteRtLmChatSession(
+        private val activeEngine: Engine?,
+        history: List<ChatTurn>,
+        systemInstruction: String?,
+        temperature: Float,
+    ) : ChatSession {
+
+        private val _state = MutableStateFlow<SessionState>(SessionState.Warming)
+        override val state: StateFlow<SessionState> = _state.asStateFlow()
+
+        private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
+        @Volatile
+        private var conversation: Conversation? = null
+
+        init {
+            scope.launch {
+                if (activeEngine == null) {
+                    _state.value = SessionState.Failed(HardwareFault.ModelNotLoaded())
+                    return@launch
+                }
+                mutex.withLock {
+                    try {
+                        val initial = history.map { turn ->
+                            if (turn.role == TurnRole.USER) Message.user(turn.text)
+                            else Message.model(turn.text)
+                        }
+                        val sampler = SamplerConfig(SAMPLER_TOP_K, SAMPLER_TOP_P, temperature.toDouble(), SAMPLER_SEED)
+                        val config = if (systemInstruction.isNullOrBlank()) {
+                            ConversationConfig(initialMessages = initial, samplerConfig = sampler)
+                        } else {
+                            ConversationConfig(
+                                systemInstruction = Contents.of(systemInstruction),
+                                initialMessages = initial,
+                                samplerConfig = sampler,
+                            )
+                        }
+                        conversation = activeEngine.createConversation(config)
+                        Napier.d(tag = TAG) { "Chat session opened; seeded ${initial.size} prior turn(s)" }
+                        _state.value = SessionState.Ready
+                    } catch (t: Throwable) {
+                        Napier.e(t, tag = TAG) { "Chat session init failed" }
+                        _state.value = SessionState.Failed(
+                            HardwareFault.DelegateFailure(t.message ?: "Session init failed"),
+                        )
+                    }
+                }
+            }
+        }
+
+        override fun sendTurn(request: AiEngineRequest): Flow<EngineState<String>> = callbackFlow {
+            val conv = conversation
+            if (conv == null || _state.value !is SessionState.Ready) {
+                trySend(EngineState.Error(HardwareFault.ModelNotLoaded("Chat session is not ready.")))
+                close()
+                return@callbackFlow
+            }
+
+            // Serialize against the engine's single native tenant (60s upper bound).
+            try {
+                withTimeout(60_000L) { mutex.lock() }
+            } catch (e: TimeoutCancellationException) {
+                trySend(EngineState.Error(HardwareFault.DelegateFailure(
+                    "Engine is still busy with a previous request. Please try again.",
+                )))
+                close()
+                return@callbackFlow
+            }
+
+            val images = request.attachments.filterIsInstance<Attachment.Image>()
+            trySend(EngineState.Generating)
+
+            val job = launch(Dispatchers.IO) {
+                try {
+                    val flow = if (images.isEmpty()) {
+                        conv.sendMessageAsync(request.formattedPrompt)
+                    } else {
+                        val parts = buildList<Content> {
+                            add(Content.Text(request.formattedPrompt))
+                            for (img in images) add(Content.ImageBytes(img.bytes))
+                        }
+                        conv.sendMessageAsync(Contents.of(parts))
+                    }
+                    // Each emission is the text-token delta — accumulating reproduces the reply.
+                    flow.collect { message ->
+                        trySend(EngineState.TokenGenerated<String>(message.toString()))
+                    }
+                    trySend(EngineState.Idle)
+                } catch (t: Throwable) {
+                    Napier.e(t, tag = TAG) { "sendTurn failed" }
+                    trySend(EngineState.Error(HardwareFault.DelegateFailure(t.message ?: "Inference failed")))
+                } finally {
+                    if (mutex.isLocked) mutex.unlock()
+                    close()
+                }
+            }
+
+            awaitClose { job.cancel() }
+        }
+
+        override fun cancel() {
+            // Interrupts the native decode loop for the in-flight turn.
+            runCatching { conversation?.cancelProcess() }
+                .onFailure { Napier.w(it, tag = TAG) { "cancel() failed" } }
+        }
+
+        @OptIn(ExperimentalApi::class)
+        override fun lastTurnMetrics(): TurnMetrics? {
+            val info = runCatching { conversation?.getBenchmarkInfo() }.getOrNull() ?: return null
+            return TurnMetrics(
+                timeToFirstTokenSec = info.timeToFirstTokenInSecond,
+                prefillTokensPerSecond = info.lastPrefillTokensPerSecond,
+                decodeTokensPerSecond = info.lastDecodeTokensPerSecond,
+                prefillTokenCount = info.lastPrefillTokenCount,
+                decodeTokenCount = info.lastDecodeTokenCount,
+            )
+        }
+
+        override fun close() {
+            // Synchronous so a one-shot generateStream (which needs the engine's
+            // single conversation slot free) can run immediately after — LiteRT-LM
+            // allows only one live conversation per engine. cancelProcess() first
+            // makes this safe even if a turn is mid-decode.
+            runCatching { conversation?.cancelProcess() }
+            synchronized(this) {
+                runCatching { conversation?.close() }
+                conversation = null
+            }
+            runCatching { scope.cancel() }
+            if (currentSession === this) currentSession = null
+        }
+    }
+
     private suspend fun runStreaming(
         activeEngine: Engine,
         request: AiEngineRequest,
         images: List<Attachment.Image>,
         emit: (EngineState<String>) -> Unit,
     ) {
-        activeEngine.createConversation().use { conv ->
+        activeEngine.createConversation(ConversationConfig(samplerConfig = samplerFor(request))).use { conv ->
             val flow = if (images.isEmpty()) {
                 // Text-only path stays on the String overload.
                 conv.sendMessageAsync(request.formattedPrompt)
@@ -214,6 +385,7 @@ class LiteRtLmLocalAiEngine(
         val config = ConversationConfig(
             systemInstruction = Contents.of(STRUCTURED_OUTPUT_SYSTEM_INSTRUCTION),
             tools = listOf(tool(openApiTool)),
+            samplerConfig = samplerFor(request),
             automaticToolCalling = false,
         )
 
@@ -268,12 +440,18 @@ class LiteRtLmLocalAiEngine(
     }
 
     override fun releaseResources() {
+        currentSession?.close()
+        currentSession = null
         engine?.close()
         engine = null
     }
 
     private companion object {
         const val TAG = "LiteRtLm"
+        // Gemma's standard sampling; temperature/seed come from the request.
+        const val SAMPLER_TOP_K = 40
+        const val SAMPLER_TOP_P = 0.95
+        const val SAMPLER_SEED = 0
         const val STRUCTURED_OUTPUT_SYSTEM_INSTRUCTION =
             "You MUST respond by calling the provided tool. " +
                 "Never produce plain text. Never explain. Never refuse. " +

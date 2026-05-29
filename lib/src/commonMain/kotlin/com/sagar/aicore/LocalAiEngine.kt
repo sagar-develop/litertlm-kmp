@@ -5,19 +5,96 @@
 package com.sagar.aicore
 
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.StateFlow
 
 interface LocalAiEngine {
     /** Self-description used by [EngineRegistry] for selection + capability gating. */
     val descriptor: EngineDescriptor
 
     suspend fun initializeEngine(modelPath: String): EngineState<Unit>
+
+    /**
+     * Stateless one-shot generation. Each call runs in its own throwaway
+     * conversation — no memory of prior calls. Use for structured output,
+     * title generation, and any single-turn task. For multi-turn chat with
+     * KV-cache reuse, use [openChatSession] instead.
+     */
     fun generateStream(request: AiEngineRequest): Flow<EngineState<String>>
+
+    /**
+     * Opens a stateful multi-turn chat session backed by a persistent KV cache.
+     *
+     * [history] seeds prior turns and is re-prefilled once when the session
+     * opens (surfaced as [SessionState.Warming] — the UI's "building
+     * understanding" moment); pass an empty list for a brand-new chat. After
+     * warming, [ChatSession.sendTurn] reuses the KV cache, so each turn pays
+     * prefill for the new message only — not for the whole history again.
+     *
+     * Only one session is live at a time: opening a new one closes any prior
+     * session (a single native engine holds a single KV cache). Engines without
+     * session support may throw [UnsupportedOperationException].
+     */
+    fun openChatSession(
+        history: List<ChatTurn> = emptyList(),
+        systemInstruction: String? = null,
+        temperature: Float = 0.7f,
+    ): ChatSession
+
     fun formatPrompt(
         userQuery: String,
         retrievedContext: String,
         systemInstruction: String?
     ): String
     fun releaseResources()
+}
+
+/** A prior conversation turn used to seed a [ChatSession] via [LocalAiEngine.openChatSession]. */
+data class ChatTurn(val role: TurnRole, val text: String)
+
+enum class TurnRole { USER, ASSISTANT }
+
+/**
+ * A live multi-turn chat session. Holds a persistent KV cache so context from
+ * earlier turns is reused rather than re-prefilled. Close it (or open another)
+ * to free the cache.
+ */
+interface ChatSession {
+    /** Warming (re-prefilling seeded history) → Ready → … ; Failed on init error. */
+    val state: StateFlow<SessionState>
+
+    /**
+     * Streams a reply to a new user turn, reusing the KV cache from prior turns.
+     * Mirrors [LocalAiEngine.generateStream]'s [EngineState] stream.
+     */
+    fun sendTurn(request: AiEngineRequest): Flow<EngineState<String>>
+
+    /** Interrupts the in-flight turn via native cancel. No-op when idle. */
+    fun cancel()
+
+    /** Exact metrics for the most recently completed turn (engine-reported, not
+     *  estimated), or null before the first turn finishes. */
+    fun lastTurnMetrics(): TurnMetrics?
+
+    /** Releases the session and its KV cache. */
+    fun close()
+}
+
+/** Engine-reported timing for one generated turn. */
+data class TurnMetrics(
+    val timeToFirstTokenSec: Double,
+    val prefillTokensPerSecond: Double,
+    val decodeTokensPerSecond: Double,
+    val prefillTokenCount: Int,
+    val decodeTokenCount: Int,
+)
+
+sealed class SessionState {
+    /** Re-prefilling seeded history; not yet ready to accept a turn. */
+    object Warming : SessionState()
+    /** Ready to accept [ChatSession.sendTurn]. */
+    object Ready : SessionState()
+    /** Session failed to initialize. */
+    data class Failed(val fault: HardwareFault) : SessionState()
 }
 
 data class AiEngineRequest(
@@ -128,7 +205,7 @@ sealed class EngineState<out T> {
 }
 
 sealed class HardwareFault(message: String) : Exception(message) {
-    class OutOfMemory(message: String = "128K Context exceeded available mobile RAM.") : HardwareFault(message)
+    class OutOfMemory(message: String = "Context length exceeded available memory.") : HardwareFault(message)
     class DelegateFailure(message: String = "NPU/GPU Delegate failed to initialize.") : HardwareFault(message)
     class ModelNotLoaded(message: String = "Engine stream called before weights loaded.") : HardwareFault(message)
 }

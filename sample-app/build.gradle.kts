@@ -5,6 +5,10 @@ plugins {
     alias(libs.plugins.androidApplication)
     alias(libs.plugins.kotlinAndroid)
     alias(libs.plugins.composeCompiler)
+    alias(libs.plugins.kotlinKapt)
+    // ObjectBox plugin must be applied AFTER the Kotlin plugins — it generates
+    // MyObjectBox + the model from @Entity classes and wires the kapt processor.
+    alias(libs.plugins.objectbox)
 }
 
 android {
@@ -15,8 +19,8 @@ android {
         applicationId = "com.nativelm.app"
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
-        versionCode = 1
-        versionName = "0.2.4"
+        versionCode = 2
+        versionName = "0.3.0"
 
         // Pull the model URL from sample-app/local.properties (gitignored).
         // Visitors who clone the repo paste their own Firebase/CDN URL there
@@ -91,6 +95,10 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.androidx.security.crypto)
     implementation(libs.androidx.core.splashscreen)
+
+    // ObjectBox — multi-conversation persistence (Conversation + Message entities).
+    implementation(libs.objectbox.kotlin)
+    kapt(libs.objectbox.processor)
 
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.napier)

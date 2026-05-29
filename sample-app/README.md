@@ -18,17 +18,22 @@ product.
 
 - **General chat** — a capable local LLM with a clean, Gemini-style chat
   surface ("How can I help you today?").
-- **Multi-turn memory** — the assistant remembers earlier turns within a
-  conversation (app-side context, capped to a token budget).
+- **Multi-turn memory (KV-cache sessions)** — the assistant remembers earlier
+  turns via a persistent engine session (`LocalAiEngine.openChatSession`), so
+  history is never re-sent: prefill is paid per new message, not re-paid for the
+  whole conversation. Time-to-first-token stays flat as the chat grows.
+- **Conversation history** — a Gemini-style drawer of past conversations
+  (ObjectBox), each with its own context. Switching a conversation re-prefills
+  its history once ("Building understanding…"), then reuses the cache.
+  Conversations are auto-titled by the model, renamable, and deletable.
 - **Rich Markdown rendering** — headings, lists, code blocks, links, block
   quotes, and tables render as formatted text in chat bubbles (dependency-free
   renderer, JetBrains Mono for code).
-- **Streaming with live metrics** — token-by-token output via
-  `LocalAiEngine.generateStream(...)`, with quiet TTFT / tokens-per-second
-  telemetry while generating.
-- **Stop / New chat / Copy** — interrupt generation mid-stream, start a fresh
-  thread, long-press any bubble to copy.
-- **Conversation persistence** — the current conversation survives app restart.
+- **Streaming with live metrics** — token-by-token output, with quiet TTFT /
+  tokens-per-second telemetry while generating.
+- **Stop / New chat / Copy** — Stop truly interrupts the native decode loop
+  (not just the UI); start a fresh thread; long-press any bubble to copy.
+- **Persistence** — all conversations survive app restart.
 - **Model management** — download models on demand and switch the active model
   from inside the app. No model is bundled in the APK.
 - **Bring your own token** — gated models download using **your** Hugging Face

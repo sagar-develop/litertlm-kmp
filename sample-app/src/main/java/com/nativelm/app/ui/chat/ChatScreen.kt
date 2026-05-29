@@ -33,15 +33,25 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -49,12 +59,14 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -66,9 +78,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.nativelm.app.llm.ChatMessage
+import com.nativelm.app.llm.ConversationSummary
 import com.nativelm.app.llm.NativeLmViewModel
 import com.nativelm.app.ui.theme.JetBrainsMono
 import com.nativelm.app.ui.theme.NativeLmMark
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -80,8 +94,12 @@ fun ChatScreen(
     val chat by vm.chat.collectAsState()
     val activeModel by vm.activeModelName.collectAsState()
     val metrics by vm.metrics.snapshot.collectAsState()
-    var menuOpen by remember { mutableStateOf(false) }
+    val conversations by vm.conversations.collectAsState()
+    val currentId by vm.currentConversationId.collectAsState()
     val listState = rememberLazyListState()
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
+    var renameTarget by remember { mutableStateOf<ConversationSummary?>(null) }
 
     // Follow the conversation as new messages arrive (newest is item 0 with
     // reverseLayout, so scrolling to 0 keeps the latest in view).
@@ -89,10 +107,30 @@ fun ChatScreen(
         if (chat.messages.isNotEmpty()) listState.animateScrollToItem(0)
     }
 
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            ConversationDrawer(
+                conversations = conversations,
+                currentId = currentId,
+                onNewChat = { scope.launch { drawerState.close() }; vm.newChat() },
+                onOpen = { id -> scope.launch { drawerState.close() }; vm.openConversation(id) },
+                onRename = { renameTarget = it },
+                onDelete = { vm.deleteConversation(it) },
+                onOpenModels = { scope.launch { drawerState.close() }; onOpenModels() },
+                onOpenSettings = { scope.launch { drawerState.close() }; onOpenSettings() },
+            )
+        },
+    ) {
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
+                navigationIcon = {
+                    IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                        Icon(Icons.Filled.Menu, contentDescription = "Conversations")
+                    }
+                },
                 title = {
                     Column {
                         Text("NativeLM", style = MaterialTheme.typography.titleMedium)
@@ -106,17 +144,6 @@ fun ChatScreen(
                 actions = {
                     IconButton(onClick = { vm.newChat() }, enabled = chat.messages.isNotEmpty()) {
                         Icon(Icons.Filled.Add, contentDescription = "New chat")
-                    }
-                    IconButton(onClick = { menuOpen = true }) {
-                        Icon(Icons.Filled.MoreVert, contentDescription = "Menu")
-                    }
-                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                        DropdownMenuItem(
-                            text = { Text("New chat") },
-                            onClick = { menuOpen = false; vm.newChat() },
-                        )
-                        DropdownMenuItem(text = { Text("Models") }, onClick = { menuOpen = false; onOpenModels() })
-                        DropdownMenuItem(text = { Text("Settings") }, onClick = { menuOpen = false; onOpenSettings() })
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -146,6 +173,8 @@ fun ChatScreen(
                         }
                     }
                 }
+                // While the engine re-prefills a reopened conversation's history.
+                if (chat.isWarming) BuildingUnderstanding()
             }
 
             // Quiet live telemetry while generating.
@@ -164,10 +193,147 @@ fun ChatScreen(
             InputBar(
                 value = chat.input,
                 generating = chat.isGenerating,
-                canSend = activeModel != null,
+                canSend = activeModel != null && !chat.isWarming,
                 onValueChange = vm::setInput,
                 onSend = vm::sendChatMessage,
                 onStop = vm::stopGeneration,
+            )
+        }
+    }
+    } // end ModalNavigationDrawer content
+
+    renameTarget?.let { target ->
+        RenameDialog(
+            current = target.title,
+            onDismiss = { renameTarget = null },
+            onConfirm = { newTitle -> vm.renameConversation(target.id, newTitle); renameTarget = null },
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ConversationDrawer(
+    conversations: List<ConversationSummary>,
+    currentId: Long,
+    onNewChat: () -> Unit,
+    onOpen: (Long) -> Unit,
+    onRename: (ConversationSummary) -> Unit,
+    onDelete: (Long) -> Unit,
+    onOpenModels: () -> Unit,
+    onOpenSettings: () -> Unit,
+) {
+    var menuForId by remember { mutableStateOf<Long?>(null) }
+    ModalDrawerSheet {
+        Column(Modifier.fillMaxSize().padding(horizontal = 12.dp)) {
+            Text(
+                "NativeLM",
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.padding(16.dp),
+            )
+            NavigationDrawerItem(
+                label = { Text("New chat") },
+                icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                selected = false,
+                onClick = onNewChat,
+            )
+            HorizontalDivider(Modifier.padding(vertical = 8.dp))
+            LazyColumn(Modifier.weight(1f)) {
+                items(items = conversations, key = { it.id }) { c ->
+                    Box {
+                        NavigationDrawerItem(
+                            label = { Text(c.title, maxLines = 1) },
+                            selected = c.id == currentId,
+                            onClick = { onOpen(c.id) },
+                            badge = {
+                                IconButton(onClick = { menuForId = c.id }) {
+                                    Icon(Icons.Filled.MoreVert, contentDescription = "Options")
+                                }
+                            },
+                        )
+                        DropdownMenu(
+                            expanded = menuForId == c.id,
+                            onDismissRequest = { menuForId = null },
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Rename") },
+                                leadingIcon = { Icon(Icons.Filled.Edit, contentDescription = null) },
+                                onClick = { menuForId = null; onRename(c) },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Delete") },
+                                leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null) },
+                                onClick = { menuForId = null; onDelete(c.id) },
+                            )
+                        }
+                    }
+                }
+            }
+            HorizontalDivider(Modifier.padding(vertical = 8.dp))
+            NavigationDrawerItem(
+                label = { Text("Models") },
+                selected = false,
+                onClick = onOpenModels,
+            )
+            NavigationDrawerItem(
+                label = { Text("Settings") },
+                selected = false,
+                onClick = onOpenSettings,
+            )
+            Spacer(Modifier.height(8.dp))
+        }
+    }
+}
+
+@Composable
+private fun RenameDialog(
+    current: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit,
+) {
+    var text by remember { mutableStateOf(current) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Rename conversation") },
+        text = {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it },
+                singleLine = true,
+            )
+        },
+        confirmButton = { TextButton(onClick = { onConfirm(text) }) { Text("Save") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+/** Shown over the thread while the engine re-prefills a reopened conversation's
+ *  history into the KV cache — the "catching up on this conversation" moment. */
+@Composable
+private fun BuildingUnderstanding() {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background.copy(alpha = 0.85f)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            CircularProgressIndicator(
+                color = MaterialTheme.colorScheme.primary,
+                strokeWidth = 2.5.dp,
+                modifier = Modifier.size(28.dp),
+            )
+            Spacer(Modifier.height(16.dp))
+            Text(
+                "Building understanding…",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onBackground,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Catching up on this conversation",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }
