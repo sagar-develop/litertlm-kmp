@@ -5,6 +5,10 @@ plugins {
     alias(libs.plugins.androidApplication)
     alias(libs.plugins.kotlinAndroid)
     alias(libs.plugins.composeCompiler)
+    alias(libs.plugins.kotlinKapt)
+    // ObjectBox plugin must be applied AFTER the Kotlin plugins — it generates
+    // MyObjectBox + the model from @Entity classes and wires the kapt processor.
+    alias(libs.plugins.objectbox)
 }
 
 android {
@@ -91,6 +95,10 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.androidx.security.crypto)
     implementation(libs.androidx.core.splashscreen)
+
+    // ObjectBox — multi-conversation persistence (Conversation + Message entities).
+    implementation(libs.objectbox.kotlin)
+    kapt(libs.objectbox.processor)
 
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.napier)

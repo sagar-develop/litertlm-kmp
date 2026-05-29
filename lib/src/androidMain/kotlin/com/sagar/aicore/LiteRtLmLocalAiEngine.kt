@@ -300,14 +300,16 @@ class LiteRtLmLocalAiEngine(
         }
 
         override fun close() {
+            // Synchronous so a one-shot generateStream (which needs the engine's
+            // single conversation slot free) can run immediately after — LiteRT-LM
+            // allows only one live conversation per engine. cancelProcess() first
+            // makes this safe even if a turn is mid-decode.
             runCatching { conversation?.cancelProcess() }
-            scope.launch {
-                mutex.withLock {
-                    runCatching { conversation?.close() }
-                    conversation = null
-                }
-                scope.cancel()
+            synchronized(this) {
+                runCatching { conversation?.close() }
+                conversation = null
             }
+            runCatching { scope.cancel() }
             if (currentSession === this) currentSession = null
         }
     }
