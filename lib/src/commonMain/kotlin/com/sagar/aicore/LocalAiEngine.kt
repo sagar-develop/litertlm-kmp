@@ -37,6 +37,7 @@ interface LocalAiEngine {
     fun openChatSession(
         history: List<ChatTurn> = emptyList(),
         systemInstruction: String? = null,
+        temperature: Float = 0.7f,
     ): ChatSession
 
     fun formatPrompt(
@@ -70,9 +71,22 @@ interface ChatSession {
     /** Interrupts the in-flight turn via native cancel. No-op when idle. */
     fun cancel()
 
+    /** Exact metrics for the most recently completed turn (engine-reported, not
+     *  estimated), or null before the first turn finishes. */
+    fun lastTurnMetrics(): TurnMetrics?
+
     /** Releases the session and its KV cache. */
     fun close()
 }
+
+/** Engine-reported timing for one generated turn. */
+data class TurnMetrics(
+    val timeToFirstTokenSec: Double,
+    val prefillTokensPerSecond: Double,
+    val decodeTokensPerSecond: Double,
+    val prefillTokenCount: Int,
+    val decodeTokenCount: Int,
+)
 
 sealed class SessionState {
     /** Re-prefilling seeded history; not yet ready to accept a turn. */
@@ -191,7 +205,7 @@ sealed class EngineState<out T> {
 }
 
 sealed class HardwareFault(message: String) : Exception(message) {
-    class OutOfMemory(message: String = "128K Context exceeded available mobile RAM.") : HardwareFault(message)
+    class OutOfMemory(message: String = "Context length exceeded available memory.") : HardwareFault(message)
     class DelegateFailure(message: String = "NPU/GPU Delegate failed to initialize.") : HardwareFault(message)
     class ModelNotLoaded(message: String = "Engine stream called before weights loaded.") : HardwareFault(message)
 }

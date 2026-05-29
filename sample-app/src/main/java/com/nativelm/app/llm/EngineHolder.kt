@@ -60,8 +60,11 @@ class EngineHolder(context: Context) {
         engine.generateStream(request)
 
     /** Opens a stateful chat session (KV-cache reuse); [history] seeds prior turns. */
-    fun openChatSession(history: List<ChatTurn>, systemInstruction: String?): ChatSession =
-        engine.openChatSession(history, systemInstruction)
+    fun openChatSession(
+        history: List<ChatTurn>,
+        systemInstruction: String?,
+        temperature: Float = 0.7f,
+    ): ChatSession = engine.openChatSession(history, systemInstruction, temperature)
 
     fun release() = engine.releaseResources()
 }

@@ -19,8 +19,8 @@ android {
         applicationId = "com.nativelm.app"
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
-        versionCode = 1
-        versionName = "0.2.4"
+        versionCode = 2
+        versionName = "0.3.0"
 
         // Pull the model URL from sample-app/local.properties (gitignored).
         // Visitors who clone the repo paste their own Firebase/CDN URL there
