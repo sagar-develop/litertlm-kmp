@@ -10,10 +10,14 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.sagar.aicore.AiEngineRequest
+import com.sagar.aicore.ChatSession
+import com.sagar.aicore.ChatTurn
 import com.sagar.aicore.DownloadState
 import com.sagar.aicore.EngineState
 import com.sagar.aicore.ModelDescriptor
 import com.sagar.aicore.ModelRole
+import com.sagar.aicore.SessionState
+import com.sagar.aicore.TurnRole
 import com.nativelm.app.data.AppPreferences
 import com.nativelm.app.data.ChatStore
 import com.nativelm.app.data.SecureStore
@@ -32,6 +36,9 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 private const val TAG = "NativeLmVM"
+
+private const val SYSTEM_INSTRUCTION =
+    "You are NativeLM, a helpful on-device assistant. Answer clearly and concisely."
 
 const val ROUTE_SPLASH = "splash"
 const val ROUTE_ONBOARDING = "onboarding"
@@ -76,6 +83,8 @@ data class ChatState(
     val messages: List<ChatMessage> = emptyList(),
     val input: String = "",
     val isGenerating: Boolean = false,
+    /** True while the engine re-prefills seeded history ("building understanding"). */
+    val isWarming: Boolean = false,
 )
 
 class NativeLmViewModel(app: Application) : ViewModel() {
@@ -116,6 +125,10 @@ class NativeLmViewModel(app: Application) : ViewModel() {
     private val downloadJobs = mutableMapOf<String, Job>()
     private var generationJob: Job? = null
     private var nextChatMessageId = 0L
+
+    /** The live KV-cache chat session for the open conversation. */
+    private var chatSession: ChatSession? = null
+    private var sessionWarmJob: Job? = null
 
     // Transient (in-flight / failed) statuses keyed by model id; disk + active
     // state is read live in refreshModels(). Declared before init {} so the
@@ -168,7 +181,11 @@ class NativeLmViewModel(app: Application) : ViewModel() {
         viewModelScope.launch {
             _engineLoad.value = EngineLoad.Loading
             val path = engineHolder.modelPath(descriptor.fileName)
-            _engineLoad.value = toEngineLoad(engineHolder.initializeEngine(path))
+            val load = toEngineLoad(engineHolder.initializeEngine(path))
+            _engineLoad.value = load
+            // Open the chat session seeded with the restored conversation so the
+            // KV cache is warm before the user types (the "building understanding" step).
+            if (load is EngineLoad.Ready) openSession(_chat.value.messages)
             refreshModels()
         }
     }
@@ -261,6 +278,7 @@ class NativeLmViewModel(app: Application) : ViewModel() {
             if (result is EngineLoad.Ready) {
                 _activeModelId.value = modelId
                 prefs.setSelectedModelId(modelId)
+                openSession(_chat.value.messages)
             }
             refreshModels()
         }
@@ -284,14 +302,9 @@ class NativeLmViewModel(app: Application) : ViewModel() {
 
     fun sendChatMessage() {
         val input = _chat.value.input.trim()
-        if (input.isBlank() || _chat.value.isGenerating) return
+        if (input.isBlank() || _chat.value.isGenerating || _chat.value.isWarming) return
         if (_engineLoad.value !is EngineLoad.Ready) return
-
-        // Build the prompt from prior completed turns BEFORE adding the new ones.
-        // The engine creates a fresh conversation per call (no KV cache yet), so
-        // we feed the history as context each turn. KV-cache reuse is a planned
-        // engine-side optimization on a separate branch.
-        val prompt = buildContextPrompt(_chat.value.messages, input)
+        val session = chatSession ?: return
 
         val userMsg = ChatMessage(ChatMessage.Role.User, input, id = ++nextChatMessageId)
         val assistantMsg = ChatMessage(ChatMessage.Role.Assistant, "", isStreaming = true, id = ++nextChatMessageId)
@@ -302,8 +315,10 @@ class NativeLmViewModel(app: Application) : ViewModel() {
         generationJob?.cancel()
         generationJob = viewModelScope.launch {
             metrics.tokens.requestStarted()
-            val request = AiEngineRequest(formattedPrompt = prompt, temperature = 0.7f, maxTokens = 1024)
-            engineHolder.generate(request).collect { state ->
+            // The session holds the KV cache from prior turns — send only the new
+            // message; no history re-prefill, no app-side context prompt.
+            val request = AiEngineRequest(formattedPrompt = input, temperature = 0.7f, maxTokens = 1024)
+            session.sendTurn(request).collect { state ->
                 when (state) {
                     is EngineState.TokenGenerated<String> -> {
                         metrics.tokens.tokenReceived()
@@ -346,6 +361,7 @@ class NativeLmViewModel(app: Application) : ViewModel() {
     /** Stop the in-flight generation, keeping whatever has streamed so far. */
     fun stopGeneration() {
         if (!_chat.value.isGenerating) return
+        chatSession?.cancel() // interrupt the native decode loop, not just the collector
         generationJob?.cancel()
         generationJob = null
         metrics.tokens.requestEnded()
@@ -360,43 +376,35 @@ class NativeLmViewModel(app: Application) : ViewModel() {
         chatStore.save(_chat.value.messages)
     }
 
-    /** Start a fresh conversation. */
+    /** Start a fresh conversation: clear the thread and open an empty session. */
     fun newChat() {
         generationJob?.cancel()
         generationJob = null
         metrics.tokens.requestEnded()
         _chat.value = ChatState()
         chatStore.clear()
+        if (_engineLoad.value is EngineLoad.Ready) openSession(emptyList())
     }
 
     /**
-     * Compose a single prompt carrying the recent conversation as context, since
-     * the engine has no cross-call memory yet. Trims oldest turns to a character
-     * budget so we stay within the model's context window.
+     * Open a stateful chat session, seeding it with [history] (re-prefilled once,
+     * surfaced as [ChatState.isWarming]). Closes any prior session. The KV cache
+     * is then reused across turns, so we no longer re-send history each message.
      */
-    private fun buildContextPrompt(history: List<ChatMessage>, latest: String): String {
-        val completed = history.filter { it.text.isNotEmpty() }
-        if (completed.isEmpty()) return latest
-
-        val budget = 6000
-        val included = ArrayDeque<ChatMessage>()
-        var used = latest.length
-        for (m in completed.asReversed()) {
-            val line = (if (m.role == ChatMessage.Role.User) "User: " else "Assistant: ") + m.text + "\n"
-            if (used + line.length > budget) break
-            used += line.length
-            included.addFirst(m)
+    private fun openSession(history: List<ChatMessage>) {
+        sessionWarmJob?.cancel()
+        val turns = history.filter { it.text.isNotEmpty() }.map {
+            ChatTurn(
+                role = if (it.role == ChatMessage.Role.User) TurnRole.USER else TurnRole.ASSISTANT,
+                text = it.text,
+            )
         }
-        return buildString {
-            append("You are NativeLM, a helpful on-device assistant. ")
-            append("Use the conversation history to answer the latest message.\n\n")
-            append("History:\n")
-            for (m in included) {
-                append(if (m.role == ChatMessage.Role.User) "User: " else "Assistant: ")
-                append(m.text).append("\n")
+        val session = engineHolder.openChatSession(turns, SYSTEM_INSTRUCTION)
+        chatSession = session
+        sessionWarmJob = viewModelScope.launch {
+            session.state.collect { st ->
+                _chat.update { it.copy(isWarming = st is SessionState.Warming) }
             }
-            append("\nLatest message:\n")
-            append(latest)
         }
     }
 
@@ -411,6 +419,8 @@ class NativeLmViewModel(app: Application) : ViewModel() {
             downloadJobs.values.forEach { it.cancel() }
             downloadJobs.clear()
             generationJob?.cancel()
+            sessionWarmJob?.cancel()
+            chatSession = null
             engineHolder.release()
             catalog.all().forEach { engineHolder.deleteModel(it.fileName) }
             secureStore.clearHfToken()

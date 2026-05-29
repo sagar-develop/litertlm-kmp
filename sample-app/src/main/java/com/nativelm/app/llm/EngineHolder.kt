@@ -8,6 +8,8 @@ import android.content.Context
 import com.sagar.aicore.AiEngineRequest
 import com.sagar.aicore.AndroidHardwareProvider
 import com.sagar.aicore.AndroidPlatformFolders
+import com.sagar.aicore.ChatSession
+import com.sagar.aicore.ChatTurn
 import com.sagar.aicore.DownloadState
 import com.sagar.aicore.EngineState
 import com.sagar.aicore.KtorModelManager
@@ -56,6 +58,10 @@ class EngineHolder(context: Context) {
 
     fun generate(request: AiEngineRequest): Flow<EngineState<String>> =
         engine.generateStream(request)
+
+    /** Opens a stateful chat session (KV-cache reuse); [history] seeds prior turns. */
+    fun openChatSession(history: List<ChatTurn>, systemInstruction: String?): ChatSession =
+        engine.openChatSession(history, systemInstruction)
 
     fun release() = engine.releaseResources()
 }

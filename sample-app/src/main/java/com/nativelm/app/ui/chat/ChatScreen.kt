@@ -35,6 +35,7 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -146,6 +147,8 @@ fun ChatScreen(
                         }
                     }
                 }
+                // While the engine re-prefills a reopened conversation's history.
+                if (chat.isWarming) BuildingUnderstanding()
             }
 
             // Quiet live telemetry while generating.
@@ -164,10 +167,42 @@ fun ChatScreen(
             InputBar(
                 value = chat.input,
                 generating = chat.isGenerating,
-                canSend = activeModel != null,
+                canSend = activeModel != null && !chat.isWarming,
                 onValueChange = vm::setInput,
                 onSend = vm::sendChatMessage,
                 onStop = vm::stopGeneration,
+            )
+        }
+    }
+}
+
+/** Shown over the thread while the engine re-prefills a reopened conversation's
+ *  history into the KV cache — the "catching up on this conversation" moment. */
+@Composable
+private fun BuildingUnderstanding() {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background.copy(alpha = 0.85f)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            CircularProgressIndicator(
+                color = MaterialTheme.colorScheme.primary,
+                strokeWidth = 2.5.dp,
+                modifier = Modifier.size(28.dp),
+            )
+            Spacer(Modifier.height(16.dp))
+            Text(
+                "Building understanding…",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onBackground,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Catching up on this conversation",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }
