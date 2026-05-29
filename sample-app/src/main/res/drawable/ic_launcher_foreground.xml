@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Document outline -->
+    <path
+        android:strokeColor="#7FA980"
+        android:strokeWidth="4.5"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round"
+        android:pathData="M46,33 L64,33 Q68,33 68,37 L68,75 Q68,79 64,79 L44,79 Q40,79 40,75 L40,39 Q40,35 44,35" />
+
+    <!-- Text lines -->
+    <path
+        android:strokeColor="#7FA980"
+        android:strokeWidth="3.6"
+        android:strokeLineCap="round"
+        android:pathData="M46,49 L62,49" />
+    <path
+        android:strokeColor="#7FA980"
+        android:strokeWidth="3.6"
+        android:strokeLineCap="round"
+        android:pathData="M46,57 L57,57" />
+
+    <!-- Spark (four-point star), solid sage -->
+    <path
+        android:fillColor="#7FA980"
+        android:pathData="M73,26 L75.5,33.5 L83,36 L75.5,38.5 L73,46 L70.5,38.5 L63,36 L70.5,33.5 Z" />
+</vector>

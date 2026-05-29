@@ -36,11 +36,16 @@ interface ModelManager {
      * the downloaded file is verified after the atomic tempâ†’final move;
      * mismatch deletes the file and emits [DownloadState.Error]. Validation
      * is inert when null.
+     * @param headers Optional extra request headers applied to every request
+     * (including resume range requests). Use this to authenticate against a
+     * gated host, e.g. mapOf("Authorization" to "Bearer hf_...") for a
+     * license-gated Hugging Face repo. Empty by default.
      */
     fun downloadModel(
         url: String,
         modelName: String,
         expectedSha256: String? = null,
+        headers: Map<String, String> = emptyMap(),
     ): Flow<DownloadState>
 
     /**
