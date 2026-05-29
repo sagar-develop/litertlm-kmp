@@ -158,23 +158,14 @@ class NativeLmViewModel(app: Application) : ViewModel() {
     init {
         metrics.start(viewModelScope)
         refreshModels()
+        // Start every launch on a fresh chat (Gemini-style). Past conversations
+        // stay in the drawer and can be reopened; we don't auto-restore one.
         refreshConversations()
-        // Restore the most recently used conversation into the chat thread.
-        _conversations.value.firstOrNull()?.let { restoreConversation(it.id) }
         viewModelScope.launch { decideStartRoute() }
     }
 
     private fun refreshConversations() {
         _conversations.value = repo.list().map { ConversationSummary(it.id, it.title, it.updatedAt) }
-    }
-
-    /** Load a conversation's messages into the thread WITHOUT opening a session
-     *  (used at init before the engine is ready; the session opens on model-ready). */
-    private fun restoreConversation(id: Long) {
-        val msgs = repo.messages(id).mapIndexed { i, e -> e.toChatMessage(i.toLong()) }
-        _currentConversationId.value = id
-        nextChatMessageId = msgs.size.toLong()
-        _chat.value = ChatState(messages = msgs)
     }
 
     // ---- Boot ----
