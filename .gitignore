@@ -44,8 +44,17 @@ publishing/
 # Sample-app scratch (added later)
 sample-app/local.properties
 
+# Release signing — keys + credentials never go in the repo
+*.keystore
+*.jks
+keystore.properties
+sample-app/keystore.properties
+
 # Private planning + session-handoff files — not for public repo
 CLAUDE.md
 docs/NATIVELM_PLAN.md
 docs/ENGINE_SYNC.md
 docs/NEXT_SESSION.md
+
+# ObjectBox model backups
+*.bak

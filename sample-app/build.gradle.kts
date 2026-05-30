@@ -11,9 +11,27 @@ plugins {
     alias(libs.plugins.objectbox)
 }
 
+// Release signing — credentials live in sample-app/keystore.properties (gitignored).
+// Falls back to debug signing if the file is absent, so a fresh clone still builds.
+val keystorePropsFile = rootProject.file("sample-app/keystore.properties")
+val keystoreProps = Properties().apply {
+    if (keystorePropsFile.exists()) load(keystorePropsFile.inputStream())
+}
+
 android {
     namespace = "com.nativelm.app"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
+
+    signingConfigs {
+        if (keystorePropsFile.exists()) {
+            create("release") {
+                storeFile = file(keystoreProps.getProperty("storeFile"))
+                storePassword = keystoreProps.getProperty("storePassword")
+                keyAlias = keystoreProps.getProperty("keyAlias")
+                keyPassword = keystoreProps.getProperty("keyPassword")
+            }
+        }
+    }
 
     defaultConfig {
         applicationId = "com.nativelm.app"
@@ -21,6 +39,10 @@ android {
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = 2
         versionName = "0.3.0"
+
+        // Only arm64-v8a: every device with the RAM to run a 2.6 GB LLM is
+        // 64-bit, and the LiteRT-LM / MediaPipe .so dominate APK size.
+        ndk { abiFilters += "arm64-v8a" }
 
         // Pull the model URL from sample-app/local.properties (gitignored).
         // Visitors who clone the repo paste their own Firebase/CDN URL there
@@ -65,6 +87,12 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
+        jniLibs {
+            // LiteRT-LM dlopen()s some .so by path → keep them page-unaligned-safe.
+            useLegacyPackaging = true
+            // LiteRT-LM and MediaPipe each bundle TFLite .so — keep the first.
+            pickFirsts += listOf("**/libtensorflowlite_jni.so", "**/libtensorflowlite_gpu_jni.so")
+        }
     }
 
     buildTypes {
@@ -72,7 +100,17 @@ android {
             isMinifyEnabled = false
         }
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
+            signingConfig = if (keystorePropsFile.exists()) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
 }
