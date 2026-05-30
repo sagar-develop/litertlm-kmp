@@ -63,6 +63,10 @@ android {
     compileSdk = libs.versions.android.compileSdk.get().toInt()
     defaultConfig {
         minSdk = libs.versions.android.minSdk.get().toInt()
+        // R8 keep rules for the engine's reflection/JNI surfaces (LiteRT-LM,
+        // MediaPipe, Gson, kotlinx.serialization). Consumers inherit these in
+        // their minified release builds automatically.
+        consumerProguardFiles("consumer-rules.pro")
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
