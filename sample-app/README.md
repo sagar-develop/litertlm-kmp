@@ -1,8 +1,9 @@
 # NativeLM
 
-**Local NotebookLM with general chat — on-device, private, fast.**
+**Local AI — private, on-device chat for Android.**
 
-Your documents and conversations never leave your phone.
+Your conversations never leave your phone. (Document chat / local RAG — the
+"NotebookLM" part — is on the roadmap.)
 
 NativeLM is the reference product built on top of [litertlm-kmp](../README.md).
 It runs Gemma-family models fully on-device: no account, no API key, no cloud
