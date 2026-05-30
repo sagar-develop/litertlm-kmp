@@ -12,6 +12,21 @@ product.
 
 > Open source · AGPL-3.0 · No telemetry · No account required · No upload.
 
+<table>
+  <tr>
+    <td width="25%" align="center"><b>On-device chat</b></td>
+    <td width="25%" align="center"><b>Conversation history</b></td>
+    <td width="25%" align="center"><b>Private by design</b></td>
+    <td width="25%" align="center"><b>Bring your own model</b></td>
+  </tr>
+  <tr>
+    <td><img src="../docs/screenshots/shot_chat.png" alt="On-device streaming chat"></td>
+    <td><img src="../docs/screenshots/shot_drawer.png" alt="Conversation history drawer"></td>
+    <td><img src="../docs/screenshots/shot_onboarding.png" alt="Private by design onboarding"></td>
+    <td><img src="../docs/screenshots/shot_models.png" alt="Model management"></td>
+  </tr>
+</table>
+
 ---
 
 ## What it does today

@@ -15,39 +15,52 @@ Shipping a production on-device LLM on Android is significantly harder than the 
 - Hardware-tier logic that picks the right Gemma variant for the device (and refuses gracefully on under-spec hardware)
 - Awareness of OEM quirks — **Realme Dynamic RAM Expansion, Xiaomi Memory Extension, OPPO** all inflate `MemTotal` and silently push under-spec devices into the wrong tier
 - A function-calling layer that converts your typed Kotlin schema into the OpenAPI JSON LiteRT-LM expects
+- Stateful, KV-cache-reusing chat sessions so multi-turn memory is lossless and time-to-first-token stays flat as a conversation grows — instead of re-sending the whole history every turn
 - All of the above shaped to run identically on Android and iOS so you can share code across both apps
 
-This library solves all six. The bundled `sample-app/` demonstrates the entire flow with a live CPU & RAM metrics overlay so you can see exactly what running Gemma on-device looks like.
+This library solves all six. The bundled `sample-app/` — **NativeLM** — is a real,
+shipped product (private on-device chat with conversation history) built on top
+of the engine, so you can see exactly what running Gemma on-device looks like.
 
-## What the sample app demonstrates
+## The showcase app — NativeLM
 
-Two features, both running fully on-device — no network, no API key, no cloud bill.
+A private, fully on-device AI chat for Android — no account, no network, no
+telemetry. Everything below runs locally on Gemma 4 (E2B / E4B) via this engine.
 
 <table>
   <tr>
-    <td width="50%" align="center"><b>Streaming chat</b></td>
-    <td width="50%" align="center"><b>Function calling</b></td>
+    <td width="25%" align="center"><b>On-device chat</b></td>
+    <td width="25%" align="center"><b>Conversation history</b></td>
+    <td width="25%" align="center"><b>Private by design</b></td>
+    <td width="25%" align="center"><b>Bring your own model</b></td>
   </tr>
   <tr>
-    <td><img src="docs/screenshots/chat-streaming.png" alt="Streaming chat mid-generation"></td>
-    <td><img src="docs/screenshots/function-calling.png" alt="Function calling structured extraction"></td>
+    <td><img src="docs/screenshots/shot_chat.png" alt="On-device streaming chat"></td>
+    <td><img src="docs/screenshots/shot_drawer.png" alt="Conversation history drawer"></td>
+    <td><img src="docs/screenshots/shot_onboarding.png" alt="Private by design onboarding"></td>
+    <td><img src="docs/screenshots/shot_models.png" alt="Model management"></td>
   </tr>
   <tr>
-    <td>Token-by-token streaming via <code>LocalAiEngine.generateStream(...)</code>. Live metrics show <b>~13 tok/s</b>, <b>CPU 50%</b> across 8 cores, <b>TTFT 1088ms</b>, <b>RAM 1.8 GB</b> for Gemma 4 E2B.</td>
-    <td>Typed Kotlin <code>ToolSchema.Definition</code> → OpenAPI JSON → LiteRT-LM constrains output → <b>parsed arguments</b> arrive as <code>EngineState.ToolCallEmitted</code>. Here: <code>{"title": "Project Apollo kickoff", "duration_minutes": 30.0}</code>.</td>
+    <td>Token-by-token streaming with rich Markdown (incl. tables), via <code>LocalAiEngine</code>.</td>
+    <td><b>Stateful KV-cache sessions</b> (<code>openChatSession</code>) — lossless multi-turn memory with no history re-sending, model-generated titles, ObjectBox persistence.</td>
+    <td>Nothing leaves the device. No account, no servers, no telemetry.</td>
+    <td>Download Gemma variants on demand with your own Hugging Face token; hardware-tier gating refuses under-spec devices.</td>
   </tr>
 </table>
 
-Per-core CPU bars, RAM, tokens/sec, and time-to-first-token update at 4 Hz throughout. The CPU history line shows the workload's full lifecycle: idle → spike → sustained inference → idle.
+Also supported by the engine: **function calling** (typed Kotlin
+`ToolSchema.Definition` → OpenAPI JSON → constrained output as
+`EngineState.ToolCallEmitted`), **vision** (image input on multimodal Gemma 4),
+and **real native cancellation** of in-flight generation.
 
 ## Platform support
 
 | Platform | Core engine | Hardware acceleration | Status |
 |---|---|---|---|
 | **Android** (API 24+) | Production | GPU / NPU via LiteRT delegate selection | Production-vetted on flagship + mid-tier devices |
-| **iOS** (arm64 + Apple Silicon sim) | Architecture-ready | Planned: Metal GPU acceleration via LiteRT-LM Swift APIs | Roadmap — v0.3 |
+| **iOS** (arm64 + Apple Silicon sim) | Architecture-ready | Planned: Metal GPU acceleration via LiteRT-LM Swift APIs | Roadmap |
 
-The common module (`lib/src/commonMain`) carries the engine state machine, model-catalog typing, Ktor-backed download manager, and function-calling schema conversion. iOS-side native bindings ship in v0.3 using LiteRT-LM's Swift APIs.
+The common module (`lib/src/commonMain`) carries the engine state machine, model-catalog typing, Ktor-backed download manager, and function-calling schema conversion. iOS-side native bindings are on the roadmap using LiteRT-LM's Swift APIs.
 
 ## Quickstart — adding the library to your app
 
@@ -73,7 +86,7 @@ In your **app module's `build.gradle.kts`**:
 
 ```kotlin
 dependencies {
-    implementation("com.github.sagar-develop:litertlm-kmp:v0.2.4")
+    implementation("com.github.sagar-develop:litertlm-kmp:v0.3.0")
 }
 ```
 
@@ -250,111 +263,57 @@ modelManager.downloadModel(
 }
 ```
 
-The sample-app's [`SampleViewModel`](sample-app/src/main/java/com/sagar/litertlmsample/llm/SampleViewModel.kt) shows the full real-world flow: download → init → generate → emit metrics. Read it end-to-end for a working reference.
+The sample-app's [`NativeLmViewModel`](sample-app/src/main/java/com/nativelm/app/llm/NativeLmViewModel.kt) shows the full real-world flow: download → init → open a stateful chat session → stream turns. Read it end-to-end for a working reference.
 
 ## Running the sample app
 
-The `sample-app/` module is a single-activity Compose app that exercises the entire library — streaming chat, function-calling, and a live CPU & RAM metrics overlay that updates 4× per second so you can see exactly what Gemma 4 is doing to your device while it generates.
+The `sample-app/` module is **NativeLM** — a Compose app that exercises the whole
+library: branded onboarding → model management → a chat surface with stateful
+KV-cache sessions and conversation history. Models are **downloaded on demand
+from Hugging Face with your own token** (never bundled), and a previously
+selected model auto-loads from disk on later launches.
 
-### 1. Host the model weights yourself
-
-The repo does **not** ship binary model weights — Gemma's license permits redistribution but each consumer is responsible for hosting. The sample app downloads from any HTTPS URL you point it at on first launch. Recommended path: **download from HuggingFace, host on Firebase Storage**.
-
-#### Step 1 — Download a Gemma 4 LiteRT-LM `.litertlm` from HuggingFace
-
-LiteRT-LM-formatted Gemma weights live on the [litert-community](https://huggingface.co/litert-community) HuggingFace org:
-
-- Sign in to HuggingFace and accept the Gemma terms-of-use on the model card (one-time).
-- Download the `.litertlm` artifact for the variant you want — Gemma 4 E2B (~2.5 GB, fits 6–9 GB RAM devices) is the safe default.
-- Keep the file on disk for the next step.
-
-#### Step 2 — Upload to Firebase Storage
-
-If you don't already have a Firebase project, [console.firebase.google.com](https://console.firebase.google.com) → **Add project** (free Spark plan is sufficient).
-
-1. In the Firebase console, open **Storage** → **Get started** → keep production rules → choose your region.
-2. Click **Upload file** → pick the `.litertlm` you downloaded. Wait for the upload to complete (the file is ~2.5 GB; 5–15 min depending on your uplink).
-3. Click the uploaded file → switch to the **Name** column → click the small "download" icon → "**Copy access token URL**". The URL looks like:
-   ```
-   https://firebasestorage.googleapis.com/v0/b/YOUR-PROJECT.firebasestorage.app/o/gemma-4-E2B-it.litertlm?alt=media&token=...
-   ```
-4. Treat this URL as semi-public — anyone with it can download from your bucket. Firebase Storage's free tier covers ~10 GB egress / month; for higher volume, use Cloudflare R2 or S3 instead.
-
-#### Step 3 — Paste the URL into `sample-app/local.properties`
+### 1. Build and install
 
 ```bash
-cp sample-app/local.properties.template sample-app/local.properties
+./gradlew :sample-app:assembleDebug
+adb install -r sample-app/build/outputs/apk/debug/sample-app-debug.apk
+adb shell am start -n com.nativelm.app/.MainActivity
 ```
 
-Then edit `sample-app/local.properties`:
+A signed, R8-minified release build is also wired (`:sample-app:assembleRelease`)
+— see [`sample-app/README.md`](sample-app/README.md).
 
-```properties
-model.url=https://firebasestorage.googleapis.com/v0/b/YOUR-PROJECT.firebasestorage.app/o/gemma-4-E2B-it.litertlm?alt=media&token=YOUR-TOKEN
-model.fileName=gemma-4-E2B-it.litertlm
-model.sizeBytes=2588000000
-```
+### 2. First-run flow
 
-`local.properties` is gitignored — your URL and token never get committed.
+The repo does **not** ship binary model weights — Gemma's license permits
+redistribution but each consumer hosts their own; NativeLM downloads directly
+from Hugging Face.
 
-### 2. Build and install
+1. **Onboarding** → **Model Management**.
+2. Paste a Hugging Face **read token** (Settings → Access Tokens on huggingface.co)
+   into the token field. It's stored encrypted on-device (`EncryptedSharedPreferences`).
+3. **Download** Gemma 4 E2B (~2.6 GB, for 6 GB+ devices) — resumable, SHA-256
+   validated. Tap **Set active** to load it into memory.
+4. **Chat.** Type a prompt and watch token-by-token streaming with live
+   tokens/sec + TTFT. The model file persists, so later launches load it directly.
 
-```bash
-./gradlew :sample-app:installDebug
-adb shell am start -n com.sagar.litertlmsample/.MainActivity
-```
+The download URLs + per-model metadata live in
+[`NativeLmModelCatalog`](sample-app/src/main/java/com/nativelm/app/llm/NativeLmModelCatalog.kt)
+(an app-supplied `ModelCatalog` over the engine's typed descriptors).
 
-First launch shows the Setup screen → **Download & initialize**. The download happens once (5–15 min depending on your network) and persists in `/data/data/com.sagar.litertlmsample/files/models/`. Subsequent launches skip straight to the Ready state.
+### 3. What confirms it's working
 
-### 3. What you'll see — and how to verify both features
-
-The app opens on the **Setup screen** the first time. Tap **Download & initialize** — the model downloads once (5–15 min on first launch, ~zero on subsequent launches because the file persists). When the Setup screen finishes, two tabs appear.
-
-#### Chat tab — verify streaming works
-
-1. Type any prompt in the text field. Example: *"Explain RoPE positional encodings in three short paragraphs."*
-2. Tap **Send**.
-3. Within ~1 second the assistant bubble appears with an ellipsis placeholder.
-4. Tokens start flowing — the bubble fills in, sentence by sentence.
-
-What confirms it's working:
-
-- The metrics overlay header switches from **"Idle"** to **"⏺ Generating · N t/s"** where N is the current tokens-per-second.
-- The **CPU total** line spikes from idle baseline (~5%) up to 40–60% depending on your device.
-- The per-core bars saturate — most cores will be at high frequency utilization.
-- **TTFT** shows the time-to-first-token in ms (typical: 800–1500 ms for the first prompt, ~200–500 ms for follow-ups thanks to the XNNPACK warm cache).
-- **RAM** climbs to ~1.5–2.0 GB and stays there (Gemma 4 E2B's KV cache + weights are resident).
-- When generation finishes, the indicator returns to **"Idle"** and tokens/sec drops to 0.
-
-#### Function calling tab — verify structured output works
-
-1. The tab opens with a pre-filled prompt: *"Schedule a 30-minute kickoff for Project Apollo on Tuesday."*
-2. The schema preview shows the typed `ToolSchema.Definition`: a tool named `extract_event_details` with `title: string` and `duration_minutes: integer`.
-3. Tap **Run extraction**.
-4. After ~10–15 seconds (LiteRT-LM's structured-output path is a bit slower than free-text streaming because it constrains decoding at the token level), the **Extracted** box populates with the parsed JSON.
-
-Expected result for the default prompt:
-
-```json
-{
-  "duration_minutes": 30.0,
-  "title": "Project Apollo kickoff"
-}
-```
-
-Edit the prompt and tap Run again to test other inputs. The schema preview is read-only — to change parameters, edit `SampleViewModel.runFunctionCall()` in [the source](sample-app/src/main/java/com/sagar/litertlmsample/llm/SampleViewModel.kt).
-
-#### Live metrics overlay — what each panel means
-
-| Element | Source | What it tells you |
-|---|---|---|
-| **CPU total** line | `Process.getElapsedCpuTime()` deltas, normalized by core count | Process-wide CPU usage as average per-core (0–100%). Spikes during inference. |
-| **Per-core 8×** bars | `/sys/devices/system/cpu/cpuN/cpufreq/scaling_cur_freq` ÷ max freq | Each core's current frequency as a percentage of its silicon max. big.LITTLE asymmetry visible — performance cores climb higher than efficiency cores. |
-| **RAM** | `Debug.MemoryInfo.totalPss` | Process proportional set size in MB/GB. Gemma 4 E2B sits around 1.8 GB resident. |
-| **tok/s** | rolling 1-second window over `EngineState.TokenGenerated` emissions | Real-time generation throughput. Higher = faster. |
-| **TTFT** | `SystemClock.elapsedRealtime()` from request submission to first token | Latency from "user tapped send" to "first token rendered". Cold first prompt = ~1.5 s; warm follow-ups = sub-second. |
-| **Generating · N t/s** badge | derived from `EngineState.TokenGenerated` activity | Live indicator while inference is in flight. Goes away when the stream completes. |
-
-All updated at 4 Hz so the chart flows smoothly while inference is running.
+- **Streaming** — the assistant bubble fills in token-by-token; a quiet
+  `TTFT · N tok/s` line shows live throughput (≈20 tok/s on a recent flagship for
+  Gemma 4 E2B, CPU backend).
+- **Multi-turn memory** — tell it a fact, then ask about it several turns later;
+  it recalls correctly **without** the app re-sending history (the KV-cache session
+  holds the context). Time-to-first-token stays flat as the chat grows.
+- **Conversation history** — the drawer lists past conversations (auto-titled by
+  the model); switching one re-prefills its history ("Building understanding…")
+  then reuses the cache.
+- **Stop** truly interrupts the native decode loop, not just the UI.
 
 ## Architecture at a glance
 
@@ -395,9 +354,9 @@ Typical engagements:
 
 - **v0.1** — initial library release. Android target production-ready, iOS targets compile but native engine bindings deferred.
 - **v0.2** — `sample-app/` Compose Android app with live CPU + RAM + tokens/sec metrics overlay. Library restructured into `:lib` subproject; published as `com.sagar:litertlm-kmp`.
-- **v0.2.4** (this release) — multimodal vision: image attachments flow through `EngineConfig.visionBackend` + `Content.ImageBytes`; `descriptor.supportsVision` is now `true`.
-- **v0.3** — iOS native engine implementation via LiteRT-LM's Swift Metal-accelerated APIs.
-- **v0.4** — Benchmark suite (tokens/sec, RAM ceiling, battery drain) across a representative device matrix.
+- **v0.2.4** — multimodal vision: image attachments flow through `EngineConfig.visionBackend` + `Content.ImageBytes`; `descriptor.supportsVision` is now `true`.
+- **v0.3.0** (this release) — **stateful KV-cache chat sessions** (`openChatSession` / `ChatSession`): lossless multi-turn memory with no history re-sending; **real native cancellation** (`cancel()`); explicit `EngineConfig.backend` selection (on-device benchmarking picked `CPU(6)`); `SamplerConfig` temperature/seed plumbed through. The NativeLM showcase app gains conversation history (ObjectBox), model-generated titles, and a signed, R8-minified release build (engine ships its own consumer ProGuard rules).
+- **Future** — iOS native engine via LiteRT-LM's Swift Metal-accelerated APIs; a benchmark suite (tokens/sec, RAM ceiling, battery drain) across a device matrix.
 
 ## Repo layout
 
