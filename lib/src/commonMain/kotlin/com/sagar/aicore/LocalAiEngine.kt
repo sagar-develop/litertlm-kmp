@@ -11,7 +11,13 @@ interface LocalAiEngine {
     /** Self-description used by [EngineRegistry] for selection + capability gating. */
     val descriptor: EngineDescriptor
 
-    suspend fun initializeEngine(modelPath: String): EngineState<Unit>
+    /**
+     * Loads the model at [modelPath] into a native engine. [supportsVision]
+     * tells the engine whether the bundle is multimodal: a vision backend is
+     * attached only when true (text-only bundles fail init with one attached,
+     * and skipping it saves memory). Defaults to true for backward compatibility.
+     */
+    suspend fun initializeEngine(modelPath: String, supportsVision: Boolean = true): EngineState<Unit>
 
     /**
      * Stateless one-shot generation. Each call runs in its own throwaway
