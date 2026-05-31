@@ -67,10 +67,97 @@
         }
       ],
       "relations": []
+    },
+    {
+      "id": "3:9052116013284322171",
+      "lastPropertyId": "6:3570725586478671027",
+      "name": "DocumentChunkEntity",
+      "properties": [
+        {
+          "id": "1:756828071566338484",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:195834270653549806",
+          "name": "documentId",
+          "indexId": "2:8509167178202119613",
+          "type": 6,
+          "flags": 8
+        },
+        {
+          "id": "3:7655810130462893273",
+          "name": "text",
+          "type": 9
+        },
+        {
+          "id": "4:3350022288911064457",
+          "name": "pageNumber",
+          "type": 5
+        },
+        {
+          "id": "5:5308478412671127287",
+          "name": "chunkIndex",
+          "type": 5
+        },
+        {
+          "id": "6:3570725586478671027",
+          "name": "embedding",
+          "indexId": "3:4604242560464399354",
+          "type": 28,
+          "flags": 8
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "4:6425121798192137321",
+      "lastPropertyId": "7:4828040489741913853",
+      "name": "DocumentEntity",
+      "properties": [
+        {
+          "id": "1:1524436323583386141",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:4844385673944363730",
+          "name": "title",
+          "type": 9
+        },
+        {
+          "id": "3:7072126854108922745",
+          "name": "sourceUri",
+          "type": 9
+        },
+        {
+          "id": "4:6547674446565242503",
+          "name": "mimeType",
+          "type": 9
+        },
+        {
+          "id": "5:3536490645797862172",
+          "name": "pageCount",
+          "type": 5
+        },
+        {
+          "id": "6:3620670032191812241",
+          "name": "chunkCount",
+          "type": 5
+        },
+        {
+          "id": "7:4828040489741913853",
+          "name": "createdAt",
+          "type": 6
+        }
+      ],
+      "relations": []
     }
   ],
-  "lastEntityId": "2:3823968940464667185",
-  "lastIndexId": "1:8647786844541690557",
+  "lastEntityId": "4:6425121798192137321",
+  "lastIndexId": "3:4604242560464399354",
   "lastRelationId": "0:0",
   "lastSequenceId": "0:0",
   "modelVersion": 5,

@@ -22,8 +22,11 @@ import com.nativelm.app.data.AppPreferences
 import com.nativelm.app.data.SecureStore
 import com.nativelm.app.data.ThemeMode
 import com.nativelm.app.data.db.ConversationRepository
+import com.nativelm.app.data.db.DocumentEntity
 import com.nativelm.app.data.db.MessageEntity
 import com.nativelm.app.metrics.MetricsRepository
+import com.nativelm.app.rag.Citation
+import com.nativelm.app.rag.IngestState
 import io.github.aakira.napier.Napier
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -46,6 +49,7 @@ const val ROUTE_ONBOARDING = "onboarding"
 const val ROUTE_MODELS = "models"
 const val ROUTE_CHAT = "chat"
 const val ROUTE_SETTINGS = "settings"
+const val ROUTE_DOCUMENTS = "documents"
 
 /** Per-model UI status derived from disk + active + in-flight download state. */
 sealed interface ModelStatus {
@@ -76,9 +80,20 @@ data class ChatMessage(
     val text: String,
     val isStreaming: Boolean = false,
     val id: Long,
+    /** Document sources grounding this answer (RAG); empty for ordinary chat. */
+    val citations: List<Citation> = emptyList(),
 ) {
     enum class Role { User, Assistant }
 }
+
+/** A document row for the management screen. */
+data class DocumentSummary(
+    val id: Long,
+    val title: String,
+    val pageCount: Int,
+    val chunkCount: Int,
+    val createdAt: Long,
+)
 
 data class ChatState(
     val messages: List<ChatMessage> = emptyList(),
@@ -98,6 +113,7 @@ data class ConversationSummary(
 class NativeLmViewModel(app: Application) : ViewModel() {
 
     private val engineHolder = EngineHolder(app)
+    private val ragHolder = RagHolder(app, engineHolder)
     private val prefs = AppPreferences(app)
     private val secureStore = SecureStore(app)
     private val repo = ConversationRepository()
@@ -128,6 +144,21 @@ class NativeLmViewModel(app: Application) : ViewModel() {
     /** Id of the open conversation; 0 = an unsaved new chat (created on first send). */
     private val _currentConversationId = MutableStateFlow(0L)
     val currentConversationId: StateFlow<Long> = _currentConversationId.asStateFlow()
+
+    // ---- Document RAG ----
+
+    /** When true, each turn is grounded against the imported documents. */
+    private val _ragEnabled = MutableStateFlow(false)
+    val ragEnabled: StateFlow<Boolean> = _ragEnabled.asStateFlow()
+
+    private val _documents = MutableStateFlow<List<DocumentSummary>>(emptyList())
+    val documents: StateFlow<List<DocumentSummary>> = _documents.asStateFlow()
+
+    /** Progress of an in-flight document import; null when idle. */
+    private val _importState = MutableStateFlow<IngestState?>(null)
+    val importState: StateFlow<IngestState?> = _importState.asStateFlow()
+
+    private var importJob: Job? = null
 
     val themeMode: StateFlow<ThemeMode> =
         prefs.themeMode.stateIn(viewModelScope, SharingStarted.Eagerly, ThemeMode.SYSTEM)
@@ -161,6 +192,7 @@ class NativeLmViewModel(app: Application) : ViewModel() {
         // Start every launch on a fresh chat (Gemini-style). Past conversations
         // stay in the drawer and can be reopened; we don't auto-restore one.
         refreshConversations()
+        refreshDocuments()
         viewModelScope.launch { decideStartRoute() }
     }
 
@@ -339,9 +371,11 @@ class NativeLmViewModel(app: Application) : ViewModel() {
         generationJob?.cancel()
         generationJob = viewModelScope.launch {
             metrics.tokens.requestStarted()
-            // The session holds the KV cache from prior turns — send only the new
-            // message; no history re-prefill, no app-side context prompt.
-            val request = AiEngineRequest(formattedPrompt = input, temperature = 0.7f, maxTokens = 1024)
+            // RAG: when grounding is on, retrieve context, fold it into this turn's
+            // prompt, and surface citations under the answer. Otherwise send only the
+            // new message so the KV cache keeps TTFT flat.
+            val turnPrompt = ragTurnPrompt(input)
+            val request = AiEngineRequest(formattedPrompt = turnPrompt, temperature = 0.7f, maxTokens = 1024)
             session.sendTurn(request).collect { state ->
                 when (state) {
                     is EngineState.TokenGenerated<String> -> {
@@ -514,6 +548,30 @@ class NativeLmViewModel(app: Application) : ViewModel() {
         }
     }
 
+    /** Build one turn's prompt, folding in retrieved document context when RAG is on. */
+    private suspend fun ragTurnPrompt(input: String): String {
+        if (!_ragEnabled.value || !ragHolder.ensureEmbeddingReady()) return input
+        val ctx = ragHolder.retrieve(input)
+        if (ctx.isEmpty) return input
+        attachCitations(ctx.citations)
+        return buildString {
+            append(ctx.contextText).append("\n\n")
+            append("User question: ").append(input).append('\n')
+            append("Answer using only the context above. If it doesn't contain the answer, say so plainly.")
+        }
+    }
+
+    /** Tag the in-flight assistant message with its grounding sources. */
+    private fun attachCitations(citations: List<Citation>) {
+        if (citations.isEmpty()) return
+        _chat.update { s ->
+            val updated = s.messages.toMutableList()
+            val last = updated.lastOrNull() ?: return@update s
+            updated[updated.lastIndex] = last.copy(citations = citations)
+            s.copy(messages = updated)
+        }
+    }
+
     private fun snippetTitle(input: String): String =
         input.trim().replace('\n', ' ').take(40).ifBlank { "New chat" }
 
@@ -533,6 +591,75 @@ class NativeLmViewModel(app: Application) : ViewModel() {
         createdAt = order
     }
 
+    // ---- Document RAG ----
+
+    fun setRagEnabled(enabled: Boolean) {
+        _ragEnabled.value = enabled
+        // Warm the embedder up-front so the first grounded turn isn't slow.
+        if (enabled) viewModelScope.launch { ragHolder.ensureEmbeddingReady() }
+    }
+
+    fun refreshDocuments() {
+        viewModelScope.launch {
+            _documents.value = ragHolder.documents().map {
+                DocumentSummary(it.id, it.title, it.pageCount, it.chunkCount, it.createdAt)
+            }
+        }
+    }
+
+    /** Import a picked file: ensure the embedding model is ready, then extract → chunk → embed → store. */
+    fun importDocument(uri: String, displayName: String?) {
+        if (importJob?.isActive == true) return
+        importJob = viewModelScope.launch {
+            _importState.value = IngestState.Extracting
+            if (!prepareEmbedding()) {
+                _importState.value = IngestState.Failed("Couldn't prepare the embedding model.")
+                return@launch
+            }
+            ragHolder.ingestor.ingest(uri, displayName).collect { state ->
+                _importState.value = state
+                if (state is IngestState.Done) refreshDocuments()
+            }
+        }
+    }
+
+    fun clearImportState() {
+        _importState.value = null
+    }
+
+    fun deleteDocument(id: Long) {
+        viewModelScope.launch {
+            ragHolder.deleteDocument(id)
+            refreshDocuments()
+        }
+    }
+
+    /** Make the embedder usable: download the small USE model if needed, then init. */
+    private suspend fun prepareEmbedding(): Boolean {
+        if (ragHolder.ensureEmbeddingReady()) return true
+        if (!downloadEmbeddingModel()) return false
+        return ragHolder.ensureEmbeddingReady()
+    }
+
+    private suspend fun downloadEmbeddingModel(): Boolean {
+        val descriptor = catalog.byId(RagHolder.USE_MODEL_ID) ?: return false
+        if (engineHolder.isModelDownloaded(descriptor.fileName)) return true
+        var success = false
+        engineHolder.downloadModel(descriptor.url, descriptor.fileName, descriptor.sha256)
+            .collect { state ->
+                when (state) {
+                    is DownloadState.Success -> success = true
+                    is DownloadState.Error -> {
+                        Napier.e(tag = TAG) { "USE model download failed: ${state.message}" }
+                        success = false
+                    }
+                    else -> Unit
+                }
+            }
+        if (success) refreshModels()
+        return success
+    }
+
     // ---- Settings ----
 
     fun setThemeMode(mode: ThemeMode) {
@@ -546,12 +673,17 @@ class NativeLmViewModel(app: Application) : ViewModel() {
             generationJob?.cancel()
             sessionWarmJob?.cancel()
             chatSession = null
+            importJob?.cancel()
             engineHolder.release()
             catalog.all().forEach { engineHolder.deleteModel(it.fileName) }
             secureStore.clearHfToken()
             _conversations.value.forEach { repo.delete(it.id) }
+            _documents.value.forEach { ragHolder.deleteDocument(it.id) }
+            _ragEnabled.value = false
+            _importState.value = null
             _currentConversationId.value = 0L
             refreshConversations()
+            refreshDocuments()
             prefs.clearAll()
             _hasToken.value = false
             _activeModelId.value = null

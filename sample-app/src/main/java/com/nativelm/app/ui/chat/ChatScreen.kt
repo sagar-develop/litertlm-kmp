@@ -34,6 +34,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
@@ -45,6 +46,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -90,12 +92,15 @@ fun ChatScreen(
     vm: NativeLmViewModel,
     onOpenModels: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenDocuments: () -> Unit,
 ) {
     val chat by vm.chat.collectAsState()
     val activeModel by vm.activeModelName.collectAsState()
     val metrics by vm.metrics.snapshot.collectAsState()
     val conversations by vm.conversations.collectAsState()
     val currentId by vm.currentConversationId.collectAsState()
+    val ragEnabled by vm.ragEnabled.collectAsState()
+    val documents by vm.documents.collectAsState()
     val listState = rememberLazyListState()
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -119,6 +124,7 @@ fun ChatScreen(
                 onDelete = { vm.deleteConversation(it) },
                 onOpenModels = { scope.launch { drawerState.close() }; onOpenModels() },
                 onOpenSettings = { scope.launch { drawerState.close() }; onOpenSettings() },
+                onOpenDocuments = { scope.launch { drawerState.close() }; onOpenDocuments() },
             )
         },
     ) {
@@ -190,6 +196,13 @@ fun ChatScreen(
                 )
             }
 
+            GroundingToggle(
+                enabled = ragEnabled,
+                docCount = documents.size,
+                onToggle = vm::setRagEnabled,
+                onManage = onOpenDocuments,
+            )
+
             InputBar(
                 value = chat.input,
                 generating = chat.isGenerating,
@@ -222,6 +235,7 @@ private fun ConversationDrawer(
     onDelete: (Long) -> Unit,
     onOpenModels: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenDocuments: () -> Unit,
 ) {
     var menuForId by remember { mutableStateOf<Long?>(null) }
     ModalDrawerSheet {
@@ -270,6 +284,11 @@ private fun ConversationDrawer(
                 }
             }
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
+            NavigationDrawerItem(
+                label = { Text("Documents") },
+                selected = false,
+                onClick = onOpenDocuments,
+            )
             NavigationDrawerItem(
                 label = { Text("Models") },
                 selected = false,
@@ -410,6 +429,20 @@ private fun MessageBubble(msg: ChatMessage) {
                     // Assistant replies arrive as Markdown — render rich text.
                     else -> MarkdownText(markdown = msg.text, color = textColor)
                 }
+                if (!isUser && msg.citations.isNotEmpty()) {
+                    Spacer(Modifier.height(6.dp))
+                    val sources = msg.citations
+                        .distinctBy { it.documentTitle to it.pageNumber }
+                        .take(3)
+                        .joinToString("  ·  ") {
+                            if (it.pageNumber > 0) "${it.documentTitle} p.${it.pageNumber}" else it.documentTitle
+                        }
+                    Text(
+                        "Sources: $sources",
+                        style = MaterialTheme.typography.labelSmall.copy(fontFamily = JetBrainsMono),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
     }
@@ -442,6 +475,41 @@ private fun TypingIndicator() {
                     .background(MaterialTheme.colorScheme.primary.copy(alpha = alpha)),
             )
         }
+    }
+}
+
+/** Toggle that grounds each turn against imported documents, with a shortcut to manage them. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun GroundingToggle(
+    enabled: Boolean,
+    docCount: Int,
+    onToggle: (Boolean) -> Unit,
+    onManage: () -> Unit,
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        FilterChip(
+            selected = enabled,
+            onClick = { onToggle(!enabled) },
+            label = {
+                Text(if (docCount > 0) "Ground in documents · $docCount" else "Ground in documents")
+            },
+            leadingIcon = {
+                Icon(
+                    Icons.Filled.Description,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                )
+            },
+        )
+        Spacer(Modifier.weight(1f))
+        TextButton(onClick = onManage) { Text(if (docCount > 0) "Manage" else "Add") }
     }
 }
 
