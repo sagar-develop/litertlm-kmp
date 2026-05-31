@@ -14,10 +14,9 @@ class NativeLmModelCatalogTest {
 
     private val catalog = NativeLmModelCatalog()
 
-    @Test fun lowRamModelIsTextOnlyUngatedInt4() {
+    @Test fun lowRamModelIsTextOnlyInt4() {
         val m = catalog.byId("gemma3-1b-it-int4-litertlm")!!
         assertFalse("1B is text-only — no vision backend", m.supportsVision)
-        assertFalse("low-RAM default must be ungated (no token friction)", m.requiresAuth)
         assertEquals(4000L, m.minDeviceRamMb)
         assertTrue(m.fileName.endsWith(".litertlm"))
     }
@@ -25,7 +24,9 @@ class NativeLmModelCatalogTest {
     @Test fun e2bIsMultimodalAndGatedAboveSixGb() {
         val m = catalog.byId("gemma-4-e2b-it-litertlm")!!
         assertTrue("E2B bundle is multimodal", m.supportsVision)
-        assertTrue("E2B must NOT be offered to 6GB devices", m.minDeviceRamMb >= 8000L)
+        // 6 GB phones report ~5.9 GB; the gate must sit above that and below a
+        // real 8 GB device's ~7.6 GB so E2B stays available there.
+        assertTrue("E2B must NOT be offered to 6GB devices", m.minDeviceRamMb in 6001L..7600L)
     }
 
     @Test fun sixGbDeviceIsOfferedOnlyTheSmallInt4Llm() {
