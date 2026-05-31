@@ -30,6 +30,13 @@ data class ModelDescriptor(
      * [ModelManager.downloadModel]'s `headers`. Defaults to false.
      */
     val requiresAuth: Boolean = false,
+    /**
+     * Whether this `.litertlm` bundle ships a vision encoder (multimodal). The
+     * engine wires `EngineConfig.visionBackend` only for vision models — a
+     * text-only bundle fails to initialize when a vision backend is attached, and
+     * skipping it on text-only models also frees memory. Defaults to false.
+     */
+    val supportsVision: Boolean = false,
 )
 
 enum class ModelFormat {

@@ -246,7 +246,7 @@ class NativeLmViewModel(app: Application) : ViewModel() {
         viewModelScope.launch {
             _engineLoad.value = EngineLoad.Loading
             val path = engineHolder.modelPath(descriptor.fileName)
-            val load = toEngineLoad(engineHolder.initializeEngine(path))
+            val load = toEngineLoad(engineHolder.initializeEngine(path, descriptor.supportsVision))
             _engineLoad.value = load
             // Open the chat session seeded with the restored conversation so the
             // KV cache is warm before the user types (the "building understanding" step).
@@ -338,7 +338,9 @@ class NativeLmViewModel(app: Application) : ViewModel() {
         viewModelScope.launch {
             _engineLoad.value = EngineLoad.Loading
             engineHolder.release()
-            val result = toEngineLoad(engineHolder.initializeEngine(engineHolder.modelPath(descriptor.fileName)))
+            val result = toEngineLoad(
+                engineHolder.initializeEngine(engineHolder.modelPath(descriptor.fileName), descriptor.supportsVision),
+            )
             _engineLoad.value = result
             if (result is EngineLoad.Ready) {
                 _activeModelId.value = modelId
@@ -830,6 +832,7 @@ class NativeLmViewModel(app: Application) : ViewModel() {
     }
 
     private fun displayName(d: ModelDescriptor): String = when (d.id) {
+        "gemma3-1b-it-int4-litertlm" -> "Gemma 3 1B (INT4)"
         "gemma-4-e2b-it-litertlm" -> "Gemma 4 E2B"
         "gemma-4-e4b-it-litertlm" -> "Gemma 4 E4B"
         "universal-sentence-encoder" -> "Universal Sentence Encoder"
