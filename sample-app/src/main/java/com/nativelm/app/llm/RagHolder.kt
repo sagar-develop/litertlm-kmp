@@ -11,15 +11,17 @@ import com.nativelm.app.rag.DefaultDocumentIngestor
 import com.nativelm.app.rag.DefaultDocumentRetriever
 import com.nativelm.app.rag.DocumentIngestor
 import com.nativelm.app.rag.DocumentRetriever
+import com.nativelm.app.rag.IngestState
 import com.nativelm.app.rag.RetrievedContext
 import com.nativelm.app.rag.extract.AndroidTextExtractor
 import com.nativelm.app.rag.extract.TextChunker
 import com.sagar.aicore.MediaPipeEmbeddingEngine
+import kotlinx.coroutines.flow.Flow
 
 /**
  * Wires the document-RAG stack — embedding engine, vector store, ingestion and
- * retrieval — in the same manual-DI style as [EngineHolder]. Reuses EngineHolder's
- * ModelManager to locate the USE-Lite embedding model on disk.
+ * retrieval — in the same manual-DI style as [EngineHolder]. All sources are
+ * project-scoped. Reuses EngineHolder's ModelManager to locate the USE-Lite model.
  */
 class RagHolder(app: Application, private val engineHolder: EngineHolder) {
 
@@ -27,7 +29,7 @@ class RagHolder(app: Application, private val engineHolder: EngineHolder) {
     private val repository = ObjectBoxDocumentRepository()
     private val extractor = AndroidTextExtractor(app)
 
-    val ingestor: DocumentIngestor =
+    private val ingestor: DocumentIngestor =
         DefaultDocumentIngestor(extractor, TextChunker(), embeddingEngine, repository)
     private val retriever: DocumentRetriever =
         DefaultDocumentRetriever(embeddingEngine, repository)
@@ -47,11 +49,20 @@ class RagHolder(app: Application, private val engineHolder: EngineHolder) {
         return true
     }
 
-    suspend fun documents(): List<DocumentEntity> = repository.listDocuments()
+    fun ingestFile(projectId: Long, uri: String, displayName: String?): Flow<IngestState> =
+        ingestor.ingest(projectId, uri, displayName)
+
+    fun ingestText(projectId: Long, title: String, text: String): Flow<IngestState> =
+        ingestor.ingestText(projectId, title, text)
+
+    suspend fun retrieve(projectId: Long, query: String): RetrievedContext =
+        retriever.retrieve(projectId, query)
+
+    suspend fun documents(projectId: Long): List<DocumentEntity> = repository.listDocuments(projectId)
 
     suspend fun deleteDocument(id: Long) = repository.deleteDocument(id)
 
-    suspend fun retrieve(query: String): RetrievedContext = retriever.retrieve(query)
+    suspend fun deleteDocumentsOfProject(projectId: Long) = repository.deleteDocumentsOfProject(projectId)
 
     companion object {
         const val USE_MODEL_ID = "universal-sentence-encoder"

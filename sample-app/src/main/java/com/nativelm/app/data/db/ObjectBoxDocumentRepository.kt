@@ -9,9 +9,8 @@ import kotlinx.coroutines.withContext
 
 /**
  * ObjectBox-backed [DocumentRepository]. Vector retrieval uses the HNSW index on
- * [DocumentChunkEntity.embedding]. All operations run on [Dispatchers.IO]. Uses the
- * Java-style QueryBuilder to match the rest of the data layer; the generated `*_`
- * query-metadata classes live in this package so need no import.
+ * [DocumentChunkEntity.embedding], post-filtered to a project. All ops run on
+ * [Dispatchers.IO]; the generated `*_` query metadata lives in this package.
  */
 class ObjectBoxDocumentRepository : DocumentRepository {
 
@@ -19,6 +18,7 @@ class ObjectBoxDocumentRepository : DocumentRepository {
     private val chunks = ObjectBox.store.boxFor(DocumentChunkEntity::class.java)
 
     override suspend fun createDocument(
+        projectId: Long,
         title: String,
         uri: String,
         mime: String,
@@ -26,6 +26,7 @@ class ObjectBoxDocumentRepository : DocumentRepository {
     ): Long = withContext(Dispatchers.IO) {
         documents.put(
             DocumentEntity().apply {
+                this.projectId = projectId
                 this.title = title
                 sourceUri = uri
                 mimeType = mime
@@ -38,14 +39,15 @@ class ObjectBoxDocumentRepository : DocumentRepository {
 
     override suspend fun addChunks(
         documentId: Long,
+        projectId: Long,
         chunks: List<DocumentChunkEntity>,
     ): Unit = withContext(Dispatchers.IO) {
         chunks.forEach {
             it.id = 0
             it.documentId = documentId
+            it.projectId = projectId
         }
         this@ObjectBoxDocumentRepository.chunks.put(chunks)
-        // Keep the parent's chunkCount in sync (ingestion may add in batches).
         documents.get(documentId)?.let { doc ->
             doc.chunkCount = this@ObjectBoxDocumentRepository.chunks
                 .query().equal(DocumentChunkEntity_.documentId, documentId).build()
@@ -57,30 +59,35 @@ class ObjectBoxDocumentRepository : DocumentRepository {
     override suspend fun findSimilarChunks(
         queryEmbedding: FloatArray,
         k: Int,
-        documentIds: List<Long>?,
+        projectId: Long,
     ): List<ScoredChunk> = withContext(Dispatchers.IO) {
         require(queryEmbedding.size == DocumentChunkEntity.EMBEDDING_DIM) {
             "Query embedding dim ${queryEmbedding.size} != ${DocumentChunkEntity.EMBEDDING_DIM}"
         }
-        val builder = chunks.query()
+        chunks.query()
             .nearestNeighbors(DocumentChunkEntity_.embedding, queryEmbedding, k)
-        if (!documentIds.isNullOrEmpty()) {
-            // Post-filter the HNSW candidates to the selected documents (may return < k).
-            builder.`in`(DocumentChunkEntity_.documentId, documentIds.toLongArray())
-        }
-        builder.build().use { query ->
-            query.findWithScores().map { ScoredChunk(it.get(), it.score) }
-        }
+            .equal(DocumentChunkEntity_.projectId, projectId)
+            .build()
+            .use { query -> query.findWithScores().map { ScoredChunk(it.get(), it.score) } }
     }
 
-    override suspend fun listDocuments(): List<DocumentEntity> = withContext(Dispatchers.IO) {
-        documents.query().orderDesc(DocumentEntity_.createdAt).build().use { it.find() }
-    }
+    override suspend fun listDocuments(projectId: Long): List<DocumentEntity> =
+        withContext(Dispatchers.IO) {
+            documents.query()
+                .equal(DocumentEntity_.projectId, projectId)
+                .orderDesc(DocumentEntity_.createdAt)
+                .build()
+                .use { it.find() }
+        }
 
     override suspend fun deleteDocument(documentId: Long): Unit = withContext(Dispatchers.IO) {
-        // tx-split (predecessor landmine #3): remove HNSW-indexed chunks in their
-        // own transaction, THEN the parent — combining them deadlocks the HNSW commit.
+        // tx-split (landmine #3): remove HNSW-indexed chunks first, then the parent.
         chunks.query().equal(DocumentChunkEntity_.documentId, documentId).build().use { it.remove() }
         documents.remove(documentId)
+    }
+
+    override suspend fun deleteDocumentsOfProject(projectId: Long): Unit = withContext(Dispatchers.IO) {
+        chunks.query().equal(DocumentChunkEntity_.projectId, projectId).build().use { it.remove() }
+        documents.query().equal(DocumentEntity_.projectId, projectId).build().use { it.remove() }
     }
 }

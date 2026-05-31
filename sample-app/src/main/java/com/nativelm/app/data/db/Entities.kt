@@ -11,13 +11,32 @@ import io.objectbox.annotation.Index
 import io.objectbox.annotation.VectorDistanceType
 
 /**
+ * A Project (a NotebookLM-style notebook): a named container that owns a set of
+ * source [DocumentEntity]s and exactly one chat [ConversationEntity], whose
+ * answers are grounded in those sources.
+ */
+@Entity
+class ProjectEntity {
+    @Id var id: Long = 0
+    var name: String = ""
+    var createdAt: Long = 0
+    var updatedAt: Long = 0
+}
+
+/**
  * A saved conversation (one chat thread in the drawer). Messages are linked by
  * [MessageEntity.conversationId] rather than an ObjectBox relation — a plain
  * indexed foreign key keeps the model simple and cascade-delete explicit.
+ *
+ * [projectId] is 0 for default general chats, or the owning [ProjectEntity.id]
+ * for a project's (single) grounded chat.
  */
 @Entity
 class ConversationEntity {
     @Id var id: Long = 0
+
+    @Index
+    var projectId: Long = 0
     var title: String = ""
     var createdAt: Long = 0
     var updatedAt: Long = 0
@@ -49,6 +68,10 @@ class MessageEntity {
 @Entity
 class DocumentEntity {
     @Id var id: Long = 0
+
+    /** Owning [ProjectEntity.id]. Every source belongs to a project. */
+    @Index
+    var projectId: Long = 0
     var title: String = ""
     var sourceUri: String = ""
     var mimeType: String = ""
@@ -69,6 +92,10 @@ class DocumentChunkEntity {
 
     @Index
     var documentId: Long = 0
+
+    /** Denormalized owning [ProjectEntity.id] so retrieval can filter the HNSW query directly. */
+    @Index
+    var projectId: Long = 0
     var text: String = ""
     var pageNumber: Int = 0
     var chunkIndex: Int = 0

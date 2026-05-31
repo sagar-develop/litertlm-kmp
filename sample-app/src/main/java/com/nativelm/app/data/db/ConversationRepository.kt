@@ -5,23 +5,36 @@
 package com.nativelm.app.data.db
 
 /**
- * CRUD over conversations + their messages. Messages link to a conversation by
- * [MessageEntity.conversationId]; deleting a conversation explicitly removes its
- * messages (ObjectBox does not cascade).
+ * CRUD over conversations + their messages, scoped by [ConversationEntity.projectId]
+ * (0 = default general chats; a project id = that project's single grounded chat).
+ * Messages link by [MessageEntity.conversationId]; deletes are explicit (no cascade).
  */
 class ConversationRepository {
 
     private val conversations = ObjectBox.store.boxFor(ConversationEntity::class.java)
     private val messages = ObjectBox.store.boxFor(MessageEntity::class.java)
 
-    /** Conversations newest-activity-first, for the drawer. */
-    fun list(): List<ConversationEntity> =
-        conversations.query().orderDesc(ConversationEntity_.updatedAt).build().use { it.find() }
+    /** Conversations in [projectId], newest-activity-first. */
+    fun list(projectId: Long): List<ConversationEntity> =
+        conversations.query()
+            .equal(ConversationEntity_.projectId, projectId)
+            .orderDesc(ConversationEntity_.updatedAt)
+            .build()
+            .use { it.find() }
+
+    /** The most recent conversation of [projectId], or null — a project has at most one. */
+    fun firstForProject(projectId: Long): ConversationEntity? =
+        conversations.query()
+            .equal(ConversationEntity_.projectId, projectId)
+            .orderDesc(ConversationEntity_.updatedAt)
+            .build()
+            .use { it.findFirst() }
 
     fun get(id: Long): ConversationEntity? = conversations.get(id)
 
-    fun create(title: String, now: Long): Long {
+    fun create(projectId: Long, title: String, now: Long): Long {
         val c = ConversationEntity().apply {
+            this.projectId = projectId
             this.title = title
             createdAt = now
             updatedAt = now
@@ -46,6 +59,11 @@ class ConversationRepository {
     fun delete(id: Long) {
         messages.query().equal(MessageEntity_.conversationId, id).build().use { it.remove() }
         conversations.remove(id)
+    }
+
+    /** Delete every conversation (and its messages) belonging to [projectId]. */
+    fun deleteForProject(projectId: Long) {
+        list(projectId).forEach { delete(it.id) }
     }
 
     fun messages(conversationId: Long): List<MessageEntity> =

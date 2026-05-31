@@ -7,12 +7,16 @@ package com.nativelm.app.rag
 import kotlinx.coroutines.flow.Flow
 
 /**
- * Ingests a picked file into the document store: extract → chunk → embed → persist.
- * Emits [IngestState] for UI progress; terminal state is [IngestState.Done] or
+ * Ingests sources into a project: extract → chunk → embed → persist. Emits
+ * [IngestState] for UI progress; terminal state is [IngestState.Done] or
  * [IngestState.Failed].
  */
 interface DocumentIngestor {
-    fun ingest(uri: String, displayName: String?): Flow<IngestState>
+    /** Import a picked file ([uri]) as a source of [projectId]. */
+    fun ingest(projectId: Long, uri: String, displayName: String?): Flow<IngestState>
+
+    /** Save raw [text] (e.g. a chat bubble) as a source of [projectId]. */
+    fun ingestText(projectId: Long, title: String, text: String): Flow<IngestState>
 }
 
 /** Progress of a single ingestion. */
@@ -31,10 +35,11 @@ sealed interface IngestState {
  * is nothing relevant (caller should then fall back to ordinary chat).
  */
 interface DocumentRetriever {
+    /** Retrieve grounding context for [query] from the sources of [projectId]. */
     suspend fun retrieve(
+        projectId: Long,
         query: String,
         k: Int = 5,
-        documentIds: List<Long>? = null,
     ): RetrievedContext
 }
 

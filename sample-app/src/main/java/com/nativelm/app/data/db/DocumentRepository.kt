@@ -5,43 +5,46 @@
 package com.nativelm.app.data.db
 
 /**
- * Persistence + k-NN retrieval over imported documents and their embedded chunks.
+ * Persistence + project-scoped k-NN retrieval over source documents and their
+ * embedded chunks. Every source belongs to a [ProjectEntity]; retrieval is scoped
+ * to one project so a notebook only answers from its own sources.
  *
- * Heavy operations are `suspend` (they hit the HNSW index / disk) and implementations
- * must move work off the main thread. Cascade-delete is explicit and **tx-split**:
- * delete a document's chunks in one transaction, then the document in another —
- * combining them deadlocks the HNSW commit (predecessor landmine).
+ * Heavy ops are `suspend` (HNSW index / disk). Cascade-delete is explicit and
+ * **tx-split**: a document's chunks are deleted in one transaction, the document
+ * in another (combining them deadlocks the HNSW commit).
  */
 interface DocumentRepository {
 
-    /** Insert the parent document row; returns its new id. */
-    suspend fun createDocument(title: String, uri: String, mime: String, pageCount: Int): Long
+    /** Insert the parent document row in [projectId]; returns its new id. */
+    suspend fun createDocument(
+        projectId: Long,
+        title: String,
+        uri: String,
+        mime: String,
+        pageCount: Int,
+    ): Long
 
-    /** Persist embedded chunks for [documentId] and bump the document's chunkCount. */
-    suspend fun addChunks(documentId: Long, chunks: List<DocumentChunkEntity>)
+    /** Persist embedded chunks for [documentId] (stamped with [projectId]) and bump chunkCount. */
+    suspend fun addChunks(documentId: Long, projectId: Long, chunks: List<DocumentChunkEntity>)
 
-    /**
-     * Top-[k] chunks by cosine similarity to [queryEmbedding]. When [documentIds]
-     * is non-null, restrict the search to those documents.
-     */
+    /** Top-[k] chunks by cosine similarity to [queryEmbedding], within [projectId]. */
     suspend fun findSimilarChunks(
         queryEmbedding: FloatArray,
         k: Int,
-        documentIds: List<Long>? = null,
+        projectId: Long,
     ): List<ScoredChunk>
 
-    /** All documents, newest first, for the management screen. */
-    suspend fun listDocuments(): List<DocumentEntity>
+    /** Sources in [projectId], newest first. */
+    suspend fun listDocuments(projectId: Long): List<DocumentEntity>
 
     /** Delete a document and all its chunks (tx-split). */
     suspend fun deleteDocument(documentId: Long)
+
+    /** Delete every source (and chunks) of [projectId] — used when deleting a project. */
+    suspend fun deleteDocumentsOfProject(projectId: Long)
 }
 
-/**
- * A retrieved chunk with its [score]. For the COSINE index this is ObjectBox's
- * cosine *distance* (range ~0..2, **lower = closer**); results come back ordered
- * closest-first.
- */
+/** A retrieved chunk with its cosine *distance* [score] (lower = closer; ordered closest-first). */
 data class ScoredChunk(
     val chunk: DocumentChunkEntity,
     val score: Double,

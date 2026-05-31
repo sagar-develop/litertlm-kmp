@@ -77,7 +77,7 @@ fun DocumentsScreen(vm: NativeLmViewModel, onBack: () -> Unit) {
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
-                title = { Text("Documents") },
+                title = { Text("Sources") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -96,8 +96,7 @@ fun DocumentsScreen(vm: NativeLmViewModel, onBack: () -> Unit) {
                 .padding(horizontal = 16.dp),
         ) {
             Text(
-                "Imported documents stay on your device. Turn on “Ground in documents” " +
-                    "in chat to answer from them.",
+                "Sources stay on your device. This project's chat answers from them.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(vertical = 8.dp),
@@ -214,7 +213,7 @@ private fun DocumentRow(doc: DocumentSummary, onDelete: () -> Unit) {
 private fun EmptyState() {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Text(
-            "No documents yet.\nImport a PDF or text file to chat with it.",
+            "No sources yet.\nImport a PDF or text file to ground this project.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
