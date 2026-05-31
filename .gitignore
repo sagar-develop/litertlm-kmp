@@ -55,6 +55,7 @@ CLAUDE.md
 docs/NATIVELM_PLAN.md
 docs/ENGINE_SYNC.md
 docs/NEXT_SESSION.md
+_session/
 
 # ObjectBox model backups
 *.bak
