@@ -22,9 +22,11 @@ import com.sagar.aicore.ModelRole
 class NativeLmModelCatalog : ModelCatalog {
 
     private val entries: List<ModelDescriptor> = listOf(
-        // Low-RAM tier: Gemma 3 1B, INT4, text-only (~557 MB). Ungated and small
-        // enough to run with headroom on 4–8 GB devices — the model 6 GB phones
-        // get instead of the 2.6 GB E2B (which OOMs there). Vision off.
+        // Low-RAM tier: Gemma 3 1B, INT4, text-only (~557 MB). Small enough to run
+        // with headroom on 4–8 GB devices — the model 6 GB phones get instead of
+        // the 2.6 GB E2B (which OOMs there). Vision off. Gemma-licensed, so it
+        // needs the HF token (requiresAuth) + the user accepting the model license
+        // on huggingface.co/litert-community/Gemma3-1B-IT.
         ModelDescriptor(
             id = "gemma3-1b-it-int4-litertlm",
             url = "https://huggingface.co/litert-community/Gemma3-1B-IT/resolve/main/gemma3-1b-it-int4.litertlm?download=true",
@@ -33,11 +35,13 @@ class NativeLmModelCatalog : ModelCatalog {
             format = ModelFormat.LITERTLM,
             role = ModelRole.LLM_PRIMARY,
             minDeviceRamMb = 4000,
-            requiresAuth = false,
+            requiresAuth = true,
             supportsVision = false,
         ),
-        // Mid tier: Gemma 4 E2B, multimodal (~2.6 GB). Gated to 8 GB+ so 6 GB
-        // devices are steered to the 1B INT4 model above.
+        // Mid tier: Gemma 4 E2B, multimodal (~2.6 GB). Gated to 7 GB+: a real
+        // 8 GB phone reports ~7.6 GB to Android (and 6 GB reports ~5.9 GB), so
+        // 7000 cleanly excludes 6 GB devices — steered to the 1B INT4 above —
+        // while keeping E2B on genuine 8 GB+ hardware.
         ModelDescriptor(
             id = "gemma-4-e2b-it-litertlm",
             url = "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm?download=true",
@@ -45,7 +49,7 @@ class NativeLmModelCatalog : ModelCatalog {
             sizeBytes = 2_588_000_000L,
             format = ModelFormat.LITERTLM,
             role = ModelRole.LLM_PRIMARY,
-            minDeviceRamMb = 8000,
+            minDeviceRamMb = 7000,
             requiresAuth = true,
             supportsVision = true,
         ),
