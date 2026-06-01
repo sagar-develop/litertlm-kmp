@@ -10,23 +10,35 @@ import com.sagar.aicore.ModelFormat
 import com.sagar.aicore.ModelRole
 
 /**
- * NativeLM's model catalog. Unlike the engine's sample [com.sagar.aicore.InMemoryModelCatalog]
- * (placeholder hosts), this points at verified Hugging Face `resolve` URLs.
+ * NativeLM's cross-device model catalogue. Points at verified Hugging Face
+ * `resolve` URLs (real `.litertlm` files in the `litert-community` org). One LLM per
+ * RAM tier — entry phones to flagships — plus the RAG embedder.
  *
- * The Gemma `.litertlm` files live in the public `litert-community/gemma-4-*-litert-lm`
- * repos (not gated). [ModelDescriptor.requiresAuth] is kept `true` so the app
- * exercises the token flow — it sends `Authorization: Bearer <hf-token>`, which
- * Hugging Face accepts. For a strictly license-gated source (token mandatory),
- * point these at `google/gemma-3n-E2B-it-litert-lm` / `…-E4B-…` instead.
+ * Gating: the Gemma bundles are license-gated, so [ModelDescriptor.requiresAuth]
+ * is `true` (the app sends `Authorization: Bearer <hf-token>` and the user must
+ * accept each repo's license on Hugging Face). The non-Gemma models (Qwen /
+ * DeepSeek / Phi) are Apache-2.0 / MIT and download token-free (`requiresAuth =
+ * false`). `supportsVision` drives both the engine's vision backend and the
+ * Model-management input-type chips; only the multimodal Gemma 4 bundles are
+ * vision-capable today.
  */
 class NativeLmModelCatalog : ModelCatalog {
 
     private val entries: List<ModelDescriptor> = listOf(
-        // Low-RAM tier: Gemma 3 1B, INT4, text-only (~557 MB). Small enough to run
-        // with headroom on 4–8 GB devices — the model 6 GB phones get instead of
-        // the 2.6 GB E2B (which OOMs there). Vision off. Gemma-licensed, so it
-        // needs the HF token (requiresAuth) + the user accepting the model license
-        // on huggingface.co/litert-community/Gemma3-1B-IT.
+        // ── Entry (~3–4 GB) — Qwen3 0.6B, text, ungated (Apache-2.0). The
+        // friction-free default for the lowest tier: no token, no license accept. ──
+        ModelDescriptor(
+            id = "qwen3-0_6b-litertlm",
+            url = "https://huggingface.co/litert-community/Qwen3-0.6B/resolve/main/Qwen3-0.6B.litertlm?download=true",
+            fileName = "Qwen3-0.6B.litertlm",
+            sizeBytes = 614_236_160L,
+            format = ModelFormat.LITERTLM,
+            role = ModelRole.LLM_PRIMARY,
+            minDeviceRamMb = 3500,
+            requiresAuth = false,
+            supportsVision = false,
+        ),
+        // ── Small (~4 GB) — Gemma 3 1B INT4, text (~557 MB). Gemma-licensed. ──
         ModelDescriptor(
             id = "gemma3-1b-it-int4-litertlm",
             url = "https://huggingface.co/litert-community/Gemma3-1B-IT/resolve/main/gemma3-1b-it-int4.litertlm?download=true",
@@ -38,10 +50,21 @@ class NativeLmModelCatalog : ModelCatalog {
             requiresAuth = true,
             supportsVision = false,
         ),
-        // Mid tier: Gemma 4 E2B, multimodal (~2.6 GB). Gated to 7 GB+: a real
-        // 8 GB phone reports ~7.6 GB to Android (and 6 GB reports ~5.9 GB), so
-        // 7000 cleanly excludes 6 GB devices — steered to the 1B INT4 above —
-        // while keeping E2B on genuine 8 GB+ hardware.
+        // ── Mid (~6 GB) — DeepSeek-R1-Distill-Qwen 1.5B, q8, text reasoning
+        // (~1.8 GB), ungated (MIT). A non-Gemma reasoning option. ──
+        ModelDescriptor(
+            id = "deepseek-r1-distill-qwen-1_5b-litertlm",
+            url = "https://huggingface.co/litert-community/DeepSeek-R1-Distill-Qwen-1.5B/resolve/main/DeepSeek-R1-Distill-Qwen-1.5B_multi-prefill-seq_q8_ekv4096.litertlm?download=true",
+            fileName = "DeepSeek-R1-Distill-Qwen-1.5B_multi-prefill-seq_q8_ekv4096.litertlm",
+            sizeBytes = 1_833_451_520L,
+            format = ModelFormat.LITERTLM,
+            role = ModelRole.LLM_PRIMARY,
+            minDeviceRamMb = 6000,
+            requiresAuth = false,
+            supportsVision = false,
+        ),
+        // ── Mid+ (~7 GB) — Gemma 4 E2B, multimodal (~2.6 GB). 7000 excludes 6 GB
+        // phones (which report ~5.9 GB) while keeping it on genuine 8 GB+ hardware. ──
         ModelDescriptor(
             id = "gemma-4-e2b-it-litertlm",
             url = "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm?download=true",
@@ -53,7 +76,7 @@ class NativeLmModelCatalog : ModelCatalog {
             requiresAuth = true,
             supportsVision = true,
         ),
-        // High tier: Gemma 4 E4B, multimodal (~3.7 GB), 10 GB+.
+        // ── High (~10 GB) — Gemma 4 E4B, multimodal (~3.7 GB). ──
         ModelDescriptor(
             id = "gemma-4-e4b-it-litertlm",
             url = "https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/resolve/main/gemma-4-E4B-it.litertlm?download=true",
@@ -64,6 +87,35 @@ class NativeLmModelCatalog : ModelCatalog {
             minDeviceRamMb = 10000,
             requiresAuth = true,
             supportsVision = true,
+        ),
+        // ── High (~10 GB) — Phi-4-mini, q8, text reasoning (~3.9 GB), ungated
+        // (MIT). A non-Gemma high-tier option alongside E4B. ──
+        ModelDescriptor(
+            id = "phi-4-mini-instruct-litertlm",
+            url = "https://huggingface.co/litert-community/Phi-4-mini-instruct/resolve/main/Phi-4-mini-instruct_multi-prefill-seq_q8_ekv4096.litertlm?download=true",
+            fileName = "Phi-4-mini-instruct_multi-prefill-seq_q8_ekv4096.litertlm",
+            sizeBytes = 3_910_090_752L,
+            format = ModelFormat.LITERTLM,
+            role = ModelRole.LLM_PRIMARY,
+            minDeviceRamMb = 10000,
+            requiresAuth = false,
+            supportsVision = false,
+        ),
+        // ── Flagship (~12 GB+) — Qwen3 4B, channelwise int8, text (~5.3 GB),
+        // ungated (Apache-2.0). NOTE: reachable only on devices whose effective
+        // RAM clears 12 GB; the OEM RAM-expansion cap (EXPANSION_CAP_MB = 9000)
+        // currently blocks expansion-enabled flagships — tracked for RAM-detection
+        // refinement (docs/LOW_END_PLAN.md). ──
+        ModelDescriptor(
+            id = "qwen3-4b-litertlm",
+            url = "https://huggingface.co/litert-community/Qwen3-4B/resolve/main/qwen3_4b_channelwise_int8_float32kv.litertlm?download=true",
+            fileName = "qwen3_4b_channelwise_int8_float32kv.litertlm",
+            sizeBytes = 5_672_370_176L,
+            format = ModelFormat.LITERTLM,
+            role = ModelRole.LLM_PRIMARY,
+            minDeviceRamMb = 12000,
+            requiresAuth = false,
+            supportsVision = false,
         ),
         ModelDescriptor(
             id = "universal-sentence-encoder",

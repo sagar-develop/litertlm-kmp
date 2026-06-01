@@ -29,19 +29,36 @@ class NativeLmModelCatalogTest {
         assertTrue("E2B must NOT be offered to 6GB devices", m.minDeviceRamMb in 6001L..7600L)
     }
 
-    @Test fun sixGbDeviceIsOfferedOnlyTheSmallInt4Llm() {
+    @Test fun sixGbDeviceGetsSmallModelsNotE2bOrLarger() {
         val ram = 6000L
         val supported = catalog.byRole(ModelRole.LLM_PRIMARY)
             .filter { ram >= it.minDeviceRamMb }
             .map { it.id }
-        assertEquals(listOf("gemma3-1b-it-int4-litertlm"), supported)
+        // 6 GB is offered the small tiers, never the multimodal Gemma 4 or flagship.
+        assertTrue("entry Qwen3 offered", "qwen3-0_6b-litertlm" in supported)
+        assertTrue("Gemma 3 1B offered", "gemma3-1b-it-int4-litertlm" in supported)
+        assertTrue("E2B must NOT be offered to 6GB", "gemma-4-e2b-it-litertlm" !in supported)
+        assertTrue("E4B must NOT be offered to 6GB", "gemma-4-e4b-it-litertlm" !in supported)
+        assertTrue("flagship must NOT be offered to 6GB", "qwen3-4b-litertlm" !in supported)
     }
 
-    @Test fun ramTiersAreGraduatedNotJustSixAndTen() {
-        val tiers = catalog.byRole(ModelRole.LLM_PRIMARY).map { it.minDeviceRamMb }.toSet()
-        // More than the old two thresholds (6000 / 10000).
-        assertTrue("expected graduated tiers, got $tiers", tiers.size >= 3)
-        assertTrue(tiers.contains(4000L))
-        assertTrue(tiers.contains(10000L))
+    @Test fun entryModelIsNonGemmaUngatedText() {
+        val m = catalog.byId("qwen3-0_6b-litertlm")!!
+        assertFalse("entry model must be ungated (no token/license friction)", m.requiresAuth)
+        assertFalse("entry model is text-only", m.supportsVision)
+        assertTrue("entry is the smallest LLM tier", m.minDeviceRamMb <= 4000L)
+    }
+
+    @Test fun catalogueSpansEntryToFlagship() {
+        val llms = catalog.byRole(ModelRole.LLM_PRIMARY)
+        // A real cross-device range: many tiers, all .litertlm, a mix of gated +
+        // ungated and Gemma + non-Gemma.
+        assertTrue("expected a broad lineup, got ${llms.size}", llms.size >= 6)
+        assertTrue(llms.all { it.fileName.endsWith(".litertlm") })
+        assertTrue("has ungated (non-Gemma) models", llms.any { !it.requiresAuth })
+        assertTrue("keeps gated Gemma models", llms.any { it.requiresAuth })
+        assertTrue("has a multimodal model", llms.any { it.supportsVision })
+        val tiers = llms.map { it.minDeviceRamMb }.toSet()
+        assertTrue("graduated tiers, got $tiers", tiers.size >= 5)
     }
 }
