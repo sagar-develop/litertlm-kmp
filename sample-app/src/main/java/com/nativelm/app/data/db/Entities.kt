@@ -11,7 +11,7 @@ import io.objectbox.annotation.Index
 import io.objectbox.annotation.VectorDistanceType
 
 /**
- * A Project (a NotebookLM-style notebook): a named container that owns a set of
+ * A Project (a notebook): a named container that owns a set of
  * source [DocumentEntity]s and exactly one chat [ConversationEntity], whose
  * answers are grounded in those sources.
  */

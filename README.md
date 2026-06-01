@@ -20,16 +20,16 @@ Shipping a production on-device LLM on Android is significantly harder than the 
 - All of the above shaped to run identically on Android and iOS so you can share code across both apps
 
 This library solves all of these. The bundled `sample-app/` — **NativeLM** — is a
-real, shipped product: an on-device **NotebookLM** (chat grounded in your own PDFs
-and notes) plus general chat with conversation history, built on top of the engine
-— so you can see exactly what running Gemma on-device looks like.
+real, shipped product: **on-device document chat** (answers grounded in your own
+PDFs and notes, organized into *Projects*) plus general chat with conversation
+history, built on top of the engine — so you can see exactly what running Gemma
+on-device looks like.
 
 ## The showcase app — NativeLM
 
 A private, fully on-device AI app for Android — no account, no network, no
 telemetry. **Chat with your own documents** (on-device RAG, organized into
-NotebookLM-style *Projects*) or just chat — everything runs locally on Gemma via
-this engine.
+*Projects*) or just chat — everything runs locally on Gemma via this engine.
 
 <table>
   <tr>
@@ -380,7 +380,7 @@ Typical engagements:
 - **v0.2** — `sample-app/` Compose Android app with live CPU + RAM + tokens/sec metrics overlay. Library restructured into `:lib` subproject; published as `com.sagar:litertlm-kmp`.
 - **v0.2.4** — multimodal vision: image attachments flow through `EngineConfig.visionBackend` + `Content.ImageBytes`; `descriptor.supportsVision` is now `true`.
 - **v0.3.0** — **stateful KV-cache chat sessions** (`openChatSession` / `ChatSession`): lossless multi-turn memory with no history re-sending; **real native cancellation** (`cancel()`); explicit `EngineConfig.backend` selection (on-device benchmarking picked `CPU(6)`); `SamplerConfig` temperature/seed plumbed through. The NativeLM showcase app gains conversation history (ObjectBox), model-generated titles, and a signed, R8-minified release build (engine ships its own consumer ProGuard rules).
-- **v0.4.0** (this release) — **Local NotebookLM**: fully on-device **document RAG** in the NativeLM app — import a PDF/text source, and the app extracts → chunks → embeds (MediaPipe USE-Lite) → stores in an ObjectBox **HNSW** vector index → retrieves project-scoped, relevance-gated context → answers grounded with **citations**. **Projects** (NotebookLM-style notebooks) keep each chat scoped to its own sources; default chat stays general. Engine: `consumer-rules.pro` now keeps the MediaPipe text-embedder + Flogger + protobuf so RAG embedding survives R8 minification.
+- **v0.4.0** (this release) — **on-device document chat**: fully local **document RAG** in the NativeLM app — import a PDF/text source, and the app extracts → chunks → embeds (MediaPipe USE-Lite) → stores in an ObjectBox **HNSW** vector index → retrieves project-scoped, relevance-gated context → answers grounded with **citations**. **Projects** (notebooks) keep each chat scoped to its own sources; default chat stays general. Engine: `consumer-rules.pro` now keeps the MediaPipe text-embedder + Flogger + protobuf so RAG embedding survives R8 minification.
 - **Future** — iOS native engine via LiteRT-LM's Swift Metal-accelerated APIs; a benchmark suite (tokens/sec, RAM ceiling, battery drain) across a device matrix.
 
 ## Repo layout

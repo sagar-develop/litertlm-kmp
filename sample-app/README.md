@@ -3,7 +3,7 @@
 **Local AI — private, on-device chat for Android.**
 
 Your documents and conversations never leave your phone. Ask questions grounded
-in your own PDFs and notes — an on-device "NotebookLM" — or just chat.
+in your own PDFs and notes, fully on-device — or just chat.
 
 NativeLM is the reference product built on top of [litertlm-kmp](../README.md).
 It runs Gemma-family models fully on-device: no account, no API key, no cloud
@@ -34,7 +34,7 @@ product.
 
 - **General chat** — a capable local LLM with a clean, Gemini-style chat
   surface ("How can I help you today?").
-- **Projects (on-device NotebookLM)** — create a project, add sources (PDF or
+- **Projects** — create a project, add sources (PDF or
   plain text, or save any answer into it), and the project's chat answers *only*
   from those sources. Documents are extracted, chunked, embedded (USE-Lite), and
   stored in an on-device vector index (ObjectBox HNSW) — nothing is uploaded.
