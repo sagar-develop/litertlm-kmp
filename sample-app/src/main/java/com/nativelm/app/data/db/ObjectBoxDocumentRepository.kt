@@ -64,11 +64,23 @@ class ObjectBoxDocumentRepository : DocumentRepository {
         require(queryEmbedding.size == DocumentChunkEntity.EMBEDDING_DIM) {
             "Query embedding dim ${queryEmbedding.size} != ${DocumentChunkEntity.EMBEDDING_DIM}"
         }
+        // ObjectBox applies the projectId condition AFTER the HNSW k-NN, not during
+        // it. So asking for just `k` neighbors globally can return zero rows for
+        // this project when closer chunks from OTHER projects fill the k slots —
+        // silently breaking project-scoped grounding. Over-fetch a wide candidate
+        // set, then filter to the project and keep the k closest. searchK is bounded
+        // by the index search ef (indexingSearchCount = 200) for recall.
+        val searchK = maxOf(k * 30, 150)
         chunks.query()
-            .nearestNeighbors(DocumentChunkEntity_.embedding, queryEmbedding, k)
+            .nearestNeighbors(DocumentChunkEntity_.embedding, queryEmbedding, searchK)
             .equal(DocumentChunkEntity_.projectId, projectId)
             .build()
-            .use { query -> query.findWithScores().map { ScoredChunk(it.get(), it.score) } }
+            .use { query ->
+                query.findWithScores().asSequence()
+                    .map { ScoredChunk(it.get(), it.score) }
+                    .take(k)
+                    .toList()
+            }
     }
 
     override suspend fun listDocuments(projectId: Long): List<DocumentEntity> =
