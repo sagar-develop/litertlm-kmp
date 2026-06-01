@@ -5,13 +5,18 @@
 package com.nativelm.app.ui.pdf
 
 import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
 import android.graphics.pdf.PdfRenderer
 import android.os.ParcelFileDescriptor
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -20,9 +25,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronLeft
@@ -41,15 +44,22 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.nativelm.app.llm.NativeLmViewModel
@@ -62,6 +72,10 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 private const val RENDER_WIDTH_PX = 1080
+
+private const val MIN_ZOOM = 1f
+private const val MAX_ZOOM = 5f
+private const val DOUBLE_TAP_ZOOM = 2.5f
 
 /**
  * Renders a source PDF (the durable app-private copy) at the cited page using
@@ -110,6 +124,8 @@ fun PdfViewerScreen(vm: NativeLmViewModel, onBack: () -> Unit) {
 
 @Composable
 private fun PdfContent(target: PdfViewTarget, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+
     // Open the renderer once for this file; close it on dispose.
     val renderer = remember(target.localPath) { openRenderer(target.localPath) }
     DisposableEffect(target.localPath) {
@@ -117,19 +133,42 @@ private fun PdfContent(target: PdfViewTarget, modifier: Modifier = Modifier) {
     }
 
     val pageCount = renderer?.pageCount ?: 0
-    var pageIndex by remember(target.localPath) {
-        mutableIntStateOf((target.initialPage - 1).coerceIn(0, (pageCount - 1).coerceAtLeast(0)))
+    val citedIndex = remember(target.localPath) {
+        (target.initialPage - 1).coerceIn(0, (pageCount - 1).coerceAtLeast(0))
     }
+    var pageIndex by remember(target.localPath) { mutableIntStateOf(citedIndex) }
     var bitmap by remember(target.localPath) { mutableStateOf<ImageBitmap?>(null) }
     val renderLock = remember(target.localPath) { Mutex() }
 
-    LaunchedEffect(target.localPath, pageIndex) {
+    // Best-effort: locate the cited passage's glyph rectangles on the cited page,
+    // so we can highlight it in place. Empty when it can't be placed (then the
+    // callout below stands in). [highlightResolved] gates the fallback so the
+    // callout doesn't flash before the lookup finishes.
+    var highlightBoxes by remember(target.localPath) { mutableStateOf<List<PdfHighlighter.Box>>(emptyList()) }
+    var highlightResolved by remember(target.localPath) { mutableStateOf(false) }
+    LaunchedEffect(target.localPath) {
+        highlightBoxes = if (target.highlight.isBlank()) {
+            emptyList()
+        } else {
+            PdfHighlighter.rectsFor(context, File(target.localPath), citedIndex, target.highlight)
+        }
+        highlightResolved = true
+    }
+
+    val highlightColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.30f).toArgb()
+
+    LaunchedEffect(target.localPath, pageIndex, highlightBoxes) {
         if (renderer == null || pageCount == 0) return@LaunchedEffect
-        bitmap = renderLock.withLock { renderPage(renderer, pageIndex) }
+        val boxes = if (pageIndex == citedIndex) highlightBoxes else emptyList()
+        bitmap = renderLock.withLock { renderPage(renderer, pageIndex, boxes, highlightColor) }
     }
 
     Column(modifier.fillMaxSize()) {
-        if (target.highlight.isNotBlank()) {
+        // The callout is a fallback: show it only when we're on the cited page,
+        // the lookup has finished, and we couldn't place the passage inline.
+        val showCallout = target.highlight.isNotBlank() &&
+            pageIndex == citedIndex && highlightResolved && highlightBoxes.isEmpty()
+        if (showCallout) {
             HighlightCallout(target.highlight)
         }
 
@@ -142,14 +181,11 @@ private fun PdfContent(target: PdfViewTarget, modifier: Modifier = Modifier) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 bitmap == null -> CircularProgressIndicator()
-                else -> Image(
+                else -> ZoomablePage(
                     bitmap = bitmap!!,
                     contentDescription = "Page ${pageIndex + 1}",
-                    contentScale = ContentScale.FillWidth,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    resetKey = pageIndex,
+                    modifier = Modifier.fillMaxSize(),
                 )
             }
         }
@@ -162,6 +198,80 @@ private fun PdfContent(target: PdfViewTarget, modifier: Modifier = Modifier) {
                 onNext = { if (pageIndex < pageCount - 1) pageIndex++ },
             )
         }
+    }
+}
+
+/**
+ * The page bitmap, fit to width, with pinch-to-zoom and pan. The page (and the
+ * baked-in highlight) scale together since both live in the bitmap. At 1× the
+ * page is taller than the viewport, so a single-finger drag pans it vertically;
+ * once zoomed, panning works in both axes. Pan is clamped so the page can't be
+ * dragged off-screen, and double-tap toggles between fit and [DOUBLE_TAP_ZOOM].
+ * [resetKey] (the page index) resets zoom/pan when the page changes.
+ */
+@Composable
+private fun ZoomablePage(
+    bitmap: ImageBitmap,
+    contentDescription: String,
+    resetKey: Any?,
+    modifier: Modifier = Modifier,
+) {
+    var scale by remember(resetKey) { mutableFloatStateOf(1f) }
+    var offset by remember(resetKey) { mutableStateOf(Offset.Zero) }
+
+    BoxWithConstraints(modifier = modifier.clipToBounds(), contentAlignment = Alignment.Center) {
+        val viewportW = constraints.maxWidth.toFloat()
+        val viewportH = constraints.maxHeight.toFloat()
+        val aspect = bitmap.height.toFloat() / bitmap.width.toFloat()
+        val baseW = viewportW
+        val baseH = baseW * aspect
+        val center = Offset(viewportW / 2f, viewportH / 2f)
+
+        // Keep the (centered) page within view: at a given scale you can pan at
+        // most half the overflow in each axis.
+        fun clamp(s: Float, o: Offset): Offset {
+            val maxX = ((baseW * s - viewportW) / 2f).coerceAtLeast(0f)
+            val maxY = ((baseH * s - viewportH) / 2f).coerceAtLeast(0f)
+            return Offset(o.x.coerceIn(-maxX, maxX), o.y.coerceIn(-maxY, maxY))
+        }
+
+        Image(
+            bitmap = bitmap,
+            contentDescription = contentDescription,
+            contentScale = ContentScale.FillWidth,
+            modifier = Modifier
+                .fillMaxWidth()
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                    translationX = offset.x
+                    translationY = offset.y
+                }
+                .pointerInput(resetKey) {
+                    detectTransformGestures { centroid, pan, zoom, _ ->
+                        val newScale = (scale * zoom).coerceIn(MIN_ZOOM, MAX_ZOOM)
+                        // Hold the pinch centroid steady while zooming, then apply pan.
+                        val c = centroid - center
+                        val zoomed = c - (c - offset) * (newScale / scale) + pan
+                        scale = newScale
+                        offset = clamp(newScale, zoomed)
+                    }
+                }
+                .pointerInput(resetKey) {
+                    detectTapGestures(
+                        onDoubleTap = { tap ->
+                            if (scale > MIN_ZOOM) {
+                                scale = MIN_ZOOM
+                                offset = clamp(MIN_ZOOM, Offset.Zero)
+                            } else {
+                                val c = tap - center
+                                scale = DOUBLE_TAP_ZOOM
+                                offset = clamp(DOUBLE_TAP_ZOOM, c - (c - offset) * DOUBLE_TAP_ZOOM)
+                            }
+                        },
+                    )
+                },
+        )
     }
 }
 
@@ -223,7 +333,12 @@ private fun openRenderer(path: String): PdfRenderer? = runCatching {
     PdfRenderer(pfd)
 }.getOrNull()
 
-private suspend fun renderPage(renderer: PdfRenderer, index: Int): ImageBitmap? =
+private suspend fun renderPage(
+    renderer: PdfRenderer,
+    index: Int,
+    highlights: List<PdfHighlighter.Box>,
+    highlightColor: Int,
+): ImageBitmap? =
     withContext(Dispatchers.IO) {
         runCatching {
             renderer.openPage(index).use { page ->
@@ -233,9 +348,25 @@ private suspend fun renderPage(renderer: PdfRenderer, index: Int): ImageBitmap? 
                 // PDFs assume a white page; fill first so transparent areas aren't black.
                 bmp.eraseColor(Color.WHITE)
                 page.render(bmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                if (highlights.isNotEmpty()) drawHighlights(bmp, highlights, highlightColor)
                 bmp.asImageBitmap()
             }
         }.getOrNull()
     }
+
+/** Paint translucent rounded rects (normalized page coords) over the cited passage. */
+private fun drawHighlights(bmp: Bitmap, boxes: List<PdfHighlighter.Box>, color: Int) {
+    val canvas = Canvas(bmp)
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        this.color = color
+        style = Paint.Style.FILL
+    }
+    val w = bmp.width.toFloat()
+    val h = bmp.height.toFloat()
+    val radius = 0.004f * w
+    for (b in boxes) {
+        canvas.drawRoundRect(b.x * w, b.y * h, (b.x + b.w) * w, (b.y + b.h) * h, radius, radius, paint)
+    }
+}
 
 private fun PdfRenderer.closeQuietly() = runCatching { close() }
