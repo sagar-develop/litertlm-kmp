@@ -26,18 +26,25 @@ class DefaultDocumentRetrieverTest {
         }
     }
 
-    private class FakeRepo(private val hits: List<ScoredChunk>) : DocumentRepository {
+    private class FakeRepo(
+        private val hits: List<ScoredChunk>,
+        private val keyword: List<DocumentChunkEntity> = emptyList(),
+    ) : DocumentRepository {
         override suspend fun createDocument(projectId: Long, title: String, uri: String, localPath: String, mime: String, pageCount: Int): Long = 0
         override suspend fun getDocument(documentId: Long): DocumentEntity? = null
         override suspend fun addChunks(documentId: Long, projectId: Long, chunks: List<DocumentChunkEntity>) {}
         override suspend fun findSimilarChunks(queryEmbedding: FloatArray, k: Int, projectId: Long): List<ScoredChunk> = hits
+        override suspend fun keywordCandidates(projectId: Long, terms: List<String>, limit: Int): List<DocumentChunkEntity> = keyword
         override suspend fun listDocuments(projectId: Long): List<DocumentEntity> = emptyList()
         override suspend fun deleteDocument(documentId: Long) {}
         override suspend fun deleteDocumentsOfProject(projectId: Long) {}
     }
 
-    private fun scored(score: Double) =
-        ScoredChunk(DocumentChunkEntity().apply { documentId = 1; text = "fact" }, score)
+    private fun scored(score: Double, id: Long = 0, text: String = "fact") =
+        ScoredChunk(DocumentChunkEntity().apply { this.id = id; documentId = 1; this.text = text }, score)
+
+    private fun chunk(id: Long, text: String) =
+        DocumentChunkEntity().apply { this.id = id; documentId = 1; this.text = text }
 
     @Test fun blankQueryReturnsEmptyWithoutEmbedding() = runTest {
         val r = DefaultDocumentRetriever(embedder, FakeRepo(listOf(scored(0.1))))
@@ -50,16 +57,32 @@ class DefaultDocumentRetrieverTest {
         assertTrue(r.retrieve(0, "hello").isEmpty)
     }
 
-    @Test fun farHitsAreFilteredToEmpty() = runTest {
-        // Every hit is beyond the cutoff → no grounding, no bogus citations.
+    @Test fun farHitsWithNoKeywordMatchAreEmpty() = runTest {
+        // Vector hits beyond the cutoff AND no keyword candidates → no grounding.
         val r = DefaultDocumentRetriever(embedder, FakeRepo(listOf(scored(0.9), scored(0.95))), maxDistance = 0.5)
         assertTrue(r.retrieve(1, "off topic").isEmpty)
     }
 
-    @Test fun nearHitsAreKept() = runTest {
-        val r = DefaultDocumentRetriever(embedder, FakeRepo(listOf(scored(0.2), scored(0.9))), maxDistance = 0.5)
+    @Test fun nearVectorHitsAreKept() = runTest {
+        val r = DefaultDocumentRetriever(embedder, FakeRepo(listOf(scored(0.2, id = 1), scored(0.9, id = 2))), maxDistance = 0.5)
         val ctx = r.retrieve(1, "on topic")
         assertFalse(ctx.isEmpty)
-        assertEquals(1, ctx.citations.size) // only the near chunk survives the gate
+        assertEquals(1, ctx.citations.size) // only the near chunk survives the vector gate
+    }
+
+    @Test fun keywordArmRecoversExactMatchVectorMissed() = runTest {
+        // Vector arm finds nothing relevant (all far), but the keyword arm matches
+        // an exact term — hybrid should still ground on it.
+        val r = DefaultDocumentRetriever(
+            embedder,
+            FakeRepo(
+                hits = listOf(scored(0.9, id = 1)), // filtered by the gate
+                keyword = listOf(chunk(5, "the project codename is ZEPHYR NINE")),
+            ),
+            maxDistance = 0.5,
+        )
+        val ctx = r.retrieve(1, "what is zephyr nine")
+        assertFalse(ctx.isEmpty)
+        assertEquals(1, ctx.citations.size)
     }
 }

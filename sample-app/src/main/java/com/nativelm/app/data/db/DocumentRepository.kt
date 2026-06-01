@@ -38,6 +38,18 @@ interface DocumentRepository {
         projectId: Long,
     ): List<ScoredChunk>
 
+    /**
+     * Chunks in [projectId] whose text contains at least one of [terms]
+     * (case-insensitive), capped at [limit]. The lexical-candidate set for the
+     * keyword arm of hybrid retrieval — only chunks that could plausibly match are
+     * loaded, so this stays cheap regardless of corpus size.
+     */
+    suspend fun keywordCandidates(
+        projectId: Long,
+        terms: List<String>,
+        limit: Int,
+    ): List<DocumentChunkEntity>
+
     /** Sources in [projectId], newest first. */
     suspend fun listDocuments(projectId: Long): List<DocumentEntity>
 
