@@ -13,6 +13,7 @@ import com.nativelm.app.rag.DocumentIngestor
 import com.nativelm.app.rag.DocumentRetriever
 import com.nativelm.app.rag.IngestState
 import com.nativelm.app.rag.RetrievedContext
+import com.nativelm.app.rag.extract.AndroidDocumentFileStore
 import com.nativelm.app.rag.extract.AndroidTextExtractor
 import com.nativelm.app.rag.extract.TextChunker
 import com.sagar.aicore.MediaPipeEmbeddingEngine
@@ -28,9 +29,10 @@ class RagHolder(app: Application, private val engineHolder: EngineHolder) {
     private val embeddingEngine = MediaPipeEmbeddingEngine(app)
     private val repository = ObjectBoxDocumentRepository()
     private val extractor = AndroidTextExtractor(app)
+    private val fileStore = AndroidDocumentFileStore(app)
 
     private val ingestor: DocumentIngestor =
-        DefaultDocumentIngestor(extractor, TextChunker(), embeddingEngine, repository)
+        DefaultDocumentIngestor(extractor, TextChunker(), embeddingEngine, repository, fileStore)
     private val retriever: DocumentRetriever =
         DefaultDocumentRetriever(embeddingEngine, repository)
 
@@ -60,9 +62,21 @@ class RagHolder(app: Application, private val engineHolder: EngineHolder) {
 
     suspend fun documents(projectId: Long): List<DocumentEntity> = repository.listDocuments(projectId)
 
-    suspend fun deleteDocument(id: Long) = repository.deleteDocument(id)
+    /** A single source's metadata (incl. [DocumentEntity.localPath]) for the viewer. */
+    suspend fun document(id: Long): DocumentEntity? = repository.getDocument(id)
 
-    suspend fun deleteDocumentsOfProject(projectId: Long) = repository.deleteDocumentsOfProject(projectId)
+    suspend fun deleteDocument(id: Long) {
+        repository.getDocument(id)?.localPath?.let { fileStore.delete(it) }
+        repository.deleteDocument(id)
+    }
+
+    suspend fun deleteDocumentsOfProject(projectId: Long) {
+        repository.listDocuments(projectId).forEach { fileStore.delete(it.localPath) }
+        repository.deleteDocumentsOfProject(projectId)
+    }
+
+    /** Wipe every stored source copy (used by Settings → clear all data). */
+    suspend fun deleteAllSourceFiles() = fileStore.deleteAll()
 
     companion object {
         const val USE_MODEL_ID = "universal-sentence-encoder"

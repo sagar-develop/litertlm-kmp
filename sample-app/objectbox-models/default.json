@@ -127,7 +127,7 @@
     },
     {
       "id": "4:6425121798192137321",
-      "lastPropertyId": "8:1226632952624020254",
+      "lastPropertyId": "9:5129622857480589838",
       "name": "DocumentEntity",
       "properties": [
         {
@@ -172,6 +172,11 @@
           "indexId": "6:8852085121153424895",
           "type": 6,
           "flags": 8
+        },
+        {
+          "id": "9:5129622857480589838",
+          "name": "localPath",
+          "type": 9
         }
       ],
       "relations": []
