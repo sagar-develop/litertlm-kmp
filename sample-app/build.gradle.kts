@@ -142,6 +142,9 @@ dependencies {
     implementation(libs.pdfbox.android)
 
     implementation(libs.kotlinx.coroutines.android)
+    // Runtime-only JSON (no compiler plugin, matching :lib's usage) — used to
+    // persist a message's RAG citations as a string column on MessageEntity.
+    implementation(libs.kotlinx.serialization.json)
     implementation(libs.napier)
     // Ktor — needed because EngineHolder constructs an HttpClient directly.
     // Production consumers using kotlin-inject (the library's DI graph) would

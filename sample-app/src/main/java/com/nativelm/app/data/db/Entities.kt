@@ -53,6 +53,20 @@ class MessageEntity {
     var text: String = ""
     var createdAt: Long = 0
 
+    /**
+     * RAG source citations for an assistant answer, as a JSON string (see
+     * `CitationJson`). Empty for user messages and ungrounded answers. Persisting
+     * these is what lets the source chips reappear when a saved grounded chat is
+     * reopened.
+     *
+     * Nullable on purpose: ObjectBox does NOT apply a Kotlin default to a
+     * newly-added property when materializing rows written before the property
+     * existed — those legacy rows read back as null, not "". A non-null type here
+     * would then trip Kotlin's null check on read. `CitationJson.decode` treats
+     * null/blank as "no citations".
+     */
+    var citationsJson: String? = null
+
     companion object {
         const val ROLE_USER = "user"
         const val ROLE_ASSISTANT = "assistant"
