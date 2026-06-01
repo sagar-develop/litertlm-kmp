@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
@@ -75,6 +76,10 @@ fun OnboardingScreen(onFinish: () -> Unit) {
         Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
+            // Background stays full-bleed; content is inset past the status/nav bars
+            // (edge-to-edge is on, so without this the bottom Skip/Next row and top
+            // content draw under the system bars — worst on 3-button-nav devices).
+            .systemBarsPadding()
             .padding(24.dp),
     ) {
         HorizontalPager(
