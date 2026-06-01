@@ -14,6 +14,21 @@
 }
 -dontwarn io.objectbox.**
 
+# ---- MediaPipe Tasks (USE-Lite text embedder for RAG) ----
+# The MediaPipe + protobuf + Flogger + JNI keeps that fix the release-only
+# Graph.<clinit> stack-walk crash live in the engine's consumer-rules.pro
+# (litertlm-kmp owns the MediaPipe dependency), so every consumer inherits them.
+# Only app-owned deps (PDFBox below) need rules here.
+
+# ---- PDFBox (tom-roush) — document text extraction for RAG ----
+# Loads fonts/resources reflectively and references AWT/Harmony stubs absent on
+# Android; keep the package and silence the missing-class warnings.
+-keep class com.tom_roush.** { *; }
+-dontwarn com.tom_roush.**
+-dontwarn java.awt.**
+-dontwarn javax.**
+-dontwarn org.apache.**
+
 # ---- Tink / androidx.security-crypto (encrypted HF token) ----
 -keep class com.google.crypto.tink.** { *; }
 -dontwarn com.google.crypto.tink.**

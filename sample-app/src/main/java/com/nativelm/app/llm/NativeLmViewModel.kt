@@ -22,8 +22,12 @@ import com.nativelm.app.data.AppPreferences
 import com.nativelm.app.data.SecureStore
 import com.nativelm.app.data.ThemeMode
 import com.nativelm.app.data.db.ConversationRepository
+import com.nativelm.app.data.db.DocumentEntity
 import com.nativelm.app.data.db.MessageEntity
+import com.nativelm.app.data.db.ProjectRepository
 import com.nativelm.app.metrics.MetricsRepository
+import com.nativelm.app.rag.Citation
+import com.nativelm.app.rag.IngestState
 import io.github.aakira.napier.Napier
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -46,6 +50,7 @@ const val ROUTE_ONBOARDING = "onboarding"
 const val ROUTE_MODELS = "models"
 const val ROUTE_CHAT = "chat"
 const val ROUTE_SETTINGS = "settings"
+const val ROUTE_DOCUMENTS = "documents"
 
 /** Per-model UI status derived from disk + active + in-flight download state. */
 sealed interface ModelStatus {
@@ -76,9 +81,20 @@ data class ChatMessage(
     val text: String,
     val isStreaming: Boolean = false,
     val id: Long,
+    /** Document sources grounding this answer (RAG); empty for ordinary chat. */
+    val citations: List<Citation> = emptyList(),
 ) {
     enum class Role { User, Assistant }
 }
+
+/** A document row for the management screen. */
+data class DocumentSummary(
+    val id: Long,
+    val title: String,
+    val pageCount: Int,
+    val chunkCount: Int,
+    val createdAt: Long,
+)
 
 data class ChatState(
     val messages: List<ChatMessage> = emptyList(),
@@ -95,12 +111,21 @@ data class ConversationSummary(
     val updatedAt: Long,
 )
 
+/** A project (notebook) row for the drawer + save sheet. */
+data class ProjectSummary(
+    val id: Long,
+    val name: String,
+    val updatedAt: Long,
+)
+
 class NativeLmViewModel(app: Application) : ViewModel() {
 
     private val engineHolder = EngineHolder(app)
+    private val ragHolder = RagHolder(app, engineHolder)
     private val prefs = AppPreferences(app)
     private val secureStore = SecureStore(app)
     private val repo = ConversationRepository()
+    private val projectRepo = ProjectRepository()
     private val catalog = NativeLmModelCatalog()
     val metrics = MetricsRepository()
 
@@ -128,6 +153,29 @@ class NativeLmViewModel(app: Application) : ViewModel() {
     /** Id of the open conversation; 0 = an unsaved new chat (created on first send). */
     private val _currentConversationId = MutableStateFlow(0L)
     val currentConversationId: StateFlow<Long> = _currentConversationId.asStateFlow()
+
+    // ---- Projects (notebooks) + sources ----
+
+    private val _projects = MutableStateFlow<List<ProjectSummary>>(emptyList())
+    val projects: StateFlow<List<ProjectSummary>> = _projects.asStateFlow()
+
+    /** Open project; 0 = the default general chat (no grounding). */
+    private val _currentProjectId = MutableStateFlow(0L)
+    val currentProjectId: StateFlow<Long> = _currentProjectId.asStateFlow()
+
+    /** Name of the open project, shown in the chat top bar; null in default chat. */
+    private val _currentProjectName = MutableStateFlow<String?>(null)
+    val currentProjectName: StateFlow<String?> = _currentProjectName.asStateFlow()
+
+    /** Sources of the open project, for its sources screen. */
+    private val _documents = MutableStateFlow<List<DocumentSummary>>(emptyList())
+    val documents: StateFlow<List<DocumentSummary>> = _documents.asStateFlow()
+
+    /** Progress of an in-flight source import; null when idle. */
+    private val _importState = MutableStateFlow<IngestState?>(null)
+    val importState: StateFlow<IngestState?> = _importState.asStateFlow()
+
+    private var importJob: Job? = null
 
     val themeMode: StateFlow<ThemeMode> =
         prefs.themeMode.stateIn(viewModelScope, SharingStarted.Eagerly, ThemeMode.SYSTEM)
@@ -161,11 +209,12 @@ class NativeLmViewModel(app: Application) : ViewModel() {
         // Start every launch on a fresh chat (Gemini-style). Past conversations
         // stay in the drawer and can be reopened; we don't auto-restore one.
         refreshConversations()
+        refreshProjects()
         viewModelScope.launch { decideStartRoute() }
     }
 
     private fun refreshConversations() {
-        _conversations.value = repo.list().map { ConversationSummary(it.id, it.title, it.updatedAt) }
+        _conversations.value = repo.list(0L).map { ConversationSummary(it.id, it.title, it.updatedAt) }
     }
 
     // ---- Boot ----
@@ -326,7 +375,11 @@ class NativeLmViewModel(app: Application) : ViewModel() {
         // "New chat" doesn't clutter the drawer until it has content).
         if (_currentConversationId.value == 0L) {
             val now = System.currentTimeMillis()
-            _currentConversationId.value = repo.create(title = snippetTitle(input), now = now)
+            _currentConversationId.value = repo.create(
+                projectId = _currentProjectId.value,
+                title = snippetTitle(input),
+                now = now,
+            )
             refreshConversations()
         }
 
@@ -339,9 +392,11 @@ class NativeLmViewModel(app: Application) : ViewModel() {
         generationJob?.cancel()
         generationJob = viewModelScope.launch {
             metrics.tokens.requestStarted()
-            // The session holds the KV cache from prior turns — send only the new
-            // message; no history re-prefill, no app-side context prompt.
-            val request = AiEngineRequest(formattedPrompt = input, temperature = 0.7f, maxTokens = 1024)
+            // RAG: when grounding is on, retrieve context, fold it into this turn's
+            // prompt, and surface citations under the answer. Otherwise send only the
+            // new message so the KV cache keeps TTFT flat.
+            val turnPrompt = ragTurnPrompt(input)
+            val request = AiEngineRequest(formattedPrompt = turnPrompt, temperature = 0.7f, maxTokens = 1024)
             session.sendTurn(request).collect { state ->
                 when (state) {
                     is EngineState.TokenGenerated<String> -> {
@@ -407,6 +462,8 @@ class NativeLmViewModel(app: Application) : ViewModel() {
         generationJob?.cancel()
         generationJob = null
         metrics.tokens.requestEnded()
+        _currentProjectId.value = 0L
+        _currentProjectName.value = null
         _currentConversationId.value = 0L
         _chat.value = ChatState()
         if (_engineLoad.value is EngineLoad.Ready) openSession(emptyList())
@@ -419,6 +476,8 @@ class NativeLmViewModel(app: Application) : ViewModel() {
         generationJob?.cancel()
         generationJob = null
         metrics.tokens.requestEnded()
+        _currentProjectId.value = 0L
+        _currentProjectName.value = null
         val msgs = repo.messages(id).mapIndexed { i, e -> e.toChatMessage(i.toLong()) }
         _currentConversationId.value = id
         nextChatMessageId = msgs.size.toLong()
@@ -455,6 +514,7 @@ class NativeLmViewModel(app: Application) : ViewModel() {
     private fun maybeGenerateTitle() {
         val id = _currentConversationId.value
         if (id == 0L) return
+        if (_currentProjectId.value != 0L) return // project chats keep the project name
         val completed = _chat.value.messages.filter { it.text.isNotEmpty() }
         if (completed.size != 2) return // only after the first user+assistant pair
         val firstUser = completed.firstOrNull { it.role == ChatMessage.Role.User }?.text ?: return
@@ -514,6 +574,31 @@ class NativeLmViewModel(app: Application) : ViewModel() {
         }
     }
 
+    /** Build one turn's prompt, grounding in the open project's sources (if any). */
+    private suspend fun ragTurnPrompt(input: String): String {
+        val projectId = _currentProjectId.value
+        if (projectId <= 0L || !ragHolder.ensureEmbeddingReady()) return input
+        val ctx = ragHolder.retrieve(projectId, input)
+        if (ctx.isEmpty) return input
+        attachCitations(ctx.citations)
+        return buildString {
+            append(ctx.contextText).append("\n\n")
+            append("User question: ").append(input).append('\n')
+            append("Answer using only the context above. If it doesn't contain the answer, say so plainly.")
+        }
+    }
+
+    /** Tag the in-flight assistant message with its grounding sources. */
+    private fun attachCitations(citations: List<Citation>) {
+        if (citations.isEmpty()) return
+        _chat.update { s ->
+            val updated = s.messages.toMutableList()
+            val last = updated.lastOrNull() ?: return@update s
+            updated[updated.lastIndex] = last.copy(citations = citations)
+            s.copy(messages = updated)
+        }
+    }
+
     private fun snippetTitle(input: String): String =
         input.trim().replace('\n', ' ').take(40).ifBlank { "New chat" }
 
@@ -533,6 +618,142 @@ class NativeLmViewModel(app: Application) : ViewModel() {
         createdAt = order
     }
 
+    // ---- Projects (notebooks) ----
+
+    fun refreshProjects() {
+        _projects.value = projectRepo.list().map { ProjectSummary(it.id, it.name, it.updatedAt) }
+    }
+
+    /** Create a notebook and return its id (used by "New project" and the save sheet). */
+    fun createProject(name: String): Long {
+        val clean = name.trim().ifBlank { "Untitled project" }
+        val id = projectRepo.create(clean, System.currentTimeMillis())
+        refreshProjects()
+        return id
+    }
+
+    fun renameProject(id: Long, name: String) {
+        val clean = name.trim().ifBlank { return }
+        projectRepo.rename(id, clean)
+        if (id == _currentProjectId.value) _currentProjectName.value = clean
+        refreshProjects()
+    }
+
+    fun deleteProject(id: Long) {
+        viewModelScope.launch {
+            repo.deleteForProject(id)
+            ragHolder.deleteDocumentsOfProject(id)
+            projectRepo.delete(id)
+            if (id == _currentProjectId.value) newChat()
+            refreshProjects()
+        }
+    }
+
+    /** Open a notebook's grounded chat (one per project; created on first open). */
+    fun openProject(id: Long) {
+        val project = projectRepo.get(id) ?: return
+        generationJob?.cancel()
+        generationJob = null
+        metrics.tokens.requestEnded()
+        val convId = repo.firstForProject(id)?.id
+            ?: repo.create(id, project.name, System.currentTimeMillis())
+        _currentProjectId.value = id
+        _currentProjectName.value = project.name
+        val msgs = repo.messages(convId).mapIndexed { i, e -> e.toChatMessage(i.toLong()) }
+        _currentConversationId.value = convId
+        nextChatMessageId = msgs.size.toLong()
+        _chat.value = ChatState(messages = msgs)
+        refreshDocuments()
+        viewModelScope.launch { ragHolder.ensureEmbeddingReady() } // warm embedder
+        if (_engineLoad.value is EngineLoad.Ready) openSession(msgs)
+    }
+
+    // ---- Sources (per project) ----
+
+    fun refreshDocuments() {
+        val projectId = _currentProjectId.value
+        viewModelScope.launch {
+            _documents.value = if (projectId <= 0L) {
+                emptyList()
+            } else {
+                ragHolder.documents(projectId).map {
+                    DocumentSummary(it.id, it.title, it.pageCount, it.chunkCount, it.createdAt)
+                }
+            }
+        }
+    }
+
+    /** Import a picked file as a source of the open project. */
+    fun importDocument(uri: String, displayName: String?) {
+        val projectId = _currentProjectId.value
+        if (projectId <= 0L || importJob?.isActive == true) return
+        importJob = launchIngest { ragHolder.ingestFile(projectId, uri, displayName) }
+    }
+
+    /** Save a chat bubble's text as a source of [projectId] (from the save sheet). */
+    fun saveBubbleToProject(projectId: Long, text: String) {
+        if (projectId <= 0L || text.isBlank() || importJob?.isActive == true) return
+        importJob = launchIngest(refreshFor = projectId) {
+            ragHolder.ingestText(projectId, snippetTitle(text), text)
+        }
+    }
+
+    /** Save a bubble into the currently-open project (project chat). */
+    fun saveBubbleToCurrentProject(text: String) = saveBubbleToProject(_currentProjectId.value, text)
+
+    /** Run an ingest flow, surfacing [IngestState] and refreshing sources when it lands in the open project. */
+    private fun launchIngest(
+        refreshFor: Long = _currentProjectId.value,
+        flow: suspend () -> kotlinx.coroutines.flow.Flow<IngestState>,
+    ): Job = viewModelScope.launch {
+        _importState.value = IngestState.Extracting
+        if (!prepareEmbedding()) {
+            _importState.value = IngestState.Failed("Couldn't prepare the embedding model.")
+            return@launch
+        }
+        flow().collect { state ->
+            _importState.value = state
+            if (state is IngestState.Done && refreshFor == _currentProjectId.value) refreshDocuments()
+        }
+    }
+
+    fun clearImportState() {
+        _importState.value = null
+    }
+
+    fun deleteDocument(id: Long) {
+        viewModelScope.launch {
+            ragHolder.deleteDocument(id)
+            refreshDocuments()
+        }
+    }
+
+    /** Make the embedder usable: download the small USE model if needed, then init. */
+    private suspend fun prepareEmbedding(): Boolean {
+        if (ragHolder.ensureEmbeddingReady()) return true
+        if (!downloadEmbeddingModel()) return false
+        return ragHolder.ensureEmbeddingReady()
+    }
+
+    private suspend fun downloadEmbeddingModel(): Boolean {
+        val descriptor = catalog.byId(RagHolder.USE_MODEL_ID) ?: return false
+        if (engineHolder.isModelDownloaded(descriptor.fileName)) return true
+        var success = false
+        engineHolder.downloadModel(descriptor.url, descriptor.fileName, descriptor.sha256)
+            .collect { state ->
+                when (state) {
+                    is DownloadState.Success -> success = true
+                    is DownloadState.Error -> {
+                        Napier.e(tag = TAG) { "USE model download failed: ${state.message}" }
+                        success = false
+                    }
+                    else -> Unit
+                }
+            }
+        if (success) refreshModels()
+        return success
+    }
+
     // ---- Settings ----
 
     fun setThemeMode(mode: ThemeMode) {
@@ -546,12 +767,23 @@ class NativeLmViewModel(app: Application) : ViewModel() {
             generationJob?.cancel()
             sessionWarmJob?.cancel()
             chatSession = null
+            importJob?.cancel()
             engineHolder.release()
             catalog.all().forEach { engineHolder.deleteModel(it.fileName) }
             secureStore.clearHfToken()
             _conversations.value.forEach { repo.delete(it.id) }
+            _projects.value.forEach { p ->
+                repo.deleteForProject(p.id)
+                ragHolder.deleteDocumentsOfProject(p.id)
+                projectRepo.delete(p.id)
+            }
+            _currentProjectId.value = 0L
+            _currentProjectName.value = null
+            _importState.value = null
             _currentConversationId.value = 0L
             refreshConversations()
+            refreshProjects()
+            refreshDocuments()
             prefs.clearAll()
             _hasToken.value = false
             _activeModelId.value = null

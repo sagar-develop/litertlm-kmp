@@ -134,9 +134,12 @@ dependencies {
     implementation(libs.androidx.security.crypto)
     implementation(libs.androidx.core.splashscreen)
 
-    // ObjectBox — multi-conversation persistence (Conversation + Message entities).
+    // ObjectBox — multi-conversation persistence + document-chunk HNSW vector index.
     implementation(libs.objectbox.kotlin)
     kapt(libs.objectbox.processor)
+
+    // PDFBox (Android port) — text extraction from imported PDFs for document RAG.
+    implementation(libs.pdfbox.android)
 
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.napier)
@@ -147,4 +150,9 @@ dependencies {
     implementation(libs.ktor.client.okhttp)
 
     debugImplementation(libs.compose.ui.tooling)
+
+    // JVM unit tests for the pure RAG logic (chunker, context formatter, retriever
+    // relevance gate). No Android framework needed — these run on testDebugUnitTest.
+    testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
 }

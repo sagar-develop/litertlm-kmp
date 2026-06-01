@@ -10,11 +10,13 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.nativelm.app.llm.NativeLmViewModel
 import com.nativelm.app.llm.ROUTE_CHAT
+import com.nativelm.app.llm.ROUTE_DOCUMENTS
 import com.nativelm.app.llm.ROUTE_MODELS
 import com.nativelm.app.llm.ROUTE_ONBOARDING
 import com.nativelm.app.llm.ROUTE_SETTINGS
 import com.nativelm.app.llm.ROUTE_SPLASH
 import com.nativelm.app.ui.chat.ChatScreen
+import com.nativelm.app.ui.documents.DocumentsScreen
 import com.nativelm.app.ui.models.ModelManagementScreen
 import com.nativelm.app.ui.onboarding.OnboardingScreen
 import com.nativelm.app.ui.settings.SettingsScreen
@@ -63,6 +65,13 @@ fun NativeLmApp(vm: NativeLmViewModel, startRoute: String) {
                 vm = vm,
                 onOpenModels = { nav.navigate(ROUTE_MODELS) },
                 onOpenSettings = { nav.navigate(ROUTE_SETTINGS) },
+                onOpenDocuments = { nav.navigate(ROUTE_DOCUMENTS) },
+            )
+        }
+        composable(ROUTE_DOCUMENTS) {
+            DocumentsScreen(
+                vm = vm,
+                onBack = { nav.popBackStack() },
             )
         }
         composable(ROUTE_SETTINGS) {

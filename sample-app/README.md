@@ -2,8 +2,8 @@
 
 **Local AI — private, on-device chat for Android.**
 
-Your conversations never leave your phone. (Document chat / local RAG — the
-"NotebookLM" part — is on the roadmap.)
+Your documents and conversations never leave your phone. Ask questions grounded
+in your own PDFs and notes — an on-device "NotebookLM" — or just chat.
 
 NativeLM is the reference product built on top of [litertlm-kmp](../README.md).
 It runs Gemma-family models fully on-device: no account, no API key, no cloud
@@ -34,6 +34,14 @@ product.
 
 - **General chat** — a capable local LLM with a clean, Gemini-style chat
   surface ("How can I help you today?").
+- **Projects (on-device NotebookLM)** — create a project, add sources (PDF or
+  plain text, or save any answer into it), and the project's chat answers *only*
+  from those sources. Documents are extracted, chunked, embedded (USE-Lite), and
+  stored in an on-device vector index (ObjectBox HNSW) — nothing is uploaded.
+- **Grounded answers with citations** — project retrieval is scoped to that
+  project's sources and relevance-gated, so each answer cites where it came from,
+  and off-topic questions fall back to ordinary chat instead of citing unrelated
+  text. The default (project-less) chat stays pure general chat.
 - **Multi-turn memory (KV-cache sessions)** — the assistant remembers earlier
   turns via a persistent engine session (`LocalAiEngine.openChatSession`), so
   history is never re-sent: prefill is paid per new message, not re-paid for the
@@ -56,8 +64,8 @@ product.
   token, pasted into the app and stored encrypted on-device. Never Firebase,
   never a backend of ours.
 
-Document chat (local RAG) and image input are on the roadmap — the embedding
-model is already downloadable in preparation.
+Image input (multimodal chat) is on the roadmap; the engine already supports it
+(`descriptor.supportsVision`), it's just not surfaced in the chat UI yet.
 
 ## First run vs. later launches
 
@@ -68,14 +76,14 @@ model is already downloadable in preparation.
 
 ## Models
 
-NativeLM ships a small catalog ([`NativeLmModelCatalog.kt`](src/main/java/com/sagar/litertlmsample/llm/NativeLmModelCatalog.kt))
+NativeLM ships a small catalog ([`NativeLmModelCatalog.kt`](src/main/java/com/nativelm/app/llm/NativeLmModelCatalog.kt))
 pointing at verified Hugging Face / Google-hosted artifacts:
 
 | Model | Role | Size | Min RAM | Auth |
 |---|---|---|---|---|
 | Gemma 4 E2B (`.litertlm`) | Language model | ~2.6 GB | 6 GB | HF token |
 | Gemma 4 E4B (`.litertlm`) | Language model | ~3.7 GB | 10 GB | HF token |
-| Universal Sentence Encoder | Embedding (for upcoming doc chat) | ~6 MB | — | none |
+| Universal Sentence Encoder | Embedding (for Projects / document RAG) | ~6 MB | — | none |
 
 Downloads are resumable with SHA-256 validation, handled by the engine's
 `KtorModelManager`. A `401/403` from Hugging Face surfaces as a clear

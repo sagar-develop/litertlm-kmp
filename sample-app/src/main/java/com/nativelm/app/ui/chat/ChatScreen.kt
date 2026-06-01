@@ -12,6 +12,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,6 +23,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -33,22 +35,23 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerValue
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationDrawerItem
@@ -60,6 +63,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberDrawerState
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -71,15 +75,18 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.nativelm.app.llm.ChatMessage
 import com.nativelm.app.llm.ConversationSummary
 import com.nativelm.app.llm.NativeLmViewModel
+import com.nativelm.app.llm.ProjectSummary
 import com.nativelm.app.ui.theme.JetBrainsMono
 import com.nativelm.app.ui.theme.NativeLmMark
 import kotlinx.coroutines.launch
@@ -90,231 +97,428 @@ fun ChatScreen(
     vm: NativeLmViewModel,
     onOpenModels: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenDocuments: () -> Unit,
 ) {
     val chat by vm.chat.collectAsState()
     val activeModel by vm.activeModelName.collectAsState()
-    val metrics by vm.metrics.snapshot.collectAsState()
     val conversations by vm.conversations.collectAsState()
     val currentId by vm.currentConversationId.collectAsState()
+    val projects by vm.projects.collectAsState()
+    val projectName by vm.currentProjectName.collectAsState()
     val listState = rememberLazyListState()
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     var renameTarget by remember { mutableStateOf<ConversationSummary?>(null) }
+    var projectRenameTarget by remember { mutableStateOf<ProjectSummary?>(null) }
+    var saveSheetText by remember { mutableStateOf<String?>(null) }
+    var newProjectName by remember { mutableStateOf<String?>(null) } // non-null => dialog open
+    var pendingSaveText by remember { mutableStateOf<String?>(null) } // save after creating project
 
-    // Follow the conversation as new messages arrive (newest is item 0 with
-    // reverseLayout, so scrolling to 0 keeps the latest in view).
     LaunchedEffect(chat.messages.size) {
         if (chat.messages.isNotEmpty()) listState.animateScrollToItem(0)
+    }
+
+    // Tapping a bubble's save button: inside a project, save directly; in default
+    // chat, open the bottom sheet to choose a notebook.
+    fun onSaveBubble(text: String) {
+        if (projectName != null) {
+            vm.saveBubbleToCurrentProject(text)
+            Toast.makeText(context, "Saved to $projectName", Toast.LENGTH_SHORT).show()
+        } else {
+            saveSheetText = text
+        }
     }
 
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
-            ConversationDrawer(
+            ChatDrawer(
                 conversations = conversations,
+                projects = projects,
                 currentId = currentId,
                 onNewChat = { scope.launch { drawerState.close() }; vm.newChat() },
                 onOpen = { id -> scope.launch { drawerState.close() }; vm.openConversation(id) },
                 onRename = { renameTarget = it },
                 onDelete = { vm.deleteConversation(it) },
+                onOpenProject = { id -> scope.launch { drawerState.close() }; vm.openProject(id) },
+                onNewProject = { newProjectName = "" },
+                onRenameProject = { projectRenameTarget = it },
+                onDeleteProject = { vm.deleteProject(it) },
                 onOpenModels = { scope.launch { drawerState.close() }; onOpenModels() },
                 onOpenSettings = { scope.launch { drawerState.close() }; onOpenSettings() },
             )
         },
     ) {
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            TopAppBar(
-                navigationIcon = {
-                    IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                        Icon(Icons.Filled.Menu, contentDescription = "Conversations")
-                    }
-                },
-                title = {
-                    Column {
-                        Text("NativeLM", style = MaterialTheme.typography.titleMedium)
-                        Text(
-                            activeModel ?: "No model loaded",
-                            style = MaterialTheme.typography.labelSmall.copy(fontFamily = JetBrainsMono),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { vm.newChat() }, enabled = chat.messages.isNotEmpty()) {
-                        Icon(Icons.Filled.Add, contentDescription = "New chat")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                ),
-            )
-        },
-    ) { padding ->
-        Column(
-            Modifier
-                .padding(padding)
-                .fillMaxSize(),
-        ) {
-            Box(Modifier.weight(1f)) {
-                if (chat.messages.isEmpty()) {
-                    Greeting(hasModel = activeModel != null, onOpenModels = onOpenModels)
-                } else {
-                    LazyColumn(
-                        state = listState,
-                        modifier = Modifier.fillMaxSize(),
-                        reverseLayout = true,
-                        contentPadding = PaddingValues(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        items(items = chat.messages.reversed(), key = { it.id }) { msg ->
-                            MessageBubble(msg)
+        Scaffold(
+            containerColor = MaterialTheme.colorScheme.background,
+            topBar = {
+                TopAppBar(
+                    navigationIcon = {
+                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                            Icon(Icons.Filled.Menu, contentDescription = "Menu")
+                        }
+                    },
+                    title = {
+                        Column {
+                            Text(projectName ?: "NativeLM", style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                if (projectName != null) "Project · grounded" else (activeModel ?: "No model loaded"),
+                                style = MaterialTheme.typography.labelSmall.copy(fontFamily = JetBrainsMono),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    },
+                    actions = {
+                        if (projectName != null) {
+                            IconButton(onClick = onOpenDocuments) {
+                                Icon(Icons.Filled.Description, contentDescription = "Sources")
+                            }
+                        }
+                        IconButton(onClick = { vm.newChat() }, enabled = chat.messages.isNotEmpty() || projectName != null) {
+                            Icon(Icons.Filled.Add, contentDescription = "New chat")
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.background,
+                    ),
+                )
+            },
+        ) { padding ->
+            Column(
+                Modifier
+                    .padding(padding)
+                    .fillMaxSize(),
+            ) {
+                Box(Modifier.weight(1f)) {
+                    if (chat.messages.isEmpty()) {
+                        Greeting(hasModel = activeModel != null, projectName = projectName, onOpenModels = onOpenModels)
+                    } else {
+                        LazyColumn(
+                            state = listState,
+                            modifier = Modifier.fillMaxSize(),
+                            reverseLayout = true,
+                            contentPadding = PaddingValues(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            items(items = chat.messages.reversed(), key = { it.id }) { msg ->
+                                MessageBubble(msg, onSave = { onSaveBubble(msg.text) })
+                            }
                         }
                     }
+                    if (chat.isWarming) BuildingUnderstanding()
                 }
-                // While the engine re-prefills a reopened conversation's history.
-                if (chat.isWarming) BuildingUnderstanding()
-            }
 
-            // Quiet live telemetry while generating.
-            if (chat.isGenerating) {
-                val tps = metrics.tokens.tokensPerSecond
-                val ttft = metrics.tokens.timeToFirstTokenMs
-                val ttftText = if (ttft > 0) "TTFT ${"%.1f".format(ttft / 1000.0)}s · " else ""
-                Text(
-                    "$ttftText${"%.0f".format(tps)} tok/s",
-                    style = MaterialTheme.typography.labelSmall.copy(fontFamily = JetBrainsMono),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 2.dp),
+                InputBar(
+                    value = chat.input,
+                    generating = chat.isGenerating,
+                    canSend = activeModel != null && !chat.isWarming,
+                    onValueChange = vm::setInput,
+                    onSend = vm::sendChatMessage,
+                    onStop = vm::stopGeneration,
                 )
             }
-
-            InputBar(
-                value = chat.input,
-                generating = chat.isGenerating,
-                canSend = activeModel != null && !chat.isWarming,
-                onValueChange = vm::setInput,
-                onSend = vm::sendChatMessage,
-                onStop = vm::stopGeneration,
-            )
         }
     }
-    } // end ModalNavigationDrawer content
 
     renameTarget?.let { target ->
-        RenameDialog(
-            current = target.title,
+        TextInputDialog(
+            title = "Rename conversation",
+            initial = target.title,
+            confirmLabel = "Save",
             onDismiss = { renameTarget = null },
             onConfirm = { newTitle -> vm.renameConversation(target.id, newTitle); renameTarget = null },
+        )
+    }
+
+    projectRenameTarget?.let { target ->
+        TextInputDialog(
+            title = "Rename project",
+            initial = target.name,
+            confirmLabel = "Save",
+            onDismiss = { projectRenameTarget = null },
+            onConfirm = { newName -> vm.renameProject(target.id, newName); projectRenameTarget = null },
+        )
+    }
+
+    newProjectName?.let {
+        TextInputDialog(
+            title = "New project",
+            initial = "",
+            confirmLabel = "Create",
+            placeholder = "Project name",
+            onDismiss = { newProjectName = null; pendingSaveText = null },
+            onConfirm = { name ->
+                val id = vm.createProject(name)
+                val toSave = pendingSaveText
+                newProjectName = null
+                pendingSaveText = null
+                if (toSave != null) {
+                    vm.saveBubbleToProject(id, toSave)
+                    Toast.makeText(context, "Saved to new project", Toast.LENGTH_SHORT).show()
+                } else {
+                    vm.openProject(id)
+                }
+            },
+        )
+    }
+
+    saveSheetText?.let { text ->
+        SaveTargetSheet(
+            projects = projects,
+            onDismiss = { saveSheetText = null },
+            onPick = { projectId ->
+                vm.saveBubbleToProject(projectId, text)
+                saveSheetText = null
+                Toast.makeText(context, "Saved", Toast.LENGTH_SHORT).show()
+            },
+            onNewProject = {
+                pendingSaveText = text
+                saveSheetText = null
+                newProjectName = ""
+            },
         )
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ConversationDrawer(
+private fun ChatDrawer(
     conversations: List<ConversationSummary>,
+    projects: List<ProjectSummary>,
     currentId: Long,
     onNewChat: () -> Unit,
     onOpen: (Long) -> Unit,
     onRename: (ConversationSummary) -> Unit,
     onDelete: (Long) -> Unit,
+    onOpenProject: (Long) -> Unit,
+    onNewProject: () -> Unit,
+    onRenameProject: (ProjectSummary) -> Unit,
+    onDeleteProject: (Long) -> Unit,
     onOpenModels: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
-    var menuForId by remember { mutableStateOf<Long?>(null) }
+    var sheet by remember { mutableStateOf<DrawerSheet?>(null) }
     ModalDrawerSheet {
         Column(Modifier.fillMaxSize().padding(horizontal = 12.dp)) {
-            Text(
-                "NativeLM",
-                style = MaterialTheme.typography.titleLarge,
+            Row(
                 modifier = Modifier.padding(16.dp),
-            )
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                NativeLmMark(size = 24.dp)
+                Spacer(Modifier.size(10.dp))
+                Text("NativeLM", style = MaterialTheme.typography.titleLarge)
+            }
             NavigationDrawerItem(
                 label = { Text("New chat") },
                 icon = { Icon(Icons.Filled.Add, contentDescription = null) },
                 selected = false,
                 onClick = onNewChat,
             )
-            HorizontalDivider(Modifier.padding(vertical = 8.dp))
+
             LazyColumn(Modifier.weight(1f)) {
-                items(items = conversations, key = { it.id }) { c ->
-                    Box {
-                        NavigationDrawerItem(
-                            label = { Text(c.title, maxLines = 1) },
-                            selected = c.id == currentId,
-                            onClick = { onOpen(c.id) },
-                            badge = {
-                                IconButton(onClick = { menuForId = c.id }) {
-                                    Icon(Icons.Filled.MoreVert, contentDescription = "Options")
-                                }
-                            },
-                        )
-                        DropdownMenu(
-                            expanded = menuForId == c.id,
-                            onDismissRequest = { menuForId = null },
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text("Rename") },
-                                leadingIcon = { Icon(Icons.Filled.Edit, contentDescription = null) },
-                                onClick = { menuForId = null; onRename(c) },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Delete") },
-                                leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null) },
-                                onClick = { menuForId = null; onDelete(c.id) },
-                            )
-                        }
+                items(items = conversations, key = { "c${it.id}" }) { c ->
+                    DrawerRow(
+                        label = c.title,
+                        selected = c.id == currentId,
+                        onClick = { onOpen(c.id) },
+                        onLongClick = { sheet = DrawerSheet.Conv(c) },
+                    )
+                }
+
+                item {
+                    HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                    Text(
+                        "Projects",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 4.dp),
+                    )
+                    NavigationDrawerItem(
+                        label = { Text("New project") },
+                        icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                        selected = false,
+                        onClick = onNewProject,
+                    )
+                }
+                items(items = projects, key = { "p${it.id}" }) { p ->
+                    DrawerRow(
+                        label = p.name,
+                        selected = false,
+                        onClick = { onOpenProject(p.id) },
+                        onLongClick = { sheet = DrawerSheet.Proj(p) },
+                        icon = { Icon(Icons.Filled.Folder, contentDescription = null) },
+                    )
+                }
+            }
+
+            HorizontalDivider(Modifier.padding(vertical = 8.dp))
+            NavigationDrawerItem(label = { Text("Models") }, selected = false, onClick = onOpenModels)
+            NavigationDrawerItem(label = { Text("Settings") }, selected = false, onClick = onOpenSettings)
+            Spacer(Modifier.height(8.dp))
+        }
+    }
+
+    sheet?.let { target ->
+        val title = when (target) {
+            is DrawerSheet.Conv -> target.item.title
+            is DrawerSheet.Proj -> target.item.name
+        }
+        val isProject = target is DrawerSheet.Proj
+        ModalBottomSheet(onDismissRequest = { sheet = null }) {
+            Column(Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
+                )
+                HorizontalDivider()
+                SheetAction(Icons.Filled.Edit, "Rename") {
+                    sheet = null
+                    when (target) {
+                        is DrawerSheet.Conv -> onRename(target.item)
+                        is DrawerSheet.Proj -> onRenameProject(target.item)
+                    }
+                }
+                SheetAction(Icons.Filled.Delete, if (isProject) "Delete project" else "Delete") {
+                    sheet = null
+                    when (target) {
+                        is DrawerSheet.Conv -> onDelete(target.item.id)
+                        is DrawerSheet.Proj -> onDeleteProject(target.item.id)
                     }
                 }
             }
-            HorizontalDivider(Modifier.padding(vertical = 8.dp))
-            NavigationDrawerItem(
-                label = { Text("Models") },
-                selected = false,
-                onClick = onOpenModels,
+        }
+    }
+}
+
+private sealed interface DrawerSheet {
+    data class Conv(val item: ConversationSummary) : DrawerSheet
+    data class Proj(val item: ProjectSummary) : DrawerSheet
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun DrawerRow(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    icon: (@Composable () -> Unit)? = null,
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = 56.dp)
+            .clip(CircleShape)
+            .then(if (selected) Modifier.background(MaterialTheme.colorScheme.secondaryContainer) else Modifier)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (icon != null) {
+            icon()
+            Spacer(Modifier.size(12.dp))
+        }
+        Text(
+            label,
+            style = MaterialTheme.typography.labelLarge,
+            color = if (selected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
+
+@Composable
+private fun SheetAction(icon: ImageVector, label: String, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 24.dp, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, contentDescription = null)
+        Spacer(Modifier.size(20.dp))
+        Text(label, style = MaterialTheme.typography.bodyLarge)
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SaveTargetSheet(
+    projects: List<ProjectSummary>,
+    onDismiss: () -> Unit,
+    onPick: (Long) -> Unit,
+    onNewProject: () -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState()
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        Column(Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
+            Text(
+                "Save to project",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
             )
-            NavigationDrawerItem(
-                label = { Text("Settings") },
-                selected = false,
-                onClick = onOpenSettings,
-            )
-            Spacer(Modifier.height(8.dp))
+            if (projects.isEmpty()) {
+                Text(
+                    "No projects yet — create one to save this.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
+                )
+            } else {
+                projects.forEach { p ->
+                    NavigationDrawerItem(
+                        label = { Text(p.name, maxLines = 1) },
+                        icon = { Icon(Icons.Filled.Folder, contentDescription = null) },
+                        selected = false,
+                        onClick = { onPick(p.id) },
+                        modifier = Modifier.padding(horizontal = 12.dp),
+                    )
+                }
+            }
+            TextButton(onClick = onNewProject, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                Icon(Icons.Filled.Add, contentDescription = null)
+                Spacer(Modifier.size(8.dp))
+                Text("Create a new project")
+            }
         }
     }
 }
 
 @Composable
-private fun RenameDialog(
-    current: String,
+private fun TextInputDialog(
+    title: String,
+    initial: String,
+    confirmLabel: String,
+    placeholder: String = "",
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit,
 ) {
-    var text by remember { mutableStateOf(current) }
+    var text by remember { mutableStateOf(initial) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Rename conversation") },
+        title = { Text(title) },
         text = {
             OutlinedTextField(
                 value = text,
                 onValueChange = { text = it },
                 singleLine = true,
+                placeholder = { if (placeholder.isNotEmpty()) Text(placeholder) },
             )
         },
-        confirmButton = { TextButton(onClick = { onConfirm(text) }) { Text("Save") } },
+        confirmButton = { TextButton(onClick = { onConfirm(text) }) { Text(confirmLabel) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
 }
 
-/** Shown over the thread while the engine re-prefills a reopened conversation's
- *  history into the KV cache — the "catching up on this conversation" moment. */
 @Composable
 private fun BuildingUnderstanding() {
     Box(
-        Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background.copy(alpha = 0.85f)),
+        Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background.copy(alpha = 0.85f)),
         contentAlignment = Alignment.Center,
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -324,33 +528,38 @@ private fun BuildingUnderstanding() {
                 modifier = Modifier.size(28.dp),
             )
             Spacer(Modifier.height(16.dp))
-            Text(
-                "Building understanding…",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onBackground,
-            )
+            Text("Building understanding…", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onBackground)
             Spacer(Modifier.height(4.dp))
-            Text(
-                "Catching up on this conversation",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Text("Catching up on this conversation", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
 
 @Composable
-private fun Greeting(hasModel: Boolean, onOpenModels: () -> Unit) {
+private fun Greeting(hasModel: Boolean, projectName: String?, onOpenModels: () -> Unit) {
     Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             NativeLmMark(size = 48.dp)
             Spacer(Modifier.height(20.dp))
             Text(
-                text = if (hasModel) "How can I help you today?" else "No model loaded",
+                text = when {
+                    !hasModel -> "No model loaded"
+                    projectName != null -> "Ask about “$projectName”"
+                    else -> "How can I help you today?"
+                },
                 style = MaterialTheme.typography.headlineSmall,
                 color = MaterialTheme.colorScheme.onBackground,
                 textAlign = TextAlign.Center,
             )
+            if (projectName != null && hasModel) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Answers are grounded in this project's sources.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                )
+            }
             if (!hasModel) {
                 Spacer(Modifier.height(8.dp))
                 TextButton(onClick = onOpenModels) { Text("Open Models") }
@@ -361,20 +570,16 @@ private fun Greeting(hasModel: Boolean, onOpenModels: () -> Unit) {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun MessageBubble(msg: ChatMessage) {
+private fun MessageBubble(msg: ChatMessage, onSave: () -> Unit) {
     val isUser = msg.role == ChatMessage.Role.User
-    val bubbleColor = if (isUser) MaterialTheme.colorScheme.primaryContainer
-    else MaterialTheme.colorScheme.surface
-    val textColor = if (isUser) MaterialTheme.colorScheme.onPrimaryContainer
-    else MaterialTheme.colorScheme.onSurface
+    val bubbleColor = if (isUser) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
+    val textColor = if (isUser) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
 
     val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
+    val canSave = !isUser && msg.text.isNotEmpty() && !msg.isStreaming
 
-    Row(
-        Modifier.fillMaxWidth(),
-        horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
-    ) {
+    Column(horizontalAlignment = if (isUser) Alignment.End else Alignment.Start, modifier = Modifier.fillMaxWidth()) {
         Surface(
             color = bubbleColor,
             shape = RoundedCornerShape(12.dp),
@@ -399,24 +604,41 @@ private fun MessageBubble(msg: ChatMessage) {
                 )
                 Spacer(Modifier.height(2.dp))
                 when {
-                    isUser -> Text( // User input is plain text, not Markdown.
-                        msg.text,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = textColor,
-                    )
+                    isUser -> Text(msg.text, style = MaterialTheme.typography.bodyMedium, color = textColor)
                     msg.text.isEmpty() ->
                         if (msg.isStreaming) TypingIndicator()
                         else Text("", style = MaterialTheme.typography.bodyMedium, color = textColor)
-                    // Assistant replies arrive as Markdown — render rich text.
                     else -> MarkdownText(markdown = msg.text, color = textColor)
                 }
+                if (!isUser && msg.citations.isNotEmpty()) {
+                    Spacer(Modifier.height(6.dp))
+                    val sources = msg.citations
+                        .distinctBy { it.documentTitle to it.pageNumber }
+                        .take(3)
+                        .joinToString("  ·  ") {
+                            if (it.pageNumber > 0) "${it.documentTitle} p.${it.pageNumber}" else it.documentTitle
+                        }
+                    Text(
+                        "Sources: $sources",
+                        style = MaterialTheme.typography.labelSmall.copy(fontFamily = JetBrainsMono),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+        if (canSave) {
+            IconButton(onClick = onSave, modifier = Modifier.size(32.dp)) {
+                Icon(
+                    Icons.Filled.BookmarkAdd,
+                    contentDescription = "Save to project",
+                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }
 }
 
-/** Three-dot "thinking" loader shown while the model is processing before the
- *  first token arrives (and between tokens if the stream stalls). */
 @Composable
 private fun TypingIndicator() {
     val transition = rememberInfiniteTransition(label = "typing")
@@ -435,12 +657,7 @@ private fun TypingIndicator() {
                 ),
                 label = "dot$i",
             )
-            Box(
-                Modifier
-                    .size(7.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = alpha)),
-            )
+            Box(Modifier.size(7.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary.copy(alpha = alpha)))
         }
     }
 }
@@ -457,9 +674,7 @@ private fun InputBar(
 ) {
     Surface(color = MaterialTheme.colorScheme.background) {
         Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
+            Modifier.fillMaxWidth().padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
@@ -472,9 +687,7 @@ private fun InputBar(
                 modifier = Modifier.weight(1f),
             )
             if (generating) {
-                FilledIconButton(onClick = onStop) {
-                    Icon(Icons.Filled.Stop, contentDescription = "Stop")
-                }
+                FilledIconButton(onClick = onStop) { Icon(Icons.Filled.Stop, contentDescription = "Stop") }
             } else {
                 FilledIconButton(onClick = onSend, enabled = canSend && value.isNotBlank()) {
                     Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send")
