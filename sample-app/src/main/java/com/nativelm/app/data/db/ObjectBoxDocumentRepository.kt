@@ -4,6 +4,8 @@
  */
 package com.nativelm.app.data.db
 
+import io.objectbox.query.QueryCondition
+import io.objectbox.query.QueryBuilder.StringOrder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -86,6 +88,26 @@ class ObjectBoxDocumentRepository : DocumentRepository {
                     .take(k)
                     .toList()
             }
+    }
+
+    override suspend fun keywordCandidates(
+        projectId: Long,
+        terms: List<String>,
+        limit: Int,
+    ): List<DocumentChunkEntity> = withContext(Dispatchers.IO) {
+        if (terms.isEmpty()) return@withContext emptyList()
+        // OR of case-insensitive "text contains term" across the query terms.
+        // Seed the fold as QueryCondition so .or() (which widens from
+        // PropertyQueryCondition) type-checks.
+        fun contains(term: String) =
+            DocumentChunkEntity_.text.contains(term, StringOrder.CASE_INSENSITIVE)
+        val anyTerm: QueryCondition<DocumentChunkEntity> =
+            terms.drop(1).fold<String, QueryCondition<DocumentChunkEntity>>(contains(terms.first())) { acc, t ->
+                acc.or(contains(t))
+            }
+        chunks.query(DocumentChunkEntity_.projectId.equal(projectId).and(anyTerm))
+            .build()
+            .use { it.find(0L, limit.toLong()) }
     }
 
     override suspend fun listDocuments(projectId: Long): List<DocumentEntity> =
