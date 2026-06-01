@@ -29,6 +29,15 @@
 -dontwarn javax.**
 -dontwarn org.apache.**
 
+# ---- ML Kit text recognition (on-device OCR for scanned PDFs + images) ----
+# ML Kit ships its own consumer rules, but keep its packages + the bundled-model
+# internals defensively (loaded via reflection/JNI) so a minified release doesn't
+# strip them — the same class of runtime-only crash we hit with MediaPipe.
+-keep class com.google.mlkit.** { *; }
+-dontwarn com.google.mlkit.**
+-keep class com.google.android.gms.internal.mlkit_vision_text_** { *; }
+-dontwarn com.google.android.gms.**
+
 # ---- Tink / androidx.security-crypto (encrypted HF token) ----
 -keep class com.google.crypto.tink.** { *; }
 -dontwarn com.google.crypto.tink.**

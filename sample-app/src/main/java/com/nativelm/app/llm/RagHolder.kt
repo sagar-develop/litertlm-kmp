@@ -15,6 +15,7 @@ import com.nativelm.app.rag.IngestState
 import com.nativelm.app.rag.RetrievedContext
 import com.nativelm.app.rag.extract.AndroidDocumentFileStore
 import com.nativelm.app.rag.extract.AndroidTextExtractor
+import com.nativelm.app.rag.extract.MlKitOcrEngine
 import com.nativelm.app.rag.extract.TextChunker
 import com.sagar.aicore.MediaPipeEmbeddingEngine
 import kotlinx.coroutines.flow.Flow
@@ -28,7 +29,7 @@ class RagHolder(app: Application, private val engineHolder: EngineHolder) {
 
     private val embeddingEngine = MediaPipeEmbeddingEngine(app)
     private val repository = ObjectBoxDocumentRepository()
-    private val extractor = AndroidTextExtractor(app)
+    private val extractor = AndroidTextExtractor(app, MlKitOcrEngine())
     private val fileStore = AndroidDocumentFileStore(app)
 
     private val ingestor: DocumentIngestor =
