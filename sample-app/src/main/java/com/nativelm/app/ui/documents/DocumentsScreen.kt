@@ -103,13 +103,13 @@ fun DocumentsScreen(vm: NativeLmViewModel, onBack: () -> Unit) {
             )
 
             Button(
-                onClick = { picker.launch(arrayOf("application/pdf", "text/plain")) },
+                onClick = { picker.launch(arrayOf("application/pdf", "text/plain", "image/*")) },
                 enabled = !busy,
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Icon(Icons.Filled.Add, contentDescription = null)
                 Spacer(Modifier.size(8.dp))
-                Text("Import PDF or text file")
+                Text("Import PDF, image, or text")
             }
 
             importState?.let { state ->
@@ -213,7 +213,7 @@ private fun DocumentRow(doc: DocumentSummary, onDelete: () -> Unit) {
 private fun EmptyState() {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Text(
-            "No sources yet.\nImport a PDF or text file to ground this project.",
+            "No sources yet.\nImport a PDF, image, or text file to ground this project.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,

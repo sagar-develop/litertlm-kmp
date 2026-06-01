@@ -140,6 +140,8 @@ dependencies {
 
     // PDFBox (Android port) — text extraction from imported PDFs for document RAG.
     implementation(libs.pdfbox.android)
+    // ML Kit on-device OCR (bundled model) — text from scanned PDFs and images.
+    implementation(libs.mlkit.text.recognition)
 
     implementation(libs.kotlinx.coroutines.android)
     // Runtime-only JSON (no compiler plugin, matching :lib's usage) — used to

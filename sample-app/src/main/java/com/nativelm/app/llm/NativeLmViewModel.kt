@@ -91,9 +91,10 @@ data class ChatMessage(
 }
 
 /**
- * A resolved request to open a source PDF at a cited page, with the cited
+ * A resolved request to open a cited source at its cited page, with the cited
  * passage to highlight. Held as ViewModel state; the chat screen reacts to it by
- * navigating to the viewer, which reads it back.
+ * navigating to the viewer, which reads it back. Covers both PDFs and images
+ * ([isImage]); an image is a single "page" shown via the same zoomable viewer.
  */
 data class PdfViewTarget(
     val documentId: Long,
@@ -104,6 +105,8 @@ data class PdfViewTarget(
     val initialPage: Int,
     /** The cited passage, shown in the highlight callout above the page. */
     val highlight: String,
+    /** True for image sources (OCR'd): rendered directly, no PdfRenderer. */
+    val isImage: Boolean = false,
 )
 
 /** A document row for the management screen. */
@@ -634,10 +637,10 @@ class NativeLmViewModel(app: Application) : ViewModel() {
     }
 
     /**
-     * Resolve a tapped [Citation] to its source PDF and, if the file is still on
-     * disk, publish a [PdfViewTarget] for the viewer to pick up. Sources without a
-     * retained PDF (text bubbles, or files imported before local copies existed)
-     * surface a one-shot message instead. Returns true when a viewer target was set.
+     * Resolve a tapped [Citation] to its source file (PDF or image) and, if the
+     * file is still on disk, publish a [PdfViewTarget] for the viewer to pick up.
+     * Sources without a retained file (text bubbles, or files imported before
+     * local copies existed) surface a one-shot message instead.
      */
     fun openCitation(citation: Citation, onOpen: () -> Unit) {
         viewModelScope.launch {
@@ -645,7 +648,8 @@ class NativeLmViewModel(app: Application) : ViewModel() {
             val path = doc?.localPath.orEmpty()
             val onDisk = path.isNotBlank() && File(path).exists()
             val isPdf = doc?.mimeType == "application/pdf"
-            if (doc != null && onDisk && isPdf) {
+            val isImage = doc?.mimeType?.startsWith("image/") == true
+            if (doc != null && onDisk && (isPdf || isImage)) {
                 _pdfViewTarget.value = PdfViewTarget(
                     documentId = doc.id,
                     title = doc.title,
@@ -653,6 +657,7 @@ class NativeLmViewModel(app: Application) : ViewModel() {
                     pageCount = doc.pageCount,
                     initialPage = citation.pageNumber,
                     highlight = citation.snippet,
+                    isImage = isImage,
                 )
                 onOpen()
             } else {

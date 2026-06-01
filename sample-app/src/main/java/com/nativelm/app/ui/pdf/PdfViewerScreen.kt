@@ -5,6 +5,7 @@
 package com.nativelm.app.ui.pdf
 
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
@@ -124,6 +125,12 @@ fun PdfViewerScreen(vm: NativeLmViewModel, onBack: () -> Unit) {
 
 @Composable
 private fun PdfContent(target: PdfViewTarget, modifier: Modifier = Modifier) {
+    // Image sources (OCR'd) have no PDF structure — decode and show directly.
+    if (target.isImage) {
+        ImagePageContent(target, modifier)
+        return
+    }
+
     val context = LocalContext.current
 
     // Open the renderer once for this file; close it on dispose.
@@ -197,6 +204,46 @@ private fun PdfContent(target: PdfViewTarget, modifier: Modifier = Modifier) {
                 onPrev = { if (pageIndex > 0) pageIndex-- },
                 onNext = { if (pageIndex < pageCount - 1) pageIndex++ },
             )
+        }
+    }
+}
+
+/**
+ * An image source (OCR'd at import): decode the durable copy and show it in the
+ * same zoomable viewer. In-image highlighting isn't supported yet, so the cited
+ * passage is shown via the callout above the image.
+ */
+@Composable
+private fun ImagePageContent(target: PdfViewTarget, modifier: Modifier = Modifier) {
+    var bitmap by remember(target.localPath) { mutableStateOf<ImageBitmap?>(null) }
+    var failed by remember(target.localPath) { mutableStateOf(false) }
+    LaunchedEffect(target.localPath) {
+        val decoded = withContext(Dispatchers.IO) {
+            runCatching { BitmapFactory.decodeFile(target.localPath)?.asImageBitmap() }.getOrNull()
+        }
+        bitmap = decoded
+        failed = decoded == null
+    }
+
+    Column(modifier.fillMaxSize()) {
+        if (target.highlight.isNotBlank()) {
+            HighlightCallout(target.highlight)
+        }
+        Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+            when {
+                failed -> Text(
+                    "Couldn't open this image.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                bitmap == null -> CircularProgressIndicator()
+                else -> ZoomablePage(
+                    bitmap = bitmap!!,
+                    contentDescription = target.title,
+                    resetKey = target.localPath,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
         }
     }
 }
