@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -86,7 +87,13 @@ fun ModelManagementScreen(
         },
         bottomBar = {
             if (activeId != null) {
-                Surface(color = MaterialTheme.colorScheme.background) {
+                // navigationBarsPadding: a custom bottomBar isn't auto-inset by
+                // Scaffold, so without this the button renders under the system
+                // nav bar (untappable on 3-button-nav devices).
+                Surface(
+                    color = MaterialTheme.colorScheme.background,
+                    modifier = Modifier.navigationBarsPadding(),
+                ) {
                     Button(
                         onClick = onContinue,
                         modifier = Modifier
