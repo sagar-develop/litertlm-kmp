@@ -399,14 +399,19 @@ class NativeLmViewModel(app: Application) : ViewModel() {
             // new message so the KV cache keeps TTFT flat.
             val turnPrompt = ragTurnPrompt(input)
             val request = AiEngineRequest(formattedPrompt = turnPrompt, temperature = 0.7f, maxTokens = 1024)
+            // Accumulate the raw stream separately so we can hide reasoning models'
+            // <think>…</think> span; the message text shows only the rendered answer.
+            val rawAnswer = StringBuilder()
             session.sendTurn(request).collect { state ->
                 when (state) {
                     is EngineState.TokenGenerated<String> -> {
                         metrics.tokens.tokenReceived()
+                        rawAnswer.append(state.data)
+                        val display = renderAssistantText(rawAnswer.toString())
                         _chat.update { s ->
                             val updated = s.messages.toMutableList()
                             val last = updated.lastOrNull() ?: return@update s
-                            updated[updated.lastIndex] = last.copy(text = last.text + state.data)
+                            updated[updated.lastIndex] = last.copy(text = display)
                             s.copy(messages = updated)
                         }
                     }
