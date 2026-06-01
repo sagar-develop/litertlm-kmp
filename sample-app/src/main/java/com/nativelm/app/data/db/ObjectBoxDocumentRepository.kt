@@ -21,6 +21,7 @@ class ObjectBoxDocumentRepository : DocumentRepository {
         projectId: Long,
         title: String,
         uri: String,
+        localPath: String,
         mime: String,
         pageCount: Int,
     ): Long = withContext(Dispatchers.IO) {
@@ -29,6 +30,7 @@ class ObjectBoxDocumentRepository : DocumentRepository {
                 this.projectId = projectId
                 this.title = title
                 sourceUri = uri
+                this.localPath = localPath
                 mimeType = mime
                 this.pageCount = pageCount
                 chunkCount = 0
@@ -36,6 +38,9 @@ class ObjectBoxDocumentRepository : DocumentRepository {
             },
         )
     }
+
+    override suspend fun getDocument(documentId: Long): DocumentEntity? =
+        withContext(Dispatchers.IO) { documents.get(documentId) }
 
     override suspend fun addChunks(
         documentId: Long,

@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -39,6 +40,8 @@ import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Stop
@@ -87,6 +90,7 @@ import com.nativelm.app.llm.ChatMessage
 import com.nativelm.app.llm.ConversationSummary
 import com.nativelm.app.llm.NativeLmViewModel
 import com.nativelm.app.llm.ProjectSummary
+import com.nativelm.app.rag.Citation
 import com.nativelm.app.ui.theme.JetBrainsMono
 import com.nativelm.app.ui.theme.NativeLmMark
 import kotlinx.coroutines.launch
@@ -98,6 +102,7 @@ fun ChatScreen(
     onOpenModels: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenDocuments: () -> Unit,
+    onOpenPdf: () -> Unit,
 ) {
     val chat by vm.chat.collectAsState()
     val activeModel by vm.activeModelName.collectAsState()
@@ -117,6 +122,15 @@ fun ChatScreen(
 
     LaunchedEffect(chat.messages.size) {
         if (chat.messages.isNotEmpty()) listState.animateScrollToItem(0)
+    }
+
+    // One-shot messages from the VM (e.g. a citation whose source file is gone).
+    val transientMessage by vm.transientMessage.collectAsState()
+    LaunchedEffect(transientMessage) {
+        transientMessage?.let {
+            Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+            vm.consumeTransientMessage()
+        }
     }
 
     // Tapping a bubble's save button: inside a project, save directly; in default
@@ -202,7 +216,13 @@ fun ChatScreen(
                             verticalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
                             items(items = chat.messages.reversed(), key = { it.id }) { msg ->
-                                MessageBubble(msg, onSave = { onSaveBubble(msg.text) })
+                                MessageBubble(
+                                    msg,
+                                    onSave = { onSaveBubble(msg.text) },
+                                    onCitationClick = { citation ->
+                                        vm.openCitation(citation, onOpen = onOpenPdf)
+                                    },
+                                )
                             }
                         }
                     }
@@ -570,7 +590,7 @@ private fun Greeting(hasModel: Boolean, projectName: String?, onOpenModels: () -
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun MessageBubble(msg: ChatMessage, onSave: () -> Unit) {
+private fun MessageBubble(msg: ChatMessage, onSave: () -> Unit, onCitationClick: (Citation) -> Unit) {
     val isUser = msg.role == ChatMessage.Role.User
     val bubbleColor = if (isUser) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
     val textColor = if (isUser) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
@@ -611,18 +631,48 @@ private fun MessageBubble(msg: ChatMessage, onSave: () -> Unit) {
                     else -> MarkdownText(markdown = msg.text, color = textColor)
                 }
                 if (!isUser && msg.citations.isNotEmpty()) {
-                    Spacer(Modifier.height(6.dp))
-                    val sources = msg.citations
-                        .distinctBy { it.documentTitle to it.pageNumber }
-                        .take(3)
-                        .joinToString("  ·  ") {
-                            if (it.pageNumber > 0) "${it.documentTitle} p.${it.pageNumber}" else it.documentTitle
+                    val sources = remember(msg.citations) {
+                        msg.citations.distinctBy { it.documentId to it.pageNumber }.take(3)
+                    }
+                    var sourcesExpanded by remember(msg.id) { mutableStateOf(false) }
+                    Spacer(Modifier.height(8.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(6.dp))
+                            .clickable { sourcesExpanded = !sourcesExpanded }
+                            .padding(vertical = 2.dp),
+                    ) {
+                        Icon(
+                            if (sourcesExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                            contentDescription = if (sourcesExpanded) "Hide sources" else "Show sources",
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            "Sources (${sources.size})",
+                            style = MaterialTheme.typography.labelSmall.copy(fontFamily = JetBrainsMono),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontWeight = FontWeight.Medium,
+                        )
+                    }
+                    if (sourcesExpanded) {
+                        Spacer(Modifier.height(6.dp))
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            sources.forEach { citation ->
+                                CitationChip(
+                                    citation,
+                                    onClick = { onCitationClick(citation) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            }
                         }
-                    Text(
-                        "Sources: $sources",
-                        style = MaterialTheme.typography.labelSmall.copy(fontFamily = JetBrainsMono),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    }
                 }
             }
         }
@@ -633,6 +683,55 @@ private fun MessageBubble(msg: ChatMessage, onSave: () -> Unit) {
                     contentDescription = "Save to project",
                     modifier = Modifier.size(18.dp),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+/** A tappable source row under a grounded answer: "Title · p.N" → opens the PDF. */
+@Composable
+private fun CitationChip(citation: Citation, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val chipStyle = MaterialTheme.typography.labelSmall.copy(fontFamily = JetBrainsMono)
+    val hasPage = citation.pageNumber > 0
+    Surface(
+        onClick = onClick,
+        color = MaterialTheme.colorScheme.primaryContainer,
+        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        shape = RoundedCornerShape(8.dp),
+        modifier = modifier,
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+        ) {
+            Icon(
+                Icons.Filled.Description,
+                contentDescription = null,
+                modifier = Modifier.size(14.dp),
+            )
+            Spacer(Modifier.width(6.dp))
+            // Fixed-column layout so the dot separator sits at the same spot on
+            // every chip (titles align in a column down the list). The title
+            // takes the left ~80% and ellipsizes before the dot; the page takes
+            // the right ~20% — enough for a 4-digit "p.1234" with room to spare,
+            // ellipsizing from its end if it ever overflows.
+            Text(
+                citation.documentTitle,
+                style = chipStyle,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(if (hasPage) 0.8f else 1f),
+            )
+            if (hasPage) {
+                Text("·", style = chipStyle, modifier = Modifier.padding(horizontal = 6.dp))
+                Text(
+                    "p.${citation.pageNumber}",
+                    style = chipStyle,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.End,
+                    modifier = Modifier.weight(0.2f),
                 )
             }
         }

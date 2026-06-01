@@ -44,14 +44,14 @@ object RagContextFormatter {
 
             if (block.length <= budget) {
                 sb.append(block)
-                citations += Citation(title, chunk.pageNumber, snippet(body))
+                citations += Citation(chunk.documentId, title, chunk.pageNumber, snippet(body))
                 budget -= block.length
             } else {
                 // Truncate this final block to what's left, if it's worth including.
                 val room = budget - header.length - 2
                 if (room >= MIN_TRUNCATED_BODY) {
                     sb.append(header).append('\n').append(body.take(room)).append("\n\n")
-                    citations += Citation(title, chunk.pageNumber, snippet(body))
+                    citations += Citation(chunk.documentId, title, chunk.pageNumber, snippet(body))
                 }
                 break
             }

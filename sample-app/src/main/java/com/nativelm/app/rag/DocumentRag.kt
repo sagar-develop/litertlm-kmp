@@ -61,6 +61,8 @@ data class RetrievedContext(
 
 /** One source surfaced under a grounded answer. */
 data class Citation(
+    /** Owning [com.nativelm.app.data.db.DocumentEntity.id], so a tap can reopen the source. */
+    val documentId: Long,
     val documentTitle: String,
     val pageNumber: Int,
     val snippet: String,

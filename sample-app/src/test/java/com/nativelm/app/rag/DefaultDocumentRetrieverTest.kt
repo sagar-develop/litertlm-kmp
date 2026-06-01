@@ -27,7 +27,8 @@ class DefaultDocumentRetrieverTest {
     }
 
     private class FakeRepo(private val hits: List<ScoredChunk>) : DocumentRepository {
-        override suspend fun createDocument(projectId: Long, title: String, uri: String, mime: String, pageCount: Int): Long = 0
+        override suspend fun createDocument(projectId: Long, title: String, uri: String, localPath: String, mime: String, pageCount: Int): Long = 0
+        override suspend fun getDocument(documentId: Long): DocumentEntity? = null
         override suspend fun addChunks(documentId: Long, projectId: Long, chunks: List<DocumentChunkEntity>) {}
         override suspend fun findSimilarChunks(queryEmbedding: FloatArray, k: Int, projectId: Long): List<ScoredChunk> = hits
         override suspend fun listDocuments(projectId: Long): List<DocumentEntity> = emptyList()

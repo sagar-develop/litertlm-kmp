@@ -6,6 +6,7 @@ package com.nativelm.app.rag
 
 import com.nativelm.app.data.db.DocumentChunkEntity
 import com.nativelm.app.data.db.DocumentRepository
+import com.nativelm.app.rag.extract.DocumentFileStore
 import com.nativelm.app.rag.extract.TextChunker
 import com.nativelm.app.rag.extract.TextExtractor
 import com.sagar.aicore.EmbeddingEngine
@@ -26,6 +27,7 @@ class DefaultDocumentIngestor(
     private val chunker: TextChunker,
     private val embeddingEngine: EmbeddingEngine,
     private val repository: DocumentRepository,
+    private val fileStore: DocumentFileStore,
 ) : DocumentIngestor {
 
     override fun ingest(projectId: Long, uri: String, displayName: String?): Flow<IngestState> = flow {
@@ -33,13 +35,19 @@ class DefaultDocumentIngestor(
             emit(IngestState.Extracting)
             val extracted = extractor.extract(uri, displayName)
             val title = displayName?.substringBeforeLast('.')?.trim()?.ifBlank { null } ?: "Document"
-            store(projectId, title, uri, extracted.mimeType, extracted.pageCount, extracted.text)
+            // Keep a durable copy so citations can reopen the source later; the
+            // picked SAF URI dies with this import. Best-effort: a failed copy
+            // leaves localPath empty (source just isn't reopenable) but the
+            // import still succeeds.
+            val ext = (displayName?.substringAfterLast('.', "") ?: "").ifBlank { uri.substringAfterLast('.', "") }
+            val localPath = fileStore.copyToLocal(uri, ext).orEmpty()
+            store(projectId, title, uri, localPath, extracted.mimeType, extracted.pageCount, extracted.text)
         }.onFailure { emitFailure(it) }
     }.flowOn(Dispatchers.Default)
 
     override fun ingestText(projectId: Long, title: String, text: String): Flow<IngestState> = flow {
         runCatching {
-            store(projectId, title, uri = "", mime = "text/plain", pageCount = 0, text = text)
+            store(projectId, title, uri = "", localPath = "", mime = "text/plain", pageCount = 0, text = text)
         }.onFailure { emitFailure(it) }
     }.flowOn(Dispatchers.Default)
 
@@ -48,6 +56,7 @@ class DefaultDocumentIngestor(
         projectId: Long,
         title: String,
         uri: String,
+        localPath: String,
         mime: String,
         pageCount: Int,
         text: String,
@@ -59,7 +68,7 @@ class DefaultDocumentIngestor(
         }
         emit(IngestState.Chunking(chunks.size))
 
-        val documentId = repository.createDocument(projectId, title, uri, mime, pageCount)
+        val documentId = repository.createDocument(projectId, title, uri, localPath, mime, pageCount)
         val entities = ArrayList<DocumentChunkEntity>(chunks.size)
         chunks.forEachIndexed { i, chunk ->
             emit(IngestState.Embedding(done = i, total = chunks.size))

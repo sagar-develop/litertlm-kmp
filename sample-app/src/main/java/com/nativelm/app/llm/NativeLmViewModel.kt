@@ -39,6 +39,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.io.File
 
 private const val TAG = "NativeLmVM"
 
@@ -51,6 +52,7 @@ const val ROUTE_MODELS = "models"
 const val ROUTE_CHAT = "chat"
 const val ROUTE_SETTINGS = "settings"
 const val ROUTE_DOCUMENTS = "documents"
+const val ROUTE_PDF_VIEWER = "pdf_viewer"
 
 /** Per-model UI status derived from disk + active + in-flight download state. */
 sealed interface ModelStatus {
@@ -86,6 +88,22 @@ data class ChatMessage(
 ) {
     enum class Role { User, Assistant }
 }
+
+/**
+ * A resolved request to open a source PDF at a cited page, with the cited
+ * passage to highlight. Held as ViewModel state; the chat screen reacts to it by
+ * navigating to the viewer, which reads it back.
+ */
+data class PdfViewTarget(
+    val documentId: Long,
+    val title: String,
+    val localPath: String,
+    val pageCount: Int,
+    /** 1-indexed cited page; coerced to a valid page by the viewer. */
+    val initialPage: Int,
+    /** The cited passage, shown in the highlight callout above the page. */
+    val highlight: String,
+)
 
 /** A document row for the management screen. */
 data class DocumentSummary(
@@ -176,6 +194,14 @@ class NativeLmViewModel(app: Application) : ViewModel() {
     val importState: StateFlow<IngestState?> = _importState.asStateFlow()
 
     private var importJob: Job? = null
+
+    /** Set when a citation is tapped and its PDF can be opened; the viewer reads it. */
+    private val _pdfViewTarget = MutableStateFlow<PdfViewTarget?>(null)
+    val pdfViewTarget: StateFlow<PdfViewTarget?> = _pdfViewTarget.asStateFlow()
+
+    /** One-shot user message (e.g. "source not available"); cleared after shown. */
+    private val _transientMessage = MutableStateFlow<String?>(null)
+    val transientMessage: StateFlow<String?> = _transientMessage.asStateFlow()
 
     val themeMode: StateFlow<ThemeMode> =
         prefs.themeMode.stateIn(viewModelScope, SharingStarted.Eagerly, ThemeMode.SYSTEM)
@@ -606,6 +632,42 @@ class NativeLmViewModel(app: Application) : ViewModel() {
         }
     }
 
+    /**
+     * Resolve a tapped [Citation] to its source PDF and, if the file is still on
+     * disk, publish a [PdfViewTarget] for the viewer to pick up. Sources without a
+     * retained PDF (text bubbles, or files imported before local copies existed)
+     * surface a one-shot message instead. Returns true when a viewer target was set.
+     */
+    fun openCitation(citation: Citation, onOpen: () -> Unit) {
+        viewModelScope.launch {
+            val doc = ragHolder.document(citation.documentId)
+            val path = doc?.localPath.orEmpty()
+            val onDisk = path.isNotBlank() && File(path).exists()
+            val isPdf = doc?.mimeType == "application/pdf"
+            if (doc != null && onDisk && isPdf) {
+                _pdfViewTarget.value = PdfViewTarget(
+                    documentId = doc.id,
+                    title = doc.title,
+                    localPath = path,
+                    pageCount = doc.pageCount,
+                    initialPage = citation.pageNumber,
+                    highlight = citation.snippet,
+                )
+                onOpen()
+            } else {
+                _transientMessage.value = "Original file isn't available for this source."
+            }
+        }
+    }
+
+    fun clearPdfViewTarget() {
+        _pdfViewTarget.value = null
+    }
+
+    fun consumeTransientMessage() {
+        _transientMessage.value = null
+    }
+
     private fun snippetTitle(input: String): String =
         input.trim().replace('\n', ' ').take(40).ifBlank { "New chat" }
 
@@ -784,6 +846,8 @@ class NativeLmViewModel(app: Application) : ViewModel() {
                 ragHolder.deleteDocumentsOfProject(p.id)
                 projectRepo.delete(p.id)
             }
+            ragHolder.deleteAllSourceFiles()
+            _pdfViewTarget.value = null
             _currentProjectId.value = 0L
             _currentProjectName.value = null
             _importState.value = null

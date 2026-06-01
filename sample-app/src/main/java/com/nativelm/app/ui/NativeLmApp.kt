@@ -13,12 +13,14 @@ import com.nativelm.app.llm.ROUTE_CHAT
 import com.nativelm.app.llm.ROUTE_DOCUMENTS
 import com.nativelm.app.llm.ROUTE_MODELS
 import com.nativelm.app.llm.ROUTE_ONBOARDING
+import com.nativelm.app.llm.ROUTE_PDF_VIEWER
 import com.nativelm.app.llm.ROUTE_SETTINGS
 import com.nativelm.app.llm.ROUTE_SPLASH
 import com.nativelm.app.ui.chat.ChatScreen
 import com.nativelm.app.ui.documents.DocumentsScreen
 import com.nativelm.app.ui.models.ModelManagementScreen
 import com.nativelm.app.ui.onboarding.OnboardingScreen
+import com.nativelm.app.ui.pdf.PdfViewerScreen
 import com.nativelm.app.ui.settings.SettingsScreen
 import com.nativelm.app.ui.splash.SplashScreen
 
@@ -66,6 +68,16 @@ fun NativeLmApp(vm: NativeLmViewModel, startRoute: String) {
                 onOpenModels = { nav.navigate(ROUTE_MODELS) },
                 onOpenSettings = { nav.navigate(ROUTE_SETTINGS) },
                 onOpenDocuments = { nav.navigate(ROUTE_DOCUMENTS) },
+                onOpenPdf = { nav.navigate(ROUTE_PDF_VIEWER) },
+            )
+        }
+        composable(ROUTE_PDF_VIEWER) {
+            PdfViewerScreen(
+                vm = vm,
+                onBack = {
+                    vm.clearPdfViewTarget()
+                    nav.popBackStack()
+                },
             )
         }
         composable(ROUTE_DOCUMENTS) {

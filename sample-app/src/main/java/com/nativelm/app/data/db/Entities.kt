@@ -74,6 +74,15 @@ class DocumentEntity {
     var projectId: Long = 0
     var title: String = ""
     var sourceUri: String = ""
+
+    /**
+     * Absolute path to the copy of the original file kept in app-private storage
+     * (`filesDir/docs/…`). The picked SAF `content://` URI is only valid for the
+     * import's lifetime, so a durable copy is what lets a citation reopen the PDF
+     * later. Empty for text sources (e.g. saved chat bubbles) and for documents
+     * imported before this field existed.
+     */
+    var localPath: String = ""
     var mimeType: String = ""
     var pageCount: Int = 0
     var chunkCount: Int = 0

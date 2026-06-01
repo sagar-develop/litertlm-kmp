@@ -20,9 +20,13 @@ interface DocumentRepository {
         projectId: Long,
         title: String,
         uri: String,
+        localPath: String,
         mime: String,
         pageCount: Int,
     ): Long
+
+    /** Fetch a single document by id, or null if it no longer exists. */
+    suspend fun getDocument(documentId: Long): DocumentEntity?
 
     /** Persist embedded chunks for [documentId] (stamped with [projectId]) and bump chunkCount. */
     suspend fun addChunks(documentId: Long, projectId: Long, chunks: List<DocumentChunkEntity>)
