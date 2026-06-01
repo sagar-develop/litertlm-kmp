@@ -41,7 +41,7 @@
     },
     {
       "id": "2:3823968940464667185",
-      "lastPropertyId": "5:6021054876979326380",
+      "lastPropertyId": "6:7156769684216857119",
       "name": "MessageEntity",
       "properties": [
         {
@@ -71,6 +71,11 @@
           "id": "5:6021054876979326380",
           "name": "createdAt",
           "type": 6
+        },
+        {
+          "id": "6:7156769684216857119",
+          "name": "citationsJson",
+          "type": 9
         }
       ],
       "relations": []

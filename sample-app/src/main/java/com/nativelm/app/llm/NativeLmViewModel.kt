@@ -27,6 +27,7 @@ import com.nativelm.app.data.db.MessageEntity
 import com.nativelm.app.data.db.ProjectRepository
 import com.nativelm.app.metrics.MetricsRepository
 import com.nativelm.app.rag.Citation
+import com.nativelm.app.rag.CitationJson
 import com.nativelm.app.rag.IngestState
 import io.github.aakira.napier.Napier
 import kotlinx.coroutines.Job
@@ -675,6 +676,7 @@ class NativeLmViewModel(app: Application) : ViewModel() {
         role = if (role == MessageEntity.ROLE_ASSISTANT) ChatMessage.Role.Assistant else ChatMessage.Role.User,
         text = text,
         id = msgId,
+        citations = CitationJson.decode(citationsJson),
     )
 
     private fun ChatMessage.toEntity(order: Long): MessageEntity = MessageEntity().apply {
@@ -685,6 +687,7 @@ class NativeLmViewModel(app: Application) : ViewModel() {
         }
         text = this@toEntity.text
         createdAt = order
+        citationsJson = CitationJson.encode(this@toEntity.citations)
     }
 
     // ---- Projects (notebooks) ----
