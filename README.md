@@ -16,16 +16,20 @@ Shipping a production on-device LLM on Android is significantly harder than the 
 - Awareness of OEM quirks — **Realme Dynamic RAM Expansion, Xiaomi Memory Extension, OPPO** all inflate `MemTotal` and silently push under-spec devices into the wrong tier
 - A function-calling layer that converts your typed Kotlin schema into the OpenAPI JSON LiteRT-LM expects
 - Stateful, KV-cache-reusing chat sessions so multi-turn memory is lossless and time-to-first-token stays flat as a conversation grows — instead of re-sending the whole history every turn
+- An on-device **text embedder** (MediaPipe USE-Lite) behind a clean `EmbeddingEngine`, so you can build retrieval-augmented generation (RAG) — chat grounded in the user's own documents — with no cloud vector service
 - All of the above shaped to run identically on Android and iOS so you can share code across both apps
 
-This library solves all six. The bundled `sample-app/` — **NativeLM** — is a real,
-shipped product (private on-device chat with conversation history) built on top
-of the engine, so you can see exactly what running Gemma on-device looks like.
+This library solves all of these. The bundled `sample-app/` — **NativeLM** — is a
+real, shipped product: an on-device **NotebookLM** (chat grounded in your own PDFs
+and notes) plus general chat with conversation history, built on top of the engine
+— so you can see exactly what running Gemma on-device looks like.
 
 ## The showcase app — NativeLM
 
-A private, fully on-device AI chat for Android — no account, no network, no
-telemetry. Everything below runs locally on Gemma 4 (E2B / E4B) via this engine.
+A private, fully on-device AI app for Android — no account, no network, no
+telemetry. **Chat with your own documents** (on-device RAG, organized into
+NotebookLM-style *Projects*) or just chat — everything runs locally on Gemma via
+this engine.
 
 <table>
   <tr>
@@ -48,9 +52,12 @@ telemetry. Everything below runs locally on Gemma 4 (E2B / E4B) via this engine.
   </tr>
 </table>
 
-Also supported by the engine: **function calling** (typed Kotlin
-`ToolSchema.Definition` → OpenAPI JSON → constrained output as
-`EngineState.ToolCallEmitted`), **vision** (image input on multimodal Gemma 4),
+Also supported by the engine: an **on-device text embedder** (`EmbeddingEngine`,
+MediaPipe USE-Lite) for **retrieval-augmented generation** — NativeLM's "chat with
+your documents" is built on it (extract → chunk → embed → ObjectBox **HNSW** vector
+index → relevance-gated retrieval → grounded answer with citations); **function
+calling** (typed Kotlin `ToolSchema.Definition` → OpenAPI JSON → constrained output
+as `EngineState.ToolCallEmitted`); **vision** (image input on multimodal Gemma 4);
 and **real native cancellation** of in-flight generation.
 
 ## Platform support
@@ -237,13 +244,30 @@ The engine is initialized with `visionBackend = Backend.CPU()` and `maxNumImages
 
 ### Embedding for RAG
 
+The engine ships an on-device text embedder, so you can ground answers in the
+user's own documents — no cloud vector service.
+
 ```kotlin
 import com.sagar.aicore.MediaPipeEmbeddingEngine
 
 val embeddings = MediaPipeEmbeddingEngine(context)
+embeddings.initialize(modelPath = "/data/.../universal_sentence_encoder.tflite")
 val vector: FloatArray = embeddings.embed("Your document chunk here")
-// → float vector ready for cosine similarity against an in-memory store
+// → 100-dim float vector, ready for nearest-neighbor search
 ```
+
+NativeLM (`sample-app/`) builds a complete on-device RAG pipeline on this primitive:
+**extract** a PDF/text source (PDFBox) → **chunk** it (page-aware) → **embed** each
+chunk → store in an **ObjectBox HNSW** vector index scoped per *Project* → at chat
+time, embed the question, pull the **relevance-gated** top-k, fence the context,
+and answer grounded with **citations**. See the
+[`rag/`](sample-app/src/main/java/com/nativelm/app/rag) and
+[`data/db/`](sample-app/src/main/java/com/nativelm/app/data/db) packages for the
+end-to-end reference.
+
+> Under R8/minification, the MediaPipe + Flogger + protobuf surfaces the embedder
+> needs ship in the engine's `consumer-rules.pro`, so a consumer's release build
+> keeps them automatically.
 
 ### Model download with progress + SHA-256
 
