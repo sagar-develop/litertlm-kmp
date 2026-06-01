@@ -53,8 +53,8 @@ class EngineHolder(context: Context) {
         headers: Map<String, String> = emptyMap(),
     ): Flow<DownloadState> = modelManager.downloadModel(url, fileName, sha256, headers)
 
-    suspend fun initializeEngine(modelPath: String): EngineState<Unit> =
-        engine.initializeEngine(modelPath)
+    suspend fun initializeEngine(modelPath: String, supportsVision: Boolean): EngineState<Unit> =
+        engine.initializeEngine(modelPath, supportsVision)
 
     fun generate(request: AiEngineRequest): Flow<EngineState<String>> =
         engine.generateStream(request)

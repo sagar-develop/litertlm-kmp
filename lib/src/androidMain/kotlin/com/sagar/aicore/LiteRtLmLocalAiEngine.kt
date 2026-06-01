@@ -70,12 +70,12 @@ class LiteRtLmLocalAiEngine(
         supportsVision = true,
         supportsAudio = false,
         maxContextTokens = 8192,
-        // 2.59–3.66 GB on disk depending on E2B/E4B; in-memory varies by
-        // backend. Empirical headroom for the loaded engine + KV cache.
+        // Footprint spans the LiteRT-LM lineup this engine runs: ~0.6 GB for the
+        // Gemma 3 1B INT4 text bundle up to ~3.7 GB for Gemma 4 E4B. Per-model
+        // RAM gating lives in the consumer's ModelCatalog (minDeviceRamMb per
+        // descriptor); this floor is just the smallest tier the engine targets.
         approximateMemoryFootprintMb = 3800,
-        // < 6 GB devices surface DeviceNotSupported; E2B serves the
-        // 6–9 GB tier, E4B serves 10+ GB.
-        minDeviceRamMb = 6000,
+        minDeviceRamMb = 4000,
         consumes = ModelFormat.LITERTLM,
     )
 
@@ -85,34 +85,35 @@ class LiteRtLmLocalAiEngine(
     /** The single live chat session; opening a new one closes this. */
     private var currentSession: LiteRtLmChatSession? = null
 
-    override suspend fun initializeEngine(modelPath: String): EngineState<Unit> =
+    override suspend fun initializeEngine(modelPath: String, supportsVision: Boolean): EngineState<Unit> =
         withContext(Dispatchers.IO) {
             mutex.withLock {
                 if (engine != null) return@withLock EngineState.TokenGenerated(Unit)
                 try {
-                    // Wire vision. visionBackend = CPU is the safe default;
-                    // GPU vision delegates exist but vary by device driver and
-                    // aren't worth the support burden. The text backend stays
-                    // defaulted (the engine picks the best available).
-                    // maxNumImages = 1 matches a single-image-per-turn flow;
-                    // raise it if a UI ever needs multiple images per message.
                     // Text backend = CPU with 6 threads. Phase-0 on-device
                     // benchmarking (CPH2723) showed GPU/NPU can't load the
                     // litert-community .litertlm bundles (GPU executor errors;
                     // NPU needs a TF_LITE_AUX section the bundle lacks), so CPU
                     // is the only viable path. Among thread counts, 6 gave the
                     // best decode tok/s while leaving the 2 prime cores free for
-                    // the UI. visionBackend stays CPU; maxNumImages = 1.
+                    // the UI.
+                    //
+                    // Vision is wired ONLY for multimodal bundles (Gemma 4 E2B/E4B):
+                    // a text-only bundle (e.g. Gemma 3 1B INT4) fails init when a
+                    // vision backend is attached, and skipping it also frees memory
+                    // — which is what lets the small INT4 models fit low-RAM devices.
+                    val visionBackend = if (supportsVision) Backend.CPU() else null
                     engine = Engine(
                         EngineConfig(
                             modelPath = modelPath,
                             backend = Backend.CPU(numOfThreads = 6),
-                            visionBackend = Backend.CPU(),
-                            maxNumImages = 1,
+                            visionBackend = visionBackend,
+                            maxNumImages = if (supportsVision) 1 else null,
                         ),
                     ).also { it.initialize() }
                     Napier.d(tag = TAG) {
-                        "Engine initialized at $modelPath with backend=CPU(6), visionBackend=CPU, maxNumImages=1"
+                        "Engine initialized at $modelPath with backend=CPU(6), " +
+                            "visionBackend=${if (supportsVision) "CPU" else "none"}"
                     }
                     EngineState.TokenGenerated(Unit)
                 } catch (t: Throwable) {

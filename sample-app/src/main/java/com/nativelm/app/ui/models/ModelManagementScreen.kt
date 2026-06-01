@@ -47,6 +47,10 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.material3.AlertDialog
+import androidx.compose.ui.platform.LocalContext
 import com.sagar.aicore.ModelRole
 import com.nativelm.app.llm.ModelStatus
 import com.nativelm.app.llm.ModelUi
@@ -67,6 +71,14 @@ fun ModelManagementScreen(
 
     val llms = models.filter { it.descriptor.role == ModelRole.LLM_PRIMARY }
     val embedders = models.filter { it.descriptor.role == ModelRole.EMBEDDING }
+    val context = LocalContext.current
+    var licensePrompt by remember { mutableStateOf<ModelUi?>(null) }
+    // Gated models need their HF license accepted with the token's account;
+    // intercept the download to remind the user (with a link) rather than letting
+    // them hit a bare 403.
+    val onDownloadRequest: (ModelUi) -> Unit = { m ->
+        if (m.descriptor.requiresAuth) licensePrompt = m else vm.download(m.descriptor.id)
+    }
 
     Scaffold(
         topBar = {
@@ -109,7 +121,7 @@ fun ModelManagementScreen(
 
             item { SectionHeader("Language models") }
             items(llms, key = { it.descriptor.id }) { model ->
-                ModelCard(model, vm)
+                ModelCard(model, vm, onDownloadRequest)
             }
 
             item {
@@ -122,9 +134,38 @@ fun ModelManagementScreen(
                 )
             }
             items(embedders, key = { it.descriptor.id }) { model ->
-                ModelCard(model, vm)
+                ModelCard(model, vm, onDownloadRequest)
             }
         }
+    }
+
+    licensePrompt?.let { m ->
+        AlertDialog(
+            onDismissRequest = { licensePrompt = null },
+            title = { Text("Accept the model license") },
+            text = {
+                Text(
+                    "${m.displayName} is a gated model. With your Hugging Face token you must " +
+                        "also accept its license once on Hugging Face, or the download is denied. " +
+                        "Open the model page, tap \"Agree and access\", then download.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    licensePrompt = null
+                    vm.download(m.descriptor.id)
+                }) { Text("Download") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    runCatching {
+                        context.startActivity(
+                            Intent(Intent.ACTION_VIEW, Uri.parse(licensePageUrl(m.descriptor.url))),
+                        )
+                    }
+                }) { Text("Open license page") }
+            },
+        )
     }
 }
 
@@ -208,7 +249,7 @@ private fun TokenCard(hasToken: Boolean, onSave: (String) -> Unit, onClear: () -
 }
 
 @Composable
-private fun ModelCard(model: ModelUi, vm: NativeLmViewModel) {
+private fun ModelCard(model: ModelUi, vm: NativeLmViewModel, onDownload: (ModelUi) -> Unit) {
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         modifier = Modifier.fillMaxWidth(),
@@ -233,7 +274,12 @@ private fun ModelCard(model: ModelUi, vm: NativeLmViewModel) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                ModelAction(model, vm)
+                ModelAction(model, vm, onDownload)
+            }
+
+            if (model.descriptor.role == ModelRole.LLM_PRIMARY) {
+                Spacer(Modifier.height(10.dp))
+                ModalityChips(model.descriptor.supportsVision)
             }
 
             val status = model.status
@@ -280,7 +326,7 @@ private fun ModelCard(model: ModelUi, vm: NativeLmViewModel) {
 }
 
 @Composable
-private fun ModelAction(model: ModelUi, vm: NativeLmViewModel) {
+private fun ModelAction(model: ModelUi, vm: NativeLmViewModel, onDownload: (ModelUi) -> Unit) {
     val id = model.descriptor.id
     val isLlm = model.descriptor.role == ModelRole.LLM_PRIMARY
     when (val status = model.status) {
@@ -294,7 +340,7 @@ private fun ModelAction(model: ModelUi, vm: NativeLmViewModel) {
         }
         is ModelStatus.Failed, ModelStatus.NotDownloaded -> {
             val label = if (status is ModelStatus.Failed) "Retry" else "Download"
-            OutlinedButton(onClick = { vm.download(id) }, enabled = model.supported) { Text(label) }
+            OutlinedButton(onClick = { onDownload(model) }, enabled = model.supported) { Text(label) }
         }
     }
 }
@@ -327,3 +373,30 @@ private fun formatSize(bytes: Long): String {
     val mb = bytes / 1_000_000.0
     return String.format("%.1f MB", mb)
 }
+
+/** Supported input-type chips for a model (Text always; Image for vision bundles). */
+@Composable
+private fun ModalityChips(supportsVision: Boolean) {
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        InputTypeChip("Text")
+        if (supportsVision) InputTypeChip("Image")
+    }
+}
+
+@Composable
+private fun InputTypeChip(label: String) {
+    Surface(
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        shape = MaterialTheme.shapes.small,
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSecondaryContainer,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
+        )
+    }
+}
+
+/** Strip `/resolve/main/<file>` to get the HF model page (where the license is accepted). */
+private fun licensePageUrl(downloadUrl: String): String = downloadUrl.substringBefore("/resolve/")

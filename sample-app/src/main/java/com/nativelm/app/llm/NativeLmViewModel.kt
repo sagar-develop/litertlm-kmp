@@ -246,7 +246,7 @@ class NativeLmViewModel(app: Application) : ViewModel() {
         viewModelScope.launch {
             _engineLoad.value = EngineLoad.Loading
             val path = engineHolder.modelPath(descriptor.fileName)
-            val load = toEngineLoad(engineHolder.initializeEngine(path))
+            val load = toEngineLoad(engineHolder.initializeEngine(path, descriptor.supportsVision))
             _engineLoad.value = load
             // Open the chat session seeded with the restored conversation so the
             // KV cache is warm before the user types (the "building understanding" step).
@@ -338,7 +338,9 @@ class NativeLmViewModel(app: Application) : ViewModel() {
         viewModelScope.launch {
             _engineLoad.value = EngineLoad.Loading
             engineHolder.release()
-            val result = toEngineLoad(engineHolder.initializeEngine(engineHolder.modelPath(descriptor.fileName)))
+            val result = toEngineLoad(
+                engineHolder.initializeEngine(engineHolder.modelPath(descriptor.fileName), descriptor.supportsVision),
+            )
             _engineLoad.value = result
             if (result is EngineLoad.Ready) {
                 _activeModelId.value = modelId
@@ -397,14 +399,19 @@ class NativeLmViewModel(app: Application) : ViewModel() {
             // new message so the KV cache keeps TTFT flat.
             val turnPrompt = ragTurnPrompt(input)
             val request = AiEngineRequest(formattedPrompt = turnPrompt, temperature = 0.7f, maxTokens = 1024)
+            // Accumulate the raw stream separately so we can hide reasoning models'
+            // <think>…</think> span; the message text shows only the rendered answer.
+            val rawAnswer = StringBuilder()
             session.sendTurn(request).collect { state ->
                 when (state) {
                     is EngineState.TokenGenerated<String> -> {
                         metrics.tokens.tokenReceived()
+                        rawAnswer.append(state.data)
+                        val display = renderAssistantText(rawAnswer.toString())
                         _chat.update { s ->
                             val updated = s.messages.toMutableList()
                             val last = updated.lastOrNull() ?: return@update s
-                            updated[updated.lastIndex] = last.copy(text = last.text + state.data)
+                            updated[updated.lastIndex] = last.copy(text = display)
                             s.copy(messages = updated)
                         }
                     }
@@ -830,8 +837,13 @@ class NativeLmViewModel(app: Application) : ViewModel() {
     }
 
     private fun displayName(d: ModelDescriptor): String = when (d.id) {
+        "qwen3-0_6b-litertlm" -> "Qwen3 0.6B"
+        "gemma3-1b-it-int4-litertlm" -> "Gemma 3 1B (INT4)"
+        "deepseek-r1-distill-qwen-1_5b-litertlm" -> "DeepSeek-R1 Distill 1.5B"
         "gemma-4-e2b-it-litertlm" -> "Gemma 4 E2B"
         "gemma-4-e4b-it-litertlm" -> "Gemma 4 E4B"
+        "phi-4-mini-instruct-litertlm" -> "Phi-4 mini"
+        "qwen3-4b-litertlm" -> "Qwen3 4B"
         "universal-sentence-encoder" -> "Universal Sentence Encoder"
         else -> d.fileName
     }
