@@ -162,7 +162,9 @@ private fun PdfContent(target: PdfViewTarget, modifier: Modifier = Modifier) {
         highlightResolved = true
     }
 
-    val highlightColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.30f).toArgb()
+    // Sage highlight over the (always-white) page. 0.30 read as washed-out at page
+    // scale; ~0.5 is clearly visible while leaving the text underneath legible.
+    val highlightColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f).toArgb()
 
     LaunchedEffect(target.localPath, pageIndex, highlightBoxes) {
         if (renderer == null || pageCount == 0) return@LaunchedEffect
@@ -401,18 +403,32 @@ private suspend fun renderPage(
         }.getOrNull()
     }
 
-/** Paint translucent rounded rects (normalized page coords) over the cited passage. */
+/**
+ * Outline + translucent fill over the cited passage (normalized page coords). The
+ * opaque sage border makes the highlight read clearly on a busy page even where
+ * the translucent fill alone is too subtle.
+ */
 private fun drawHighlights(bmp: Bitmap, boxes: List<PdfHighlighter.Box>, color: Int) {
     val canvas = Canvas(bmp)
-    val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        this.color = color
-        style = Paint.Style.FILL
-    }
     val w = bmp.width.toFloat()
     val h = bmp.height.toFloat()
     val radius = 0.004f * w
+    val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        this.color = color
+        style = Paint.Style.FILL
+    }
+    val border = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        this.color = color or 0xFF000000.toInt() // same sage, fully opaque
+        style = Paint.Style.STROKE
+        strokeWidth = (0.0035f * w).coerceAtLeast(3f)
+    }
     for (b in boxes) {
-        canvas.drawRoundRect(b.x * w, b.y * h, (b.x + b.w) * w, (b.y + b.h) * h, radius, radius, paint)
+        val l = b.x * w
+        val t = b.y * h
+        val r = (b.x + b.w) * w
+        val btm = (b.y + b.h) * h
+        canvas.drawRoundRect(l, t, r, btm, radius, radius, fill)
+        canvas.drawRoundRect(l, t, r, btm, radius, radius, border)
     }
 }
 
