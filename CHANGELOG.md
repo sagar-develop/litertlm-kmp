@@ -7,9 +7,9 @@ and the project loosely follows [Semantic Versioning](https://semver.org/).
 
 > Note on scope: the **engine library** (`lib/`, published as
 > `com.sagar:litertlm-kmp`) and the **showcase app** (`sample-app/`, NativeLM)
-> live in one repo and share a version line. Entries below note which surface a
-> change lands on. The engine library version in `lib/build.gradle.kts` is
-> currently `0.3.0`; app-facing milestones (v0.4–v0.6) are tagged on the repo.
+> live in one repo and share a single version line. Entries below note which
+> surface a change lands on. The engine library version in
+> `lib/build.gradle.kts` tracks the latest release (`0.6.0`).
 
 ## [Unreleased]
 
@@ -20,7 +20,8 @@ and the project loosely follows [Semantic Versioning](https://semver.org/).
 - README: CI status badge and an Installation section pointing at JitPack.
 
 ### Changed
-- README/doc engine-version references aligned for internal consistency.
+- Engine library version bumped to `0.6.0` so `lib/build.gradle.kts` tracks the
+  unified release line (was `0.3.0`); README/doc version references aligned to match.
 
 ## [0.6.0] — 2026-06-03
 

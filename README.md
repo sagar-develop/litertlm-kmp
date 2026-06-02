@@ -388,10 +388,10 @@ Typical engagements:
 - **v0.6.0** — **NativeLM Studio**: an on-device document studio that turns a project's sources into artifacts via a map-reduce pass — Briefing, FAQ, Key Topics, Study Guide, Timeline, Mind Map, plus **Audio Overview** and **Podcast** rendered with on-device Text-to-Speech.
 - **Future** — iOS native engine via LiteRT-LM's Swift Metal-accelerated APIs; a benchmark suite (tokens/sec, RAM ceiling, battery drain) across a device matrix.
 
-> The published **engine library** version (`com.sagar:litertlm-kmp`) currently
-> tracks `0.3.0` (see [`lib/build.gradle.kts`](lib/build.gradle.kts)); the v0.4–v0.6
-> milestones above are NativeLM app releases tagged on the repo. See
-> [`CHANGELOG.md`](CHANGELOG.md) for the full history.
+> The **engine library** (`com.sagar:litertlm-kmp`) and the **NativeLM** app
+> share one version line; the latest release is **v0.6.0** (see
+> [`lib/build.gradle.kts`](lib/build.gradle.kts) and
+> [`CHANGELOG.md`](CHANGELOG.md) for the full history).
 
 ## Repo layout
 
