@@ -1,0 +1,43 @@
+name: CI
+
+# Builds the library module only. The sample-app (NativeLM) is intentionally
+# excluded: it requires a keystore.properties / signing config that is not
+# present in CI, so assembling it would fail for reasons unrelated to the engine.
+# This workflow's job is a green "the engine library compiles" signal.
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+# Cancel superseded runs on the same ref to save CI minutes.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-lib:
+    name: Build library (:lib)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build library only
+        # :lib:assemble compiles and packages the Android AAR + KMP klibs for the
+        # engine. It does NOT depend on :sample-app, so no signing config is needed.
+        run: ./gradlew :lib:assemble --no-daemon --stacktrace
