@@ -11,7 +11,8 @@ package com.nativelm.app.studio
  */
 enum class StudioArtifactType(val label: String) {
     BRIEFING("Briefing"),
-    FAQ("FAQ");
+    FAQ("FAQ"),
+    KEY_TOPICS("Key Topics");
 
     companion object {
         fun fromName(name: String): StudioArtifactType =

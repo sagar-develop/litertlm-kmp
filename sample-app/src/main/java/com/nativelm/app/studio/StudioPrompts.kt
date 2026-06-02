@@ -70,4 +70,18 @@ internal object StudioPrompts {
         append(digest.trim())
         append("\n--- DIGEST END ---\n")
     }
+
+    /** FINAL (Key Topics): cluster the digest into themes, each with a one-line description. */
+    fun keyTopics(scopeLabel: String, digest: String): String = buildString {
+        append("You are identifying the key topics covered by the source material in the ")
+        append("digest below (scope: ").append(scopeLabel).append(").\n")
+        append("List 5 to 8 distinct topics, most important first. Format as **Markdown**:\n")
+        append("- Start each topic with a \"### \" heading containing a short topic name (2 to 5 words).\n")
+        append("- On the next line, give a single-sentence description of what the sources say about it.\n")
+        append("Write numbers and units as plain text — never LaTeX or math notation.\n")
+        append("Use only information supported by the digest; do not invent topics. No preamble.\n\n")
+        append("--- DIGEST START ---\n")
+        append(digest.trim())
+        append("\n--- DIGEST END ---\n")
+    }
 }

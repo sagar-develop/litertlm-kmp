@@ -944,6 +944,7 @@ class NativeLmViewModel(app: Application) : ViewModel() {
                 val content = when (type) {
                     StudioArtifactType.BRIEFING -> generator.briefing(sources, scopeLabel, onProgress)
                     StudioArtifactType.FAQ -> generator.faq(sources, scopeLabel, onProgress)
+                    StudioArtifactType.KEY_TOPICS -> generator.keyTopics(sources, scopeLabel, onProgress)
                 }
                 val now = System.currentTimeMillis()
                 val title = studioTitleFrom(content, type, scopeLabel)
@@ -1010,6 +1011,18 @@ class NativeLmViewModel(app: Application) : ViewModel() {
     }
 
     fun closeArtifact() = _studio.update { it.copy(open = null) }
+
+    /**
+     * Seed the open project's grounded chat with [question] and send it — the
+     * "ask about this topic" hook from a Key Topics artifact. Closes the Studio
+     * viewer; the caller navigates back to the chat to watch the answer stream.
+     */
+    fun askInChat(question: String) {
+        if (question.isBlank()) return
+        closeArtifact()
+        setInput(question)
+        sendChatMessage()
+    }
 
     fun clearStudioError() = _studio.update { it.copy(error = null) }
 

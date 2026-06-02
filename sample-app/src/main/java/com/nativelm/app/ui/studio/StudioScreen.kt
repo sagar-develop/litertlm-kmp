@@ -26,6 +26,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ExpandLess
@@ -66,13 +67,15 @@ import com.nativelm.app.llm.StudioArtifactView
 import com.nativelm.app.llm.StudioProgress
 import com.nativelm.app.studio.FaqItem
 import com.nativelm.app.studio.StudioArtifactType
+import com.nativelm.app.studio.TopicItem
 import com.nativelm.app.studio.parseFaq
+import com.nativelm.app.studio.parseTopics
 import com.nativelm.app.ui.chat.MarkdownText
 import com.nativelm.app.ui.theme.JetBrainsMono
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun StudioScreen(vm: NativeLmViewModel, onBack: () -> Unit) {
+fun StudioScreen(vm: NativeLmViewModel, onBack: () -> Unit, onAskInChat: () -> Unit) {
     val studio by vm.studio.collectAsState()
     val documents by vm.documents.collectAsState()
     val projectName by vm.currentProjectName.collectAsState()
@@ -92,6 +95,10 @@ fun StudioScreen(vm: NativeLmViewModel, onBack: () -> Unit) {
             onShare = { shareArtifact(context, artifact) },
             onRegenerate = { vm.regenerateArtifact(artifact.id) },
             onDelete = { vm.deleteArtifact(artifact.id) },
+            onAskTopic = { question ->
+                vm.askInChat(question)
+                onAskInChat()
+            },
         )
         return
     }
@@ -375,6 +382,7 @@ private fun ArtifactViewer(
     onShare: () -> Unit,
     onRegenerate: () -> Unit,
     onDelete: () -> Unit,
+    onAskTopic: (String) -> Unit,
 ) {
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -410,13 +418,30 @@ private fun ArtifactViewer(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 8.dp),
         ) {
-            // FAQ renders as an expandable Q/A list; a degraded parse falls back to
-            // plain markdown so the user never loses the generated text.
-            val faq = if (artifact.type == StudioArtifactType.FAQ) parseFaq(artifact.content) else emptyList()
-            if (faq.isNotEmpty()) {
-                faq.forEach { item -> FaqRow(item) }
-            } else {
-                MarkdownText(markdown = artifact.content)
+            // Structured artifacts get custom rendering; a degraded parse always
+            // falls back to plain markdown so the generated text is never lost.
+            when (artifact.type) {
+                StudioArtifactType.FAQ -> {
+                    val faq = parseFaq(artifact.content)
+                    if (faq.isNotEmpty()) faq.forEach { FaqRow(it) } else MarkdownText(artifact.content)
+                }
+                StudioArtifactType.KEY_TOPICS -> {
+                    val topics = parseTopics(artifact.content)
+                    if (topics.isNotEmpty()) {
+                        Text(
+                            "Tap a topic to ask about it in this project's chat.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(bottom = 8.dp),
+                        )
+                        topics.forEach { topic ->
+                            TopicRow(topic, onAsk = { onAskTopic("Tell me more about ${topic.title}.") })
+                        }
+                    } else {
+                        MarkdownText(artifact.content)
+                    }
+                }
+                else -> MarkdownText(markdown = artifact.content)
             }
             Spacer(Modifier.height(32.dp))
         }
@@ -455,6 +480,46 @@ private fun FaqRow(item: FaqItem) {
             )
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+    }
+}
+
+@Composable
+private fun TopicRow(item: TopicItem, onAsk: () -> Unit) {
+    Surface(
+        color = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(12.dp),
+        onClick = onAsk,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+    ) {
+        Row(
+            Modifier.padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    item.title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                if (item.description.isNotBlank()) {
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        item.description,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            Spacer(Modifier.size(8.dp))
+            Icon(
+                Icons.AutoMirrored.Filled.Send,
+                contentDescription = "Ask about this",
+                tint = MaterialTheme.colorScheme.primary,
+            )
+        }
     }
 }
 

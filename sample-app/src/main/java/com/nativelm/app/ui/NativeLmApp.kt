@@ -78,6 +78,7 @@ fun NativeLmApp(vm: NativeLmViewModel, startRoute: String) {
             StudioScreen(
                 vm = vm,
                 onBack = { nav.popBackStack() },
+                onAskInChat = { nav.popBackStack(ROUTE_CHAT, inclusive = false) },
             )
         }
         composable(ROUTE_PDF_VIEWER) {
