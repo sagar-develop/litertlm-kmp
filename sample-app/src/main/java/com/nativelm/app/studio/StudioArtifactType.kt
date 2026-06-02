@@ -13,7 +13,8 @@ enum class StudioArtifactType(val label: String) {
     BRIEFING("Briefing"),
     FAQ("FAQ"),
     KEY_TOPICS("Key Topics"),
-    STUDY_GUIDE("Study Guide");
+    STUDY_GUIDE("Study Guide"),
+    TIMELINE("Timeline");
 
     companion object {
         fun fromName(name: String): StudioArtifactType =

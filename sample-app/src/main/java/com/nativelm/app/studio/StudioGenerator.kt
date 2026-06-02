@@ -93,6 +93,27 @@ class StudioGenerator(
             .ifBlank { error("The model produced an empty study guide.") }
     }
 
+    /**
+     * Build a Timeline (markdown, `### date` headings + descriptions) over [sources].
+     * Same digest pipeline; the MAP stage is already told to keep dates. Throws with a
+     * friendly message when the sources yield no dated events, so the caller can suggest
+     * a different artifact rather than persist an empty timeline.
+     */
+    suspend fun timeline(
+        sources: List<Source>,
+        scopeLabel: String,
+        onProgress: (Progress) -> Unit,
+    ): String {
+        val digest = digest(sources, onProgress)
+        onProgress(Progress("Building timeline", 1, 1))
+        val content = llm(StudioPrompts.timeline(scopeLabel, digest.take(MAX_DIGEST_CHARS)), TIMELINE_TOKENS)
+            .ifBlank { error("The model produced an empty timeline.") }
+        if (content.contains(StudioPrompts.NO_DATES) || parseTimeline(content).isEmpty()) {
+            error("These sources don't have enough dated events for a timeline. Try a Briefing or FAQ instead.")
+        }
+        return content
+    }
+
     /** MAP + REDUCE: produce a single context-budget digest from all sources. */
     private suspend fun digest(sources: List<Source>, onProgress: (Progress) -> Unit): String {
         val windows = windows(sources)
@@ -186,5 +207,6 @@ class StudioGenerator(
         private const val FAQ_TOKENS = 1024
         private const val TOPICS_TOKENS = 768
         private const val STUDY_GUIDE_TOKENS = 1280
+        private const val TIMELINE_TOKENS = 1280
     }
 }

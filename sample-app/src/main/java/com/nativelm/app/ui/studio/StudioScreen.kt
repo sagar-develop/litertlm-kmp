@@ -7,16 +7,20 @@ package com.nativelm.app.ui.studio
 import android.content.Context
 import android.content.Intent
 import android.text.format.DateUtils
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -57,6 +61,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -68,9 +73,11 @@ import com.nativelm.app.llm.StudioProgress
 import com.nativelm.app.studio.FaqItem
 import com.nativelm.app.studio.StudioArtifactType
 import com.nativelm.app.studio.TermItem
+import com.nativelm.app.studio.TimelineEvent
 import com.nativelm.app.studio.TopicItem
 import com.nativelm.app.studio.parseFaq
 import com.nativelm.app.studio.parseStudyGuide
+import com.nativelm.app.studio.parseTimeline
 import com.nativelm.app.studio.parseTopics
 import com.nativelm.app.ui.chat.MarkdownText
 import com.nativelm.app.ui.theme.JetBrainsMono
@@ -458,6 +465,10 @@ private fun ArtifactViewer(
                         MarkdownText(artifact.content)
                     }
                 }
+                StudioArtifactType.TIMELINE -> {
+                    val events = parseTimeline(artifact.content)
+                    if (events.isNotEmpty()) TimelineView(events) else MarkdownText(artifact.content)
+                }
                 else -> MarkdownText(markdown = artifact.content)
             }
             Spacer(Modifier.height(32.dp))
@@ -574,6 +585,62 @@ private fun TermDefRow(item: TermItem) {
         }
     }
     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+}
+
+@Composable
+private fun TimelineView(events: List<TimelineEvent>) {
+    Column(Modifier.fillMaxWidth()) {
+        events.forEachIndexed { index, event ->
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .height(IntrinsicSize.Min),
+            ) {
+                TimelineRail(isFirst = index == 0, isLast = index == events.lastIndex)
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .padding(start = 12.dp, bottom = 20.dp),
+                ) {
+                    Text(
+                        event.date,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontFamily = JetBrainsMono,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    if (event.description.isNotBlank()) {
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            event.description,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** The dotted rail down the left of the timeline: a node per event joined by a line. */
+@Composable
+private fun TimelineRail(isFirst: Boolean, isLast: Boolean) {
+    val lineColor = MaterialTheme.colorScheme.outlineVariant
+    val dotColor = MaterialTheme.colorScheme.primary
+    Canvas(
+        Modifier
+            .width(24.dp)
+            .fillMaxHeight(),
+    ) {
+        val cx = size.width / 2f
+        val dotY = 9.dp.toPx()
+        val radius = 5.dp.toPx()
+        val stroke = 2.dp.toPx()
+        if (!isFirst) drawLine(lineColor, Offset(cx, 0f), Offset(cx, dotY), strokeWidth = stroke)
+        if (!isLast) drawLine(lineColor, Offset(cx, dotY), Offset(cx, size.height), strokeWidth = stroke)
+        drawCircle(dotColor, radius = radius, center = Offset(cx, dotY))
+    }
 }
 
 @Composable

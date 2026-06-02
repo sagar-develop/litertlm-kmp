@@ -946,6 +946,7 @@ class NativeLmViewModel(app: Application) : ViewModel() {
                     StudioArtifactType.FAQ -> generator.faq(sources, scopeLabel, onProgress)
                     StudioArtifactType.KEY_TOPICS -> generator.keyTopics(sources, scopeLabel, onProgress)
                     StudioArtifactType.STUDY_GUIDE -> generator.studyGuide(sources, scopeLabel, onProgress)
+                    StudioArtifactType.TIMELINE -> generator.timeline(sources, scopeLabel, onProgress)
                 }
                 val now = System.currentTimeMillis()
                 val title = studioTitleFrom(content, type, scopeLabel)

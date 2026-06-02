@@ -111,4 +111,25 @@ internal object StudioPrompts {
         append(digest.trim())
         append("\n--- DIGEST END ---\n")
     }
+
+    /** Sentinel the model is asked to emit when the sources contain no dated events. */
+    const val NO_DATES: String = "NO_DATES"
+
+    /** FINAL (Timeline): extract dated events from the digest into chronological order. */
+    fun timeline(scopeLabel: String, digest: String): String = buildString {
+        append("You are extracting a chronological timeline of events from the digest of source ")
+        append("material below (scope: ").append(scopeLabel).append(").\n")
+        append("Find the events that have a date or time and list them earliest first. Format as **Markdown**:\n")
+        append("- An optional short title (\"# ...\").\n")
+        append("- For each event, a \"### \" heading containing only its date or time period, exactly as the ")
+        append("sources give it (e.g. \"1947\", \"March 2024\", \"Q3 2023\", \"Day 1\").\n")
+        append("- On the next line, a one to two sentence description of what happened.\n")
+        append("Order strictly from earliest to latest. Use only events supported by the digest; ")
+        append("do not invent dates. ").append(NUMBER_STYLE).append("\n")
+        append("If the sources contain no dated events at all, reply with exactly: ").append(NO_DATES).append("\n")
+        append("No preamble before the first heading.\n\n")
+        append("--- DIGEST START ---\n")
+        append(digest.trim())
+        append("\n--- DIGEST END ---\n")
+    }
 }
