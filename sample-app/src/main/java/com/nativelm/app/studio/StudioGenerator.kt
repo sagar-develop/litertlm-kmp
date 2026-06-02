@@ -146,6 +146,22 @@ class StudioGenerator(
             .ifBlank { error("The model produced an empty audio overview.") }
     }
 
+    /**
+     * Build a Podcast script (two-host "Alex:"/"Sam:" dialogue) over [sources] — Studio
+     * Step 7b. Same digest pipeline; the viewer parses the turns and plays them with two
+     * distinct on-device voices, degrading to plain text if the dialogue doesn't parse.
+     */
+    suspend fun podcast(
+        sources: List<Source>,
+        scopeLabel: String,
+        onProgress: (Progress) -> Unit,
+    ): String {
+        val digest = digest(sources, onProgress)
+        onProgress(Progress("Writing podcast", 1, 1))
+        return llm(StudioPrompts.podcast(scopeLabel, digest.take(MAX_DIGEST_CHARS)), PODCAST_TOKENS)
+            .ifBlank { error("The model produced an empty podcast script.") }
+    }
+
     /** MAP + REDUCE: produce a single context-budget digest from all sources. */
     private suspend fun digest(sources: List<Source>, onProgress: (Progress) -> Unit): String {
         val windows = windows(sources)
@@ -242,5 +258,6 @@ class StudioGenerator(
         private const val TIMELINE_TOKENS = 1280
         private const val MIND_MAP_TOKENS = 1024
         private const val AUDIO_OVERVIEW_TOKENS = 1024
+        private const val PODCAST_TOKENS = 1536
     }
 }

@@ -31,10 +31,13 @@ import com.nativelm.app.metrics.MetricsRepository
 import com.nativelm.app.rag.Citation
 import com.nativelm.app.rag.CitationJson
 import com.nativelm.app.rag.IngestState
+import com.nativelm.app.studio.PodcastController
+import com.nativelm.app.studio.PodcastPlayState
 import com.nativelm.app.studio.ReadAloudState
 import com.nativelm.app.studio.StudioArtifactType
 import com.nativelm.app.studio.StudioGenerator
 import com.nativelm.app.studio.TtsController
+import com.nativelm.app.studio.parsePodcast
 import com.nativelm.app.studio.sanitizeStudioMarkdown
 import com.nativelm.app.studio.stripForSpeech
 import io.github.aakira.napier.Napier
@@ -272,6 +275,12 @@ class NativeLmViewModel(app: Application) : ViewModel() {
         _transientMessage.value = "Text-to-speech isn't available on this device."
     }
     val readAloud: StateFlow<ReadAloudState?> = tts.state
+
+    /** On-device two-voice podcast playback for the open artifact; null = nothing playing. */
+    private val podcastTts = PodcastController(app) {
+        _transientMessage.value = "Text-to-speech isn't available on this device."
+    }
+    val podcast: StateFlow<PodcastPlayState?> = podcastTts.state
 
     /** The live KV-cache chat session for the open conversation. */
     private var chatSession: ChatSession? = null
@@ -938,6 +947,7 @@ class NativeLmViewModel(app: Application) : ViewModel() {
         }
         val startConvId = _currentConversationId.value
         tts.stop()
+        podcastTts.stop()
         studioJob?.cancel()
         studioJob = viewModelScope.launch {
             _studio.update { it.copy(generating = true, progress = StudioProgress("Preparing", 0, 0), error = null) }
@@ -959,6 +969,7 @@ class NativeLmViewModel(app: Application) : ViewModel() {
                     StudioArtifactType.TIMELINE -> generator.timeline(sources, scopeLabel, onProgress)
                     StudioArtifactType.MIND_MAP -> generator.mindMap(sources, scopeLabel, onProgress)
                     StudioArtifactType.AUDIO_OVERVIEW -> generator.audioOverview(sources, scopeLabel, onProgress)
+                    StudioArtifactType.PODCAST -> generator.podcast(sources, scopeLabel, onProgress)
                 }
                 val now = System.currentTimeMillis()
                 val title = studioTitleFrom(content, type, scopeLabel)
@@ -1026,12 +1037,21 @@ class NativeLmViewModel(app: Application) : ViewModel() {
 
     fun closeArtifact() {
         tts.stop()
+        podcastTts.stop()
         _studio.update { it.copy(open = null) }
     }
 
     /** Play/pause read-aloud of the open artifact via on-device TTS (Studio 7a). */
-    fun toggleReadAloud(artifact: StudioArtifactView) =
+    fun toggleReadAloud(artifact: StudioArtifactView) {
+        podcastTts.stop()
         tts.toggle(artifact.id, stripForSpeech(artifact.content))
+    }
+
+    /** Play/pause two-voice podcast playback of the open artifact (Studio 7b). */
+    fun togglePodcast(artifact: StudioArtifactView) {
+        tts.stop()
+        podcastTts.toggle(artifact.id, parsePodcast(artifact.content))
+    }
 
     /**
      * Seed the open project's grounded chat with [question] and send it — the
@@ -1053,6 +1073,7 @@ class NativeLmViewModel(app: Application) : ViewModel() {
             _studio.update {
                 if (it.open?.id == id) {
                     tts.stop()
+                    podcastTts.stop()
                     it.copy(open = null)
                 } else {
                     it
@@ -1201,6 +1222,7 @@ class NativeLmViewModel(app: Application) : ViewModel() {
         super.onCleared()
         metrics.stop()
         tts.shutdown()
+        podcastTts.shutdown()
     }
 
     companion object {

@@ -179,4 +179,33 @@ internal object StudioPrompts {
         append(digest.trim())
         append("\n--- DIGEST END ---\n")
     }
+
+    /**
+     * FINAL (Podcast): a two-host conversational script — Studio Step 7b. Strict
+     * "Name:" line prefixes so [parsePodcast] can split it into turns, each spoken by
+     * one of two distinct on-device voices. Like [audioOverview] it is written for the
+     * ear (spoken prose, no Markdown, spoken numbers).
+     */
+    fun podcast(scopeLabel: String, digest: String): String = buildString {
+        append("You are writing the script for a short two-host audio podcast that explains the ")
+        append("source material in the digest below (scope: ").append(scopeLabel).append(").\n")
+        append("The two hosts are Alex and Sam. Write a natural, friendly conversation in which ")
+        append("they explain the material to a listener — Alex tends to guide and ask questions, ")
+        append("Sam tends to explain and add detail, but keep it balanced and let them build on ")
+        append("each other.\n")
+        append("Use this STRICT format — one turn per line, and nothing else:\n")
+        append("Alex: <what Alex says>\n")
+        append("Sam: <what Sam says>\n")
+        append("Rules: every line must start with either \"Alex:\" or \"Sam:\", and the two ")
+        append("alternate. Write spoken, conversational sentences — NO Markdown, no stage ")
+        append("directions, no text in brackets, no sound effects. Open with a one-line welcome, ")
+        append("walk through the most important points, and close with a short takeaway. Aim for ")
+        append("12 to 20 turns. Write numbers the way you would SAY them (\"sixty-eight percent\"), ")
+        append("never as symbols or math.\n")
+        append("Use only information supported by the digest; do not invent facts. Output only the ")
+        append("dialogue lines — no title, no preamble.\n\n")
+        append("--- DIGEST START ---\n")
+        append(digest.trim())
+        append("\n--- DIGEST END ---\n")
+    }
 }

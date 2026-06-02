@@ -16,7 +16,8 @@ enum class StudioArtifactType(val label: String) {
     STUDY_GUIDE("Study Guide"),
     TIMELINE("Timeline"),
     MIND_MAP("Mind Map"),
-    AUDIO_OVERVIEW("Audio Overview");
+    AUDIO_OVERVIEW("Audio Overview"),
+    PODCAST("Podcast");
 
     companion object {
         fun fromName(name: String): StudioArtifactType =

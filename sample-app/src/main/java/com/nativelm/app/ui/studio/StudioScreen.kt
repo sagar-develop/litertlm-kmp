@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.text.format.DateUtils
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -65,6 +66,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -74,6 +76,9 @@ import com.nativelm.app.llm.StudioArtifactSummary
 import com.nativelm.app.llm.StudioArtifactView
 import com.nativelm.app.llm.StudioProgress
 import com.nativelm.app.studio.FaqItem
+import com.nativelm.app.studio.PodcastPlayState
+import com.nativelm.app.studio.PodcastStatus
+import com.nativelm.app.studio.PodcastTurn
 import com.nativelm.app.studio.ReadStatus
 import com.nativelm.app.studio.StudioArtifactType
 import com.nativelm.app.studio.TermItem
@@ -81,6 +86,7 @@ import com.nativelm.app.studio.TimelineEvent
 import com.nativelm.app.studio.TopicItem
 import com.nativelm.app.studio.parseFaq
 import com.nativelm.app.studio.parseMindMap
+import com.nativelm.app.studio.parsePodcast
 import com.nativelm.app.studio.parseStudyGuide
 import com.nativelm.app.studio.parseTimeline
 import com.nativelm.app.studio.parseTopics
@@ -94,6 +100,7 @@ fun StudioScreen(vm: NativeLmViewModel, onBack: () -> Unit, onAskInChat: () -> U
     val documents by vm.documents.collectAsState()
     val projectName by vm.currentProjectName.collectAsState()
     val readAloud by vm.readAloud.collectAsState()
+    val podcast by vm.podcast.collectAsState()
     val context = LocalContext.current
 
     LaunchedEffect(Unit) {
@@ -107,8 +114,10 @@ fun StudioScreen(vm: NativeLmViewModel, onBack: () -> Unit, onAskInChat: () -> U
             artifact = artifact,
             busy = studio.generating,
             readStatus = readAloud?.takeIf { it.artifactId == artifact.id }?.status,
+            podcastState = podcast?.takeIf { it.artifactId == artifact.id },
             onBack = vm::closeArtifact,
             onReadAloud = { vm.toggleReadAloud(artifact) },
+            onPodcast = { vm.togglePodcast(artifact) },
             onShare = { shareArtifact(context, artifact) },
             onRegenerate = { vm.regenerateArtifact(artifact.id) },
             onDelete = { vm.deleteArtifact(artifact.id) },
@@ -396,8 +405,10 @@ private fun ArtifactViewer(
     artifact: StudioArtifactView,
     busy: Boolean,
     readStatus: ReadStatus?,
+    podcastState: PodcastPlayState?,
     onBack: () -> Unit,
     onReadAloud: () -> Unit,
+    onPodcast: () -> Unit,
     onShare: () -> Unit,
     onRegenerate: () -> Unit,
     onDelete: () -> Unit,
@@ -414,17 +425,8 @@ private fun ArtifactViewer(
                     }
                 },
                 actions = {
-                    // Audio Overview has a dedicated in-body player, so skip the
-                    // redundant top-bar read-aloud control for that type.
-                    if (artifact.type != StudioArtifactType.AUDIO_OVERVIEW) {
-                        val speaking = readStatus == ReadStatus.SPEAKING
-                        IconButton(onClick = onReadAloud) {
-                            Icon(
-                                if (speaking) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                                contentDescription = if (speaking) "Pause read-aloud" else "Read aloud",
-                            )
-                        }
-                    }
+                    // Read-aloud lives only inside the audio artifacts' own player
+                    // cards (Audio Overview / Podcast), not as a global top-bar action.
                     IconButton(onClick = onShare) {
                         Icon(Icons.Filled.Share, contentDescription = "Share")
                     }
@@ -527,6 +529,22 @@ private fun ArtifactViewer(
                     SectionHeader("Transcript")
                     MarkdownText(artifact.content)
                 }
+                StudioArtifactType.PODCAST -> {
+                    val turns = parsePodcast(artifact.content)
+                    if (turns.isNotEmpty()) {
+                        PodcastPlayer(status = podcastState?.status, onToggle = onPodcast)
+                        Spacer(Modifier.height(20.dp))
+                        SectionHeader("Transcript")
+                        val activeTurn = podcastState
+                            ?.takeIf { it.status == PodcastStatus.SPEAKING }
+                            ?.turnIndex
+                        turns.forEachIndexed { i, turn ->
+                            PodcastTurnRow(turn, isCurrent = i == activeTurn)
+                        }
+                    } else {
+                        MarkdownText(artifact.content)
+                    }
+                }
                 else -> MarkdownText(markdown = artifact.content)
             }
             Spacer(Modifier.height(32.dp))
@@ -535,18 +553,41 @@ private fun ArtifactViewer(
 }
 
 /**
- * The Audio Overview player: a prominent play/pause button reflecting the live
- * read-aloud [status], backed by the same on-device TTS used elsewhere. The
- * transcript is rendered below it by the caller.
+ * The Audio Overview player: a prominent play/pause card reflecting the live
+ * read-aloud [status]. The transcript is rendered below it by the caller.
  */
 @Composable
 private fun AudioOverviewPlayer(status: ReadStatus?, onToggle: () -> Unit) {
-    val speaking = status == ReadStatus.SPEAKING
-    val stateText = when (status) {
-        ReadStatus.SPEAKING -> "Playing…"
-        ReadStatus.PAUSED -> "Paused — tap to resume"
-        null -> "Tap to play"
-    }
+    PlayerCard(
+        title = "Audio Overview",
+        subtitle = when (status) {
+            ReadStatus.SPEAKING -> "Playing…"
+            ReadStatus.PAUSED -> "Paused — tap to resume"
+            null -> "Tap to play"
+        },
+        playing = status == ReadStatus.SPEAKING,
+        onToggle = onToggle,
+    )
+}
+
+/** The Podcast player: same play/pause card, driven by two-voice playback [status]. */
+@Composable
+private fun PodcastPlayer(status: PodcastStatus?, onToggle: () -> Unit) {
+    PlayerCard(
+        title = "Podcast",
+        subtitle = when (status) {
+            PodcastStatus.SPEAKING -> "Playing…"
+            PodcastStatus.PAUSED -> "Paused — tap to resume"
+            null -> "Two voices · tap to play"
+        },
+        playing = status == PodcastStatus.SPEAKING,
+        onToggle = onToggle,
+    )
+}
+
+/** Shared play/pause card used by the audio artifacts (Audio Overview, Podcast). */
+@Composable
+private fun PlayerCard(title: String, subtitle: String, playing: Boolean, onToggle: () -> Unit) {
     Surface(
         color = MaterialTheme.colorScheme.surfaceVariant,
         shape = RoundedCornerShape(16.dp),
@@ -565,22 +606,56 @@ private fun AudioOverviewPlayer(status: ReadStatus?, onToggle: () -> Unit) {
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
-                        if (speaking) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                        contentDescription = if (speaking) "Pause" else "Play",
+                        if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                        contentDescription = if (playing) "Pause" else "Play",
                         tint = MaterialTheme.colorScheme.onPrimary,
                         modifier = Modifier.size(30.dp),
                     )
                 }
             }
             Column {
-                Text("Audio Overview", style = MaterialTheme.typography.titleMedium)
+                Text(title, style = MaterialTheme.typography.titleMedium)
                 Text(
-                    stateText,
+                    subtitle,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
+    }
+}
+
+/** One podcast turn in the transcript: a speaker-coloured name + the line, highlighted
+ *  while it is the turn currently being spoken. */
+@Composable
+private fun PodcastTurnRow(turn: PodcastTurn, isCurrent: Boolean) {
+    val accent = if (turn.speaker == 0) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.tertiary
+    }
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+            .background(
+                if (isCurrent) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent,
+                RoundedCornerShape(8.dp),
+            )
+            .padding(horizontal = if (isCurrent) 10.dp else 0.dp, vertical = if (isCurrent) 8.dp else 0.dp),
+    ) {
+        Text(
+            turn.name,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = accent,
+        )
+        Spacer(Modifier.height(2.dp))
+        Text(
+            turn.text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
     }
 }
 
