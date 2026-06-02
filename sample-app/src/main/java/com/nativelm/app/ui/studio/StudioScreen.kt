@@ -34,6 +34,18 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.automirrored.outlined.Article
+import androidx.compose.material.icons.automirrored.outlined.Label
+import androidx.compose.material.icons.outlined.AccountTree
+import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.FolderOpen
+import androidx.compose.material.icons.outlined.GraphicEq
+import androidx.compose.material.icons.outlined.Mic
+import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.QuestionAnswer
+import androidx.compose.material.icons.outlined.School
+import androidx.compose.material.icons.outlined.Timeline
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
@@ -41,21 +53,25 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material3.AlertDialog
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -71,6 +87,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.nativelm.app.llm.NativeLmViewModel
 import com.nativelm.app.llm.StudioArtifactSummary
 import com.nativelm.app.llm.StudioArtifactView
@@ -129,7 +146,6 @@ fun StudioScreen(vm: NativeLmViewModel, onBack: () -> Unit, onAskInChat: () -> U
         return
     }
 
-    var showType by remember { mutableStateOf(false) }
     var pendingType by remember { mutableStateOf<StudioArtifactType?>(null) }
 
     Scaffold(
@@ -158,85 +174,99 @@ fun StudioScreen(vm: NativeLmViewModel, onBack: () -> Unit, onAskInChat: () -> U
             )
         },
     ) { padding ->
-        Column(
-            Modifier
+        val canGenerate = documents.isNotEmpty() && !studio.generating
+        LazyColumn(
+            modifier = Modifier
                 .padding(padding)
-                .fillMaxSize()
-                .padding(horizontal = 16.dp),
+                .fillMaxSize(),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 40.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text(
-                "Generate overviews from this project's sources. Everything runs on your device.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(vertical = 8.dp),
-            )
-
-            Button(
-                onClick = { showType = true },
-                enabled = !studio.generating && documents.isNotEmpty(),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Icon(Icons.Filled.AutoAwesome, contentDescription = null)
-                Spacer(Modifier.size(8.dp))
-                Text("Generate")
-            }
-            if (documents.isEmpty()) {
+            item {
                 Text(
-                    "Import sources first to generate an overview.",
-                    style = MaterialTheme.typography.labelSmall,
+                    "Generate overviews from this project's sources. Everything runs on your device.",
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 6.dp),
+                    modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
                 )
             }
 
+            if (documents.isEmpty()) {
+                item {
+                    Text(
+                        "Import sources first to generate an overview.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
             studio.progress?.let { p ->
-                Spacer(Modifier.height(12.dp))
-                ProgressCard(p, onCancel = vm::cancelStudio)
+                item { ProgressCard(p, onCancel = vm::cancelStudio) }
             }
-
             studio.error?.let { msg ->
-                Spacer(Modifier.height(12.dp))
-                ErrorCard(msg, onDismiss = vm::clearStudioError)
+                item { ErrorCard(msg, onDismiss = vm::clearStudioError) }
             }
 
-            Spacer(Modifier.height(16.dp))
+            // Audio — the headline outputs lead.
+            item { SectionLabel("Audio") }
+            item {
+                AudioHeroCard(
+                    type = StudioArtifactType.AUDIO_OVERVIEW,
+                    blurb = "A spoken summary, single narrator",
+                    enabled = canGenerate,
+                    onClick = { pendingType = StudioArtifactType.AUDIO_OVERVIEW },
+                )
+            }
+            item {
+                AudioHeroCard(
+                    type = StudioArtifactType.PODCAST,
+                    blurb = "Two hosts discuss your sources",
+                    enabled = canGenerate,
+                    onClick = { pendingType = StudioArtifactType.PODCAST },
+                )
+            }
 
-            if (studio.artifacts.isEmpty() && studio.progress == null) {
-                EmptyState()
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(bottom = 24.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    items(items = studio.artifacts, key = { it.id }) { artifact ->
-                        ArtifactRow(
-                            artifact = artifact,
-                            onOpen = { vm.openArtifact(artifact.id) },
-                            onDelete = { vm.deleteArtifact(artifact.id) },
-                        )
+            // Create — the text artifact types as a 2-column grid.
+            item { SectionLabel("Create") }
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TEXT_TYPES.chunked(2).forEach { rowTypes ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            rowTypes.forEach { type ->
+                                CreateCard(
+                                    type = type,
+                                    enabled = canGenerate,
+                                    modifier = Modifier.weight(1f),
+                                    onClick = { pendingType = type },
+                                )
+                            }
+                            if (rowTypes.size == 1) Spacer(Modifier.weight(1f))
+                        }
                     }
+                }
+            }
+
+            // Outputs — generated artifacts.
+            if (studio.artifacts.isNotEmpty()) {
+                item { SectionLabel("Outputs") }
+                items(items = studio.artifacts, key = { it.id }) { artifact ->
+                    ArtifactRow(
+                        artifact = artifact,
+                        onOpen = { vm.openArtifact(artifact.id) },
+                        onDelete = { vm.deleteArtifact(artifact.id) },
+                    )
                 }
             }
         }
     }
 
-    if (showType) {
-        TypeDialog(
-            onDismiss = { showType = false },
-            onPick = { type ->
-                showType = false
-                pendingType = type
-            },
-        )
-    }
-
     pendingType?.let { type ->
-        ScopeDialog(
-            title = "${type.label} from…",
-            sources = documents.map { it.id to it.title },
+        SourceSheet(
+            type = type,
+            sources = documents,
             onDismiss = { pendingType = null },
-            onPick = { sourceId ->
+            onGenerate = { sourceId ->
                 pendingType = null
                 vm.generate(type, sourceId)
             },
@@ -244,58 +274,279 @@ fun StudioScreen(vm: NativeLmViewModel, onBack: () -> Unit, onAskInChat: () -> U
     }
 }
 
+private val TEXT_TYPES = listOf(
+    StudioArtifactType.BRIEFING,
+    StudioArtifactType.FAQ,
+    StudioArtifactType.KEY_TOPICS,
+    StudioArtifactType.STUDY_GUIDE,
+    StudioArtifactType.TIMELINE,
+    StudioArtifactType.MIND_MAP,
+)
+
+/** The outline icon for each artifact type — used in the grid, hero cards, and output rows. */
+private fun StudioArtifactType.icon(): ImageVector = when (this) {
+    StudioArtifactType.BRIEFING -> Icons.AutoMirrored.Outlined.Article
+    StudioArtifactType.FAQ -> Icons.Outlined.QuestionAnswer
+    StudioArtifactType.KEY_TOPICS -> Icons.AutoMirrored.Outlined.Label
+    StudioArtifactType.STUDY_GUIDE -> Icons.Outlined.School
+    StudioArtifactType.TIMELINE -> Icons.Outlined.Timeline
+    StudioArtifactType.MIND_MAP -> Icons.Outlined.AccountTree
+    StudioArtifactType.AUDIO_OVERVIEW -> Icons.Outlined.GraphicEq
+    StudioArtifactType.PODCAST -> Icons.Outlined.Mic
+}
+
+/** A small uppercase mono section label (Audio / Create / Outputs). */
 @Composable
-private fun TypeDialog(
-    onDismiss: () -> Unit,
-    onPick: (StudioArtifactType) -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-        title = { Text("Generate…") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                StudioArtifactType.entries.forEach { type ->
-                    ScopeOption(type.label) { onPick(type) }
-                }
-            }
-        },
+private fun SectionLabel(text: String) {
+    Text(
+        text.uppercase(),
+        style = MaterialTheme.typography.labelSmall.copy(
+            fontFamily = JetBrainsMono,
+            letterSpacing = 1.5.sp,
+        ),
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 12.dp, bottom = 2.dp),
     )
 }
 
+/** A full-width hero card for an audio output (Audio Overview / Podcast). */
 @Composable
-private fun ScopeDialog(
-    title: String,
-    sources: List<Pair<Long, String>>,
-    onDismiss: () -> Unit,
-    onPick: (Long) -> Unit,
+private fun AudioHeroCard(
+    type: StudioArtifactType,
+    blurb: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-        title = { Text(title) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                ScopeOption("Whole project") { onPick(0L) }
-                sources.forEach { (id, title) ->
-                    ScopeOption(title) { onPick(id) }
-                }
+    Surface(
+        onClick = onClick,
+        enabled = enabled,
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            Modifier.padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Box(
+                Modifier
+                    .size(48.dp)
+                    .background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(12.dp)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    type.icon(),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(24.dp),
+                )
             }
-        },
-    )
+            Column(Modifier.weight(1f)) {
+                Text(
+                    type.label,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    blurb,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Box(
+                Modifier
+                    .size(40.dp)
+                    .background(
+                        if (enabled) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.surfaceVariant
+                        },
+                        CircleShape,
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    Icons.Filled.AutoAwesome,
+                    contentDescription = "Generate ${type.label}",
+                    tint = if (enabled) {
+                        MaterialTheme.colorScheme.onPrimary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+        }
+    }
 }
 
+/** A compact grid card for a text artifact type (Briefing, FAQ, …). */
 @Composable
-private fun ScopeOption(label: String, onClick: () -> Unit) {
-    TextButton(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
-        Text(
-            label,
-            modifier = Modifier.fillMaxWidth(),
-            maxLines = 1,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
+private fun CreateCard(
+    type: StudioArtifactType,
+    enabled: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    Surface(
+        onClick = onClick,
+        enabled = enabled,
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        modifier = modifier,
+    ) {
+        Column(Modifier.padding(14.dp)) {
+            Icon(
+                type.icon(),
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.size(22.dp),
+            )
+            Spacer(Modifier.height(24.dp))
+            Text(
+                type.label,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+        }
+    }
+}
+
+/** Bottom sheet to pick the source for a generation: Whole project (default) or one source. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SourceSheet(
+    type: StudioArtifactType,
+    sources: List<com.nativelm.app.llm.DocumentSummary>,
+    onDismiss: () -> Unit,
+    onGenerate: (Long) -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var selected by remember { mutableStateOf(0L) } // 0 = whole project
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = MaterialTheme.colorScheme.surface,
+    ) {
+        Column(Modifier.padding(start = 20.dp, end = 20.dp, bottom = 24.dp)) {
+            Text(
+                "Generate ${type.label}",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                "Choose a source",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 2.dp, bottom = 12.dp),
+            )
+
+            SourceRow(
+                icon = Icons.Outlined.FolderOpen,
+                label = "Whole project",
+                caption = "${sources.size} source" + if (sources.size == 1) "" else "s",
+                selected = selected == 0L,
+                onClick = { selected = 0L },
+            )
+            sources.forEach { doc ->
+                SourceRow(
+                    icon = Icons.Outlined.Description,
+                    label = doc.title,
+                    caption = "${doc.pageCount} page" + if (doc.pageCount == 1) "" else "s",
+                    selected = selected == doc.id,
+                    onClick = { selected = doc.id },
+                )
+            }
+
+            Spacer(Modifier.height(20.dp))
+            Button(
+                onClick = { onGenerate(selected) },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Icon(Icons.Filled.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.size(8.dp))
+                Text("Generate")
+            }
+            Text(
+                "Runs on your device",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp),
+            )
+        }
+    }
+}
+
+/** One selectable source row in the [SourceSheet]. */
+@Composable
+private fun SourceRow(
+    icon: ImageVector,
+    label: String,
+    caption: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(12.dp),
+        color = if (selected) {
+            MaterialTheme.colorScheme.primaryContainer
+        } else {
+            MaterialTheme.colorScheme.surface
+        },
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 3.dp),
+    ) {
+        Row(
+            Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Icon(
+                icon,
+                contentDescription = null,
+                tint = if (selected) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+                modifier = Modifier.size(22.dp),
+            )
+            Column(Modifier.weight(1f)) {
+                Text(
+                    label,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                )
+                Text(
+                    caption,
+                    style = MaterialTheme.typography.labelSmall.copy(fontFamily = JetBrainsMono),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (selected) {
+                Icon(
+                    Icons.Filled.Check,
+                    contentDescription = "Selected",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+        }
     }
 }
 
@@ -365,16 +616,25 @@ private fun ArtifactRow(
     onOpen: () -> Unit,
     onDelete: () -> Unit,
 ) {
+    var menuOpen by remember { mutableStateOf(false) }
     Surface(
         color = MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         onClick = onOpen,
         modifier = Modifier.fillMaxWidth(),
     ) {
         Row(
-            Modifier.padding(start = 14.dp, top = 12.dp, bottom = 12.dp, end = 4.dp),
+            Modifier.padding(start = 12.dp, top = 12.dp, bottom = 12.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            Icon(
+                artifact.type.icon(),
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(22.dp),
+            )
             Column(Modifier.weight(1f)) {
                 Text(
                     artifact.title,
@@ -392,8 +652,20 @@ private fun ArtifactRow(
                     maxLines = 1,
                 )
             }
-            IconButton(onClick = onDelete) {
-                Icon(Icons.Filled.Delete, contentDescription = "Delete ${artifact.title}")
+            Box {
+                IconButton(onClick = { menuOpen = true }) {
+                    Icon(Icons.Outlined.MoreVert, contentDescription = "More options")
+                }
+                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    DropdownMenuItem(
+                        text = { Text("Delete") },
+                        leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null) },
+                        onClick = {
+                            menuOpen = false
+                            onDelete()
+                        },
+                    )
+                }
             }
         }
     }
@@ -823,18 +1095,6 @@ private fun TimelineRail(isFirst: Boolean, isLast: Boolean) {
         if (!isFirst) drawLine(lineColor, Offset(cx, 0f), Offset(cx, dotY), strokeWidth = stroke)
         if (!isLast) drawLine(lineColor, Offset(cx, dotY), Offset(cx, size.height), strokeWidth = stroke)
         drawCircle(dotColor, radius = radius, center = Offset(cx, dotY))
-    }
-}
-
-@Composable
-private fun EmptyState() {
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text(
-            "No artifacts yet.\nGenerate a briefing to get an overview of this project.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-        )
     }
 }
 
