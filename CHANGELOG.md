@@ -23,6 +23,17 @@ and the project loosely follows [Semantic Versioning](https://semver.org/).
 - Engine library version bumped to `0.6.0` so `lib/build.gradle.kts` tracks the
   unified release line (was `0.3.0`); README/doc version references aligned to match.
 
+## [0.6.1] — 2026-06-03
+
+### Fixed
+- **Zero-telemetry guarantee restored.** ML Kit (on-device OCR) transitively
+  bundles Google's `datatransport` pipeline, which auto-initialized on startup
+  and uploaded usage/diagnostics to `firebaselogging.googleapis.com`. Removed the
+  CCT backend and its upload schedulers via manifest merge so nothing ever leaves
+  the device; on-device OCR is unaffected (verified on-device: image import still
+  OCRs and indexes). Also corrects the app `versionName`, which incorrectly read
+  `0.5.0` in the v0.6.0 build.
+
 ## [0.6.0] — 2026-06-03
 
 ### Added
