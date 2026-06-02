@@ -8,8 +8,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -71,8 +70,7 @@ fun MindMapView(root: MindNode, onAsk: (String) -> Unit, modifier: Modifier = Mo
 
     BoxWithConstraints(
         modifier
-            .fillMaxWidth()
-            .height(460.dp)
+            .fillMaxSize()
             .clipToBounds(),
     ) {
         val vw = constraints.maxWidth.toFloat()
@@ -85,15 +83,13 @@ fun MindMapView(root: MindNode, onAsk: (String) -> Unit, modifier: Modifier = Mo
         var scale by remember(root) { mutableFloatStateOf(init.first) }
         var offset by remember(root) { mutableStateOf(init.second) }
 
+        // The gesture detector lives on the full viewport box (not the clipped,
+        // content-sized inner box) so the whole 460dp area captures the pinch/pan and
+        // consumes it before the parent verticalScroll can steal the touch. The inner
+        // box carries the graphicsLayer transform.
         Box(
             Modifier
-                .graphicsLayer {
-                    scaleX = scale
-                    scaleY = scale
-                    translationX = offset.x
-                    translationY = offset.y
-                    transformOrigin = TransformOrigin(0f, 0f)
-                }
+                .fillMaxSize()
                 .pointerInput(root) {
                     detectTransformGestures { centroid, pan, zoom, _ ->
                         val newScale = (scale * zoom).coerceIn(MIN_SCALE, MAX_SCALE)
@@ -101,6 +97,16 @@ fun MindMapView(root: MindNode, onAsk: (String) -> Unit, modifier: Modifier = Mo
                         offset = centroid - (centroid - offset) * (newScale / scale) + pan
                         scale = newScale
                     }
+                },
+        ) {
+          Box(
+            Modifier
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                    translationX = offset.x
+                    translationY = offset.y
+                    transformOrigin = TransformOrigin(0f, 0f)
                 },
         ) {
             Canvas(
@@ -129,6 +135,7 @@ fun MindMapView(root: MindNode, onAsk: (String) -> Unit, modifier: Modifier = Mo
                         .size(NODE_W, NODE_H),
                 )
             }
+          }
         }
     }
 }

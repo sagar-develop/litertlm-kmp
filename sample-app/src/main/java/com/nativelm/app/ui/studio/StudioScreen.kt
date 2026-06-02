@@ -421,6 +421,34 @@ private fun ArtifactViewer(
             )
         },
     ) { padding ->
+        // A mind map drives its own pan/zoom, so it gets the full content area
+        // (no outer scroll, no fixed height). Everything else scrolls normally.
+        val mindRoot = if (artifact.type == StudioArtifactType.MIND_MAP) {
+            parseMindMap(artifact.content)
+        } else {
+            null
+        }
+        if (mindRoot != null) {
+            Column(
+                Modifier
+                    .padding(padding)
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+            ) {
+                Text(
+                    "Pinch to zoom, drag to pan. Tap a node to ask about it.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 8.dp),
+                )
+                MindMapView(
+                    mindRoot,
+                    onAsk = { onAskTopic("Tell me more about $it.") },
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            return@Scaffold
+        }
         Column(
             Modifier
                 .padding(padding)
@@ -470,20 +498,9 @@ private fun ArtifactViewer(
                     val events = parseTimeline(artifact.content)
                     if (events.isNotEmpty()) TimelineView(events) else MarkdownText(artifact.content)
                 }
-                StudioArtifactType.MIND_MAP -> {
-                    val root = parseMindMap(artifact.content)
-                    if (root != null) {
-                        Text(
-                            "Pinch to zoom, drag to pan. Tap a node to ask about it.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(bottom = 8.dp),
-                        )
-                        MindMapView(root, onAsk = { onAskTopic("Tell me more about $it.") })
-                    } else {
-                        MarkdownText(artifact.content)
-                    }
-                }
+                // A parsable mind map is rendered full-screen above (early return);
+                // reaching here means the parse failed, so degrade to plain markdown.
+                StudioArtifactType.MIND_MAP -> MarkdownText(artifact.content)
                 else -> MarkdownText(markdown = artifact.content)
             }
             Spacer(Modifier.height(32.dp))
