@@ -40,4 +40,8 @@ jobs:
       - name: Build library only
         # :lib:assemble compiles and packages the Android AAR + KMP klibs for the
         # engine. It does NOT depend on :sample-app, so no signing config is needed.
-        run: ./gradlew :lib:assemble --no-daemon --stacktrace
+        # chmod guards against the gradlew executable bit being lost when the repo
+        # is committed from Windows.
+        run: |
+          chmod +x ./gradlew
+          ./gradlew :lib:assemble --no-daemon --stacktrace
