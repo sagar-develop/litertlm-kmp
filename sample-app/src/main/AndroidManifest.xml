@@ -35,6 +35,21 @@
             </intent-filter>
         </activity>
 
+        <!-- Zero-telemetry guarantee: ML Kit (on-device OCR) transitively bundles
+             Google's datatransport pipeline, which auto-initializes on startup and
+             uploads usage/diagnostics to firebaselogging.googleapis.com. Strip the
+             CCT backend + its upload schedulers so nothing ever leaves the device.
+             On-device OCR does not depend on this telemetry pipeline. -->
+        <service
+            android:name="com.google.android.datatransport.runtime.backends.TransportBackendDiscovery"
+            tools:node="remove" />
+        <service
+            android:name="com.google.android.datatransport.runtime.scheduling.jobscheduling.JobInfoSchedulerService"
+            tools:node="remove" />
+        <receiver
+            android:name="com.google.android.datatransport.runtime.scheduling.jobscheduling.AlarmManagerSchedulerBroadcastReceiver"
+            tools:node="remove" />
+
     </application>
 
 </manifest>
