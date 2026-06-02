@@ -130,6 +130,22 @@ class StudioGenerator(
             .ifBlank { error("The model produced an empty mind map.") }
     }
 
+    /**
+     * Build an Audio Overview script (single-narrator spoken prose) over [sources].
+     * Same digest pipeline; the final prompt asks for ear-friendly narration. The
+     * viewer plays it with on-device TTS and shows the transcript.
+     */
+    suspend fun audioOverview(
+        sources: List<Source>,
+        scopeLabel: String,
+        onProgress: (Progress) -> Unit,
+    ): String {
+        val digest = digest(sources, onProgress)
+        onProgress(Progress("Writing audio overview", 1, 1))
+        return llm(StudioPrompts.audioOverview(scopeLabel, digest.take(MAX_DIGEST_CHARS)), AUDIO_OVERVIEW_TOKENS)
+            .ifBlank { error("The model produced an empty audio overview.") }
+    }
+
     /** MAP + REDUCE: produce a single context-budget digest from all sources. */
     private suspend fun digest(sources: List<Source>, onProgress: (Progress) -> Unit): String {
         val windows = windows(sources)
@@ -225,5 +241,6 @@ class StudioGenerator(
         private const val STUDY_GUIDE_TOKENS = 1280
         private const val TIMELINE_TOKENS = 1280
         private const val MIND_MAP_TOKENS = 1024
+        private const val AUDIO_OVERVIEW_TOKENS = 1024
     }
 }

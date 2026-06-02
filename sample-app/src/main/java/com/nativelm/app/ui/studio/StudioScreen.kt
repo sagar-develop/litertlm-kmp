@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -413,12 +414,16 @@ private fun ArtifactViewer(
                     }
                 },
                 actions = {
-                    val speaking = readStatus == ReadStatus.SPEAKING
-                    IconButton(onClick = onReadAloud) {
-                        Icon(
-                            if (speaking) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                            contentDescription = if (speaking) "Pause read-aloud" else "Read aloud",
-                        )
+                    // Audio Overview has a dedicated in-body player, so skip the
+                    // redundant top-bar read-aloud control for that type.
+                    if (artifact.type != StudioArtifactType.AUDIO_OVERVIEW) {
+                        val speaking = readStatus == ReadStatus.SPEAKING
+                        IconButton(onClick = onReadAloud) {
+                            Icon(
+                                if (speaking) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                                contentDescription = if (speaking) "Pause read-aloud" else "Read aloud",
+                            )
+                        }
                     }
                     IconButton(onClick = onShare) {
                         Icon(Icons.Filled.Share, contentDescription = "Share")
@@ -516,9 +521,65 @@ private fun ArtifactViewer(
                 // A parsable mind map is rendered full-screen above (early return);
                 // reaching here means the parse failed, so degrade to plain markdown.
                 StudioArtifactType.MIND_MAP -> MarkdownText(artifact.content)
+                StudioArtifactType.AUDIO_OVERVIEW -> {
+                    AudioOverviewPlayer(status = readStatus, onToggle = onReadAloud)
+                    Spacer(Modifier.height(20.dp))
+                    SectionHeader("Transcript")
+                    MarkdownText(artifact.content)
+                }
                 else -> MarkdownText(markdown = artifact.content)
             }
             Spacer(Modifier.height(32.dp))
+        }
+    }
+}
+
+/**
+ * The Audio Overview player: a prominent play/pause button reflecting the live
+ * read-aloud [status], backed by the same on-device TTS used elsewhere. The
+ * transcript is rendered below it by the caller.
+ */
+@Composable
+private fun AudioOverviewPlayer(status: ReadStatus?, onToggle: () -> Unit) {
+    val speaking = status == ReadStatus.SPEAKING
+    val stateText = when (status) {
+        ReadStatus.SPEAKING -> "Playing…"
+        ReadStatus.PAUSED -> "Paused — tap to resume"
+        null -> "Tap to play"
+    }
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            Modifier.padding(20.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Surface(
+                onClick = onToggle,
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(56.dp),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        if (speaking) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                        contentDescription = if (speaking) "Pause" else "Play",
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(30.dp),
+                    )
+                }
+            }
+            Column {
+                Text("Audio Overview", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    stateText,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }

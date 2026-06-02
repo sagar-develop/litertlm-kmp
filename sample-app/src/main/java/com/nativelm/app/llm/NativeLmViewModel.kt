@@ -958,6 +958,7 @@ class NativeLmViewModel(app: Application) : ViewModel() {
                     StudioArtifactType.STUDY_GUIDE -> generator.studyGuide(sources, scopeLabel, onProgress)
                     StudioArtifactType.TIMELINE -> generator.timeline(sources, scopeLabel, onProgress)
                     StudioArtifactType.MIND_MAP -> generator.mindMap(sources, scopeLabel, onProgress)
+                    StudioArtifactType.AUDIO_OVERVIEW -> generator.audioOverview(sources, scopeLabel, onProgress)
                 }
                 val now = System.currentTimeMillis()
                 val title = studioTitleFrom(content, type, scopeLabel)

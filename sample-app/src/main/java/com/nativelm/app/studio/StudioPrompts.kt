@@ -151,4 +151,32 @@ internal object StudioPrompts {
         append(digest.trim())
         append("\n--- DIGEST END ---\n")
     }
+
+    /**
+     * FINAL (Audio Overview): a single-narrator spoken script — written for the ear,
+     * not the eye. Deliberately omits [NUMBER_STYLE]: this is read aloud, so numbers
+     * should be spelled the way they're spoken, and there is no Markdown to sanitize.
+     * Studio Step 7 (single-voice now; a two-host conversation can layer on later).
+     */
+    fun audioOverview(scopeLabel: String, digest: String): String = buildString {
+        append("You are writing the script for a short spoken audio overview, based ONLY on the ")
+        append("digest of source material below (scope: ").append(scopeLabel).append(").\n")
+        append("A single narrator will READ THIS ALOUD, so write for the ear, not the eye:\n")
+        append("- Plain, flowing prose in a few short paragraphs. Use NO Markdown at all — no ")
+        append("headings, bullet points, tables, bold, or links — because the voice would ")
+        append("pronounce those symbols.\n")
+        append("- Open with one warm sentence saying what this material is about. Then walk the ")
+        append("listener through the most important points in a natural order, joined by spoken ")
+        append("transitions (\"First,\", \"What's interesting here is\", \"This matters because\"). ")
+        append("End with a one or two sentence takeaway.\n")
+        append("- Conversational but factual; speak to the listener as \"you\". Aim for about 350 ")
+        append("to 550 words — roughly two to three minutes when spoken.\n")
+        append("- Write numbers and units the way you would SAY them (\"about three and a half ")
+        append("million per microliter\", \"sixty-eight percent\"), never as symbols or math.\n")
+        append("Use only information supported by the digest; do not invent facts. Output only the ")
+        append("narration itself — no title, no label, no preamble.\n\n")
+        append("--- DIGEST START ---\n")
+        append(digest.trim())
+        append("\n--- DIGEST END ---\n")
+    }
 }
