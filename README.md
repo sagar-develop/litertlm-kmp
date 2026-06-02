@@ -2,6 +2,10 @@
 
 [![CI](https://github.com/sagar-develop/litertlm-kmp/actions/workflows/ci.yml/badge.svg)](https://github.com/sagar-develop/litertlm-kmp/actions/workflows/ci.yml)
 [![JitPack](https://jitpack.io/v/sagar-develop/litertlm-kmp.svg)](https://jitpack.io/#sagar-develop/litertlm-kmp)
+[![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
+[![Commercial license](https://img.shields.io/badge/license-Commercial%20available-success.svg)](COMMERCIAL.md)
+[![Kotlin](https://img.shields.io/badge/Kotlin-2.3.21-blue.svg?logo=kotlin)](https://kotlinlang.org)
+[![Platform](https://img.shields.io/badge/platform-Android%20%7C%20iOS-blueviolet.svg)](#platform-support)
 
 **A Kotlin Multiplatform wrapper around Google's [LiteRT-LM](https://github.com/google-ai-edge/LiteRT-LM) for running Gemma-family models on-device.**
 
