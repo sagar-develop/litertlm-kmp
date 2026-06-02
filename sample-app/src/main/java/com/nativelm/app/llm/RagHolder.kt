@@ -63,6 +63,14 @@ class RagHolder(app: Application, private val engineHolder: EngineHolder) {
 
     suspend fun documents(projectId: Long): List<DocumentEntity> = repository.listDocuments(projectId)
 
+    /**
+     * Every chunk of a project (or one source when [documentId] > 0), in reading
+     * order, for Studio's whole-source-set map-reduce. See
+     * [com.nativelm.app.data.db.DocumentRepository.chunksForProject].
+     */
+    suspend fun chunksForProject(projectId: Long, documentId: Long = 0): List<com.nativelm.app.data.db.DocumentChunkEntity> =
+        repository.chunksForProject(projectId, documentId)
+
     /** A single source's metadata (incl. [DocumentEntity.localPath]) for the viewer. */
     suspend fun document(id: Long): DocumentEntity? = repository.getDocument(id)
 

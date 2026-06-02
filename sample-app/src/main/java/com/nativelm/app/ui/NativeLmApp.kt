@@ -16,6 +16,7 @@ import com.nativelm.app.llm.ROUTE_ONBOARDING
 import com.nativelm.app.llm.ROUTE_PDF_VIEWER
 import com.nativelm.app.llm.ROUTE_SETTINGS
 import com.nativelm.app.llm.ROUTE_SPLASH
+import com.nativelm.app.llm.ROUTE_STUDIO
 import com.nativelm.app.ui.chat.ChatScreen
 import com.nativelm.app.ui.documents.DocumentsScreen
 import com.nativelm.app.ui.models.ModelManagementScreen
@@ -23,6 +24,7 @@ import com.nativelm.app.ui.onboarding.OnboardingScreen
 import com.nativelm.app.ui.pdf.PdfViewerScreen
 import com.nativelm.app.ui.settings.SettingsScreen
 import com.nativelm.app.ui.splash.SplashScreen
+import com.nativelm.app.ui.studio.StudioScreen
 
 /**
  * NativeLM navigation graph. The start destination is decided by the ViewModel's
@@ -69,6 +71,14 @@ fun NativeLmApp(vm: NativeLmViewModel, startRoute: String) {
                 onOpenSettings = { nav.navigate(ROUTE_SETTINGS) },
                 onOpenDocuments = { nav.navigate(ROUTE_DOCUMENTS) },
                 onOpenPdf = { nav.navigate(ROUTE_PDF_VIEWER) },
+                onOpenStudio = { nav.navigate(ROUTE_STUDIO) },
+            )
+        }
+        composable(ROUTE_STUDIO) {
+            StudioScreen(
+                vm = vm,
+                onBack = { nav.popBackStack() },
+                onAskInChat = { nav.popBackStack(ROUTE_CHAT, inclusive = false) },
             )
         }
         composable(ROUTE_PDF_VIEWER) {

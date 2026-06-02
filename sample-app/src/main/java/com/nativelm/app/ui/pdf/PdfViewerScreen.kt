@@ -162,9 +162,10 @@ private fun PdfContent(target: PdfViewTarget, modifier: Modifier = Modifier) {
         highlightResolved = true
     }
 
-    // Sage highlight over the (always-white) page. 0.30 read as washed-out at page
-    // scale; ~0.5 is clearly visible while leaving the text underneath legible.
-    val highlightColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f).toArgb()
+    // Sage highlight over the (always-white) page. The opaque border does the
+    // work of marking the region, so the fill is just a light tint (~0.15) that
+    // keeps the text underneath fully legible rather than washing it darker.
+    val highlightColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f).toArgb()
 
     LaunchedEffect(target.localPath, pageIndex, highlightBoxes) {
         if (renderer == null || pageCount == 0) return@LaunchedEffect
@@ -404,9 +405,9 @@ private suspend fun renderPage(
     }
 
 /**
- * Outline + translucent fill over the cited passage (normalized page coords). The
- * opaque sage border makes the highlight read clearly on a busy page even where
- * the translucent fill alone is too subtle.
+ * A clean opaque sage border over the cited passage (normalized page coords) with
+ * only a light tint inside. The border marks the region clearly on a busy page;
+ * the faint fill leaves the text underneath legible rather than darkening it.
  */
 private fun drawHighlights(bmp: Bitmap, boxes: List<PdfHighlighter.Box>, color: Int) {
     val canvas = Canvas(bmp)
@@ -414,13 +415,13 @@ private fun drawHighlights(bmp: Bitmap, boxes: List<PdfHighlighter.Box>, color: 
     val h = bmp.height.toFloat()
     val radius = 0.004f * w
     val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        this.color = color
+        this.color = color // light sage tint (alpha set by caller)
         style = Paint.Style.FILL
     }
     val border = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         this.color = color or 0xFF000000.toInt() // same sage, fully opaque
         style = Paint.Style.STROKE
-        strokeWidth = (0.0035f * w).coerceAtLeast(3f)
+        strokeWidth = (0.0025f * w).coerceAtLeast(2.5f)
     }
     for (b in boxes) {
         val l = b.x * w

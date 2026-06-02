@@ -137,3 +137,28 @@ class DocumentChunkEntity {
         const val EMBEDDING_DIM: Int = 100
     }
 }
+
+/**
+ * A Studio artifact generated *from* a project's sources (a Briefing, FAQ, etc.) —
+ * the output of map-reduce over the source set, not a chat answer. Persisted per
+ * project so it can be re-viewed, shared, regenerated, or deleted.
+ *
+ * [type] is a [com.nativelm.app.studio.StudioArtifactType] name (e.g. "BRIEFING").
+ * [content] is markdown. [sourceId] is 0 for whole-project scope, or the owning
+ * [DocumentEntity.id] when the artifact targets a single source; [scopeLabel] is the
+ * human-readable scope ("Whole project" or the source title) shown in the UI.
+ */
+@Entity
+class StudioArtifactEntity {
+    @Id var id: Long = 0
+
+    @Index
+    var projectId: Long = 0
+    var type: String = ""
+    var title: String = ""
+    var content: String = ""
+    var sourceId: Long = 0
+    var scopeLabel: String = ""
+    var createdAt: Long = 0
+    var updatedAt: Long = 0
+}

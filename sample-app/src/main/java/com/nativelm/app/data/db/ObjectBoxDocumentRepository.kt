@@ -119,6 +119,22 @@ class ObjectBoxDocumentRepository : DocumentRepository {
                 .use { it.find() }
         }
 
+    override suspend fun chunksForProject(
+        projectId: Long,
+        documentId: Long,
+    ): List<DocumentChunkEntity> = withContext(Dispatchers.IO) {
+        val condition = if (documentId > 0L) {
+            DocumentChunkEntity_.documentId.equal(documentId)
+        } else {
+            DocumentChunkEntity_.projectId.equal(projectId)
+        }
+        chunks.query(condition)
+            .order(DocumentChunkEntity_.documentId)
+            .order(DocumentChunkEntity_.chunkIndex)
+            .build()
+            .use { it.find() }
+    }
+
     override suspend fun deleteDocument(documentId: Long): Unit = withContext(Dispatchers.IO) {
         // tx-split (landmine #3): remove HNSW-indexed chunks first, then the parent.
         chunks.query().equal(DocumentChunkEntity_.documentId, documentId).build().use { it.remove() }
