@@ -7,6 +7,7 @@ package com.nativelm.app.ui.studio
 import android.content.Context
 import android.content.Intent
 import android.text.format.DateUtils
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -686,6 +687,7 @@ private fun ArtifactViewer(
     onDelete: () -> Unit,
     onAskTopic: (String) -> Unit,
 ) {
+    var menuOpen by remember { mutableStateOf(false) }
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
@@ -699,14 +701,33 @@ private fun ArtifactViewer(
                 actions = {
                     // Read-aloud lives only inside the audio artifacts' own player
                     // cards (Audio Overview / Podcast), not as a global top-bar action.
+                    // Share is the common action; regenerate/delete tuck into an overflow.
                     IconButton(onClick = onShare) {
                         Icon(Icons.Filled.Share, contentDescription = "Share")
                     }
-                    IconButton(onClick = onRegenerate, enabled = !busy) {
-                        Icon(Icons.Filled.Refresh, contentDescription = "Regenerate")
-                    }
-                    IconButton(onClick = onDelete) {
-                        Icon(Icons.Filled.Delete, contentDescription = "Delete")
+                    Box {
+                        IconButton(onClick = { menuOpen = true }) {
+                            Icon(Icons.Outlined.MoreVert, contentDescription = "More options")
+                        }
+                        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                            DropdownMenuItem(
+                                text = { Text("Regenerate") },
+                                leadingIcon = { Icon(Icons.Filled.Refresh, contentDescription = null) },
+                                enabled = !busy,
+                                onClick = {
+                                    menuOpen = false
+                                    onRegenerate()
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Delete") },
+                                leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null) },
+                                onClick = {
+                                    menuOpen = false
+                                    onDelete()
+                                },
+                            )
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -729,6 +750,7 @@ private fun ArtifactViewer(
                     .fillMaxSize()
                     .padding(horizontal = 16.dp, vertical = 8.dp),
             ) {
+                ScopeChip(artifact)
                 Text(
                     "Pinch to zoom, drag to pan. Tap a node to ask about it.",
                     style = MaterialTheme.typography.bodySmall,
@@ -750,6 +772,7 @@ private fun ArtifactViewer(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 8.dp),
         ) {
+            ScopeChip(artifact)
             // Structured artifacts get custom rendering; a degraded parse always
             // falls back to plain markdown so the generated text is never lost.
             when (artifact.type) {
@@ -831,6 +854,7 @@ private fun ArtifactViewer(
 @Composable
 private fun AudioOverviewPlayer(status: ReadStatus?, onToggle: () -> Unit) {
     PlayerCard(
+        icon = StudioArtifactType.AUDIO_OVERVIEW.icon(),
         title = "Audio Overview",
         subtitle = when (status) {
             ReadStatus.SPEAKING -> "Playing…"
@@ -846,6 +870,7 @@ private fun AudioOverviewPlayer(status: ReadStatus?, onToggle: () -> Unit) {
 @Composable
 private fun PodcastPlayer(status: PodcastStatus?, onToggle: () -> Unit) {
     PlayerCard(
+        icon = StudioArtifactType.PODCAST.icon(),
         title = "Podcast",
         subtitle = when (status) {
             PodcastStatus.SPEAKING -> "Playing…"
@@ -857,40 +882,67 @@ private fun PodcastPlayer(status: PodcastStatus?, onToggle: () -> Unit) {
     )
 }
 
-/** Shared play/pause card used by the audio artifacts (Audio Overview, Podcast). */
+/**
+ * Shared play/pause card for the audio artifacts (Audio Overview, Podcast). Mirrors the
+ * home hero card — a sage-tinted type-icon square and the title — but the trailing circle
+ * is the live play/pause control instead of a generate affordance.
+ */
 @Composable
-private fun PlayerCard(title: String, subtitle: String, playing: Boolean, onToggle: () -> Unit) {
+private fun PlayerCard(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    playing: Boolean,
+    onToggle: () -> Unit,
+) {
     Surface(
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        shape = RoundedCornerShape(16.dp),
+        onClick = onToggle,
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Row(
-            Modifier.padding(20.dp),
+            Modifier.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Surface(
-                onClick = onToggle,
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(56.dp),
+            Box(
+                Modifier
+                    .size(48.dp)
+                    .background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(12.dp)),
+                contentAlignment = Alignment.Center,
             ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                        contentDescription = if (playing) "Pause" else "Play",
-                        tint = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.size(30.dp),
-                    )
-                }
+                Icon(
+                    icon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(24.dp),
+                )
             }
-            Column {
-                Text(title, style = MaterialTheme.typography.titleMedium)
+            Column(Modifier.weight(1f)) {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
                 Text(
                     subtitle,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Box(
+                Modifier
+                    .size(48.dp)
+                    .background(MaterialTheme.colorScheme.primary, CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                    contentDescription = if (playing) "Pause" else "Play",
+                    tint = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier.size(28.dp),
                 )
             }
         }
@@ -916,13 +968,20 @@ private fun PodcastTurnRow(turn: PodcastTurn, isCurrent: Boolean) {
             )
             .padding(horizontal = if (isCurrent) 10.dp else 0.dp, vertical = if (isCurrent) 8.dp else 0.dp),
     ) {
-        Text(
-            turn.name,
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.SemiBold,
-            color = accent,
-        )
-        Spacer(Modifier.height(2.dp))
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Box(
+                Modifier
+                    .size(7.dp)
+                    .background(accent, CircleShape),
+            )
+            Text(
+                turn.name,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = accent,
+            )
+        }
+        Spacer(Modifier.height(3.dp))
         Text(
             turn.text,
             style = MaterialTheme.typography.bodyMedium,
@@ -934,7 +993,7 @@ private fun PodcastTurnRow(turn: PodcastTurn, isCurrent: Boolean) {
 @Composable
 private fun FaqRow(item: FaqItem) {
     var expanded by remember { mutableStateOf(false) }
-    Column(Modifier.fillMaxWidth()) {
+    Column(Modifier.fillMaxWidth().animateContentSize()) {
         Row(
             Modifier
                 .fillMaxWidth()
@@ -971,6 +1030,7 @@ private fun TopicRow(item: TopicItem, onAsk: () -> Unit) {
     Surface(
         color = MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         onClick = onAsk,
         modifier = Modifier
             .fillMaxWidth()
@@ -1009,12 +1069,43 @@ private fun TopicRow(item: TopicItem, onAsk: () -> Unit) {
 @Composable
 private fun SectionHeader(text: String) {
     Text(
-        text,
-        style = MaterialTheme.typography.titleMedium,
-        fontWeight = FontWeight.SemiBold,
-        color = MaterialTheme.colorScheme.onSurface,
-        modifier = Modifier.padding(top = 16.dp, bottom = 4.dp),
+        text.uppercase(),
+        style = MaterialTheme.typography.labelSmall.copy(
+            fontFamily = JetBrainsMono,
+            letterSpacing = 1.5.sp,
+        ),
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 20.dp, bottom = 6.dp),
     )
+}
+
+/** A small context chip at the top of the viewer: the artifact's type icon + "Type · scope". */
+@Composable
+private fun ScopeChip(artifact: StudioArtifactView) {
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        modifier = Modifier.padding(bottom = 14.dp),
+    ) {
+        Row(
+            Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Icon(
+                artifact.type.icon(),
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(15.dp),
+            )
+            Text(
+                "${artifact.type.label} · ${artifact.scopeLabel}",
+                style = MaterialTheme.typography.labelSmall.copy(fontFamily = JetBrainsMono),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+            )
+        }
+    }
 }
 
 @Composable
