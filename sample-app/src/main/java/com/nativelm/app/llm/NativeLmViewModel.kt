@@ -31,9 +31,12 @@ import com.nativelm.app.metrics.MetricsRepository
 import com.nativelm.app.rag.Citation
 import com.nativelm.app.rag.CitationJson
 import com.nativelm.app.rag.IngestState
+import com.nativelm.app.studio.ReadAloudState
 import com.nativelm.app.studio.StudioArtifactType
 import com.nativelm.app.studio.StudioGenerator
+import com.nativelm.app.studio.TtsController
 import com.nativelm.app.studio.sanitizeStudioMarkdown
+import com.nativelm.app.studio.stripForSpeech
 import io.github.aakira.napier.Napier
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -263,6 +266,12 @@ class NativeLmViewModel(app: Application) : ViewModel() {
     /** Studio (artifact generation) state for the open project. */
     private val _studio = MutableStateFlow(StudioState())
     val studio: StateFlow<StudioState> = _studio.asStateFlow()
+
+    /** On-device read-aloud (TTS) for the open artifact; null = nothing playing. */
+    private val tts = TtsController(app) {
+        _transientMessage.value = "Text-to-speech isn't available on this device."
+    }
+    val readAloud: StateFlow<ReadAloudState?> = tts.state
 
     /** The live KV-cache chat session for the open conversation. */
     private var chatSession: ChatSession? = null
@@ -928,6 +937,7 @@ class NativeLmViewModel(app: Application) : ViewModel() {
             return
         }
         val startConvId = _currentConversationId.value
+        tts.stop()
         studioJob?.cancel()
         studioJob = viewModelScope.launch {
             _studio.update { it.copy(generating = true, progress = StudioProgress("Preparing", 0, 0), error = null) }
@@ -1013,7 +1023,14 @@ class NativeLmViewModel(app: Application) : ViewModel() {
         }
     }
 
-    fun closeArtifact() = _studio.update { it.copy(open = null) }
+    fun closeArtifact() {
+        tts.stop()
+        _studio.update { it.copy(open = null) }
+    }
+
+    /** Play/pause read-aloud of the open artifact via on-device TTS (Studio 7a). */
+    fun toggleReadAloud(artifact: StudioArtifactView) =
+        tts.toggle(artifact.id, stripForSpeech(artifact.content))
 
     /**
      * Seed the open project's grounded chat with [question] and send it — the
@@ -1032,7 +1049,14 @@ class NativeLmViewModel(app: Application) : ViewModel() {
     fun deleteArtifact(id: Long) {
         viewModelScope.launch {
             studioRepo.delete(id)
-            _studio.update { if (it.open?.id == id) it.copy(open = null) else it }
+            _studio.update {
+                if (it.open?.id == id) {
+                    tts.stop()
+                    it.copy(open = null)
+                } else {
+                    it
+                }
+            }
             refreshArtifacts()
         }
     }
@@ -1175,6 +1199,7 @@ class NativeLmViewModel(app: Application) : ViewModel() {
     override fun onCleared() {
         super.onCleared()
         metrics.stop()
+        tts.shutdown()
     }
 
     companion object {

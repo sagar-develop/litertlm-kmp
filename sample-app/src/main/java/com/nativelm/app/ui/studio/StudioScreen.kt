@@ -35,6 +35,8 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
@@ -71,6 +73,7 @@ import com.nativelm.app.llm.StudioArtifactSummary
 import com.nativelm.app.llm.StudioArtifactView
 import com.nativelm.app.llm.StudioProgress
 import com.nativelm.app.studio.FaqItem
+import com.nativelm.app.studio.ReadStatus
 import com.nativelm.app.studio.StudioArtifactType
 import com.nativelm.app.studio.TermItem
 import com.nativelm.app.studio.TimelineEvent
@@ -89,6 +92,7 @@ fun StudioScreen(vm: NativeLmViewModel, onBack: () -> Unit, onAskInChat: () -> U
     val studio by vm.studio.collectAsState()
     val documents by vm.documents.collectAsState()
     val projectName by vm.currentProjectName.collectAsState()
+    val readAloud by vm.readAloud.collectAsState()
     val context = LocalContext.current
 
     LaunchedEffect(Unit) {
@@ -101,7 +105,9 @@ fun StudioScreen(vm: NativeLmViewModel, onBack: () -> Unit, onAskInChat: () -> U
         ArtifactViewer(
             artifact = artifact,
             busy = studio.generating,
+            readStatus = readAloud?.takeIf { it.artifactId == artifact.id }?.status,
             onBack = vm::closeArtifact,
+            onReadAloud = { vm.toggleReadAloud(artifact) },
             onShare = { shareArtifact(context, artifact) },
             onRegenerate = { vm.regenerateArtifact(artifact.id) },
             onDelete = { vm.deleteArtifact(artifact.id) },
@@ -388,7 +394,9 @@ private fun ArtifactRow(
 private fun ArtifactViewer(
     artifact: StudioArtifactView,
     busy: Boolean,
+    readStatus: ReadStatus?,
     onBack: () -> Unit,
+    onReadAloud: () -> Unit,
     onShare: () -> Unit,
     onRegenerate: () -> Unit,
     onDelete: () -> Unit,
@@ -405,6 +413,13 @@ private fun ArtifactViewer(
                     }
                 },
                 actions = {
+                    val speaking = readStatus == ReadStatus.SPEAKING
+                    IconButton(onClick = onReadAloud) {
+                        Icon(
+                            if (speaking) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                            contentDescription = if (speaking) "Pause read-aloud" else "Read aloud",
+                        )
+                    }
                     IconButton(onClick = onShare) {
                         Icon(Icons.Filled.Share, contentDescription = "Share")
                     }

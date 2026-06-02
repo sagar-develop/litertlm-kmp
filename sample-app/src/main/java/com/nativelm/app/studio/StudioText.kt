@@ -70,6 +70,31 @@ internal fun sanitizeStudioMarkdown(raw: String): String {
     return s.trim()
 }
 
+/**
+ * Plain-text projection of a Studio artifact for text-to-speech. Builds on
+ * [sanitizeStudioMarkdown] (LaTeX → Unicode) and then drops Markdown *structure*
+ * — headings, emphasis, code ticks, list/quote markers, table pipes, link URLs —
+ * so the speech engine reads natural prose instead of pronouncing symbols.
+ */
+internal fun stripForSpeech(markdown: String): String {
+    var s = sanitizeStudioMarkdown(markdown)
+    // Links/images: keep the visible text, drop the target.
+    s = s.replace("![", "[")
+    s = s.replace(Regex("\\[([^\\]]+)]\\([^)]*\\)"), "$1")
+    // Line-leading structure: heading hashes, block quotes, list bullets.
+    s = s.replace(Regex("(?m)^\\s{0,3}#{1,6}\\s*"), "")
+    s = s.replace(Regex("(?m)^\\s{0,3}>\\s?"), "")
+    s = s.replace(Regex("(?m)^\\s*[-*+]\\s+"), "")
+    // Table divider rows (e.g. |---|:--:|) → gone; remaining cell pipes → a pause.
+    s = s.replace(Regex("(?m)^[\\s|:-]+$"), "")
+    s = s.replace(Regex("\\s*\\|\\s*"), ", ")
+    // Inline emphasis / code markers.
+    s = s.replace(Regex("[*_`~]"), "")
+    // Tidy whitespace; turn paragraph breaks into a spoken pause.
+    s = s.replace(Regex("\\n{2,}"), ".\n").replace(Regex("[ \\t]{2,}"), " ")
+    return s.trim()
+}
+
 private val SUPERSCRIPTS = mapOf(
     '0' to '⁰', '1' to '¹', '2' to '²', '3' to '³', '4' to '⁴',
     '5' to '⁵', '6' to '⁶', '7' to '⁷', '8' to '⁸', '9' to '⁹',
