@@ -114,6 +114,22 @@ class StudioGenerator(
         return content
     }
 
+    /**
+     * Build a Mind Map (nested indented-bullet outline) over [sources]. Same digest
+     * pipeline; only the final prompt differs. The viewer parses the outline into a
+     * node graph, degrading to plain markdown if the structure doesn't parse.
+     */
+    suspend fun mindMap(
+        sources: List<Source>,
+        scopeLabel: String,
+        onProgress: (Progress) -> Unit,
+    ): String {
+        val digest = digest(sources, onProgress)
+        onProgress(Progress("Building mind map", 1, 1))
+        return llm(StudioPrompts.mindMap(scopeLabel, digest.take(MAX_DIGEST_CHARS)), MIND_MAP_TOKENS)
+            .ifBlank { error("The model produced an empty mind map.") }
+    }
+
     /** MAP + REDUCE: produce a single context-budget digest from all sources. */
     private suspend fun digest(sources: List<Source>, onProgress: (Progress) -> Unit): String {
         val windows = windows(sources)
@@ -208,5 +224,6 @@ class StudioGenerator(
         private const val TOPICS_TOKENS = 768
         private const val STUDY_GUIDE_TOKENS = 1280
         private const val TIMELINE_TOKENS = 1280
+        private const val MIND_MAP_TOKENS = 1024
     }
 }

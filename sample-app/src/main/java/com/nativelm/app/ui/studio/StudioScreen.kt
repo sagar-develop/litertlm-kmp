@@ -76,6 +76,7 @@ import com.nativelm.app.studio.TermItem
 import com.nativelm.app.studio.TimelineEvent
 import com.nativelm.app.studio.TopicItem
 import com.nativelm.app.studio.parseFaq
+import com.nativelm.app.studio.parseMindMap
 import com.nativelm.app.studio.parseStudyGuide
 import com.nativelm.app.studio.parseTimeline
 import com.nativelm.app.studio.parseTopics
@@ -468,6 +469,20 @@ private fun ArtifactViewer(
                 StudioArtifactType.TIMELINE -> {
                     val events = parseTimeline(artifact.content)
                     if (events.isNotEmpty()) TimelineView(events) else MarkdownText(artifact.content)
+                }
+                StudioArtifactType.MIND_MAP -> {
+                    val root = parseMindMap(artifact.content)
+                    if (root != null) {
+                        Text(
+                            "Pinch to zoom, drag to pan. Tap a node to ask about it.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(bottom = 8.dp),
+                        )
+                        MindMapView(root, onAsk = { onAskTopic("Tell me more about $it.") })
+                    } else {
+                        MarkdownText(artifact.content)
+                    }
                 }
                 else -> MarkdownText(markdown = artifact.content)
             }

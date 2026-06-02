@@ -132,4 +132,23 @@ internal object StudioPrompts {
         append(digest.trim())
         append("\n--- DIGEST END ---\n")
     }
+
+    /** FINAL (Mind Map): a nested indented-bullet outline → parsed into a node graph. */
+    fun mindMap(scopeLabel: String, digest: String): String = buildString {
+        append("You are building a mind map of the source material in the digest below ")
+        append("(scope: ").append(scopeLabel).append(").\n")
+        append("Output ONLY a nested outline as an indented Markdown bullet list — nothing else:\n")
+        append("- One single top-level bullet: the central theme (2 to 5 words).\n")
+        append("- Under it, 3 to 6 main branches, each indented by 2 spaces.\n")
+        append("- Under each branch, 2 to 4 sub-points, indented by 4 spaces.\n")
+        append("Indent strictly with spaces (2 per level) and start every line with \"- \". ")
+        append("Keep each label short (a few words), not full sentences. Do not go deeper than ")
+        append("3 levels. ").append(NUMBER_STYLE).append("\n")
+        append("Use only concepts supported by the digest; do not invent. No preamble, no prose, ")
+        append("just the bullet outline. Example:\n")
+        append("- Central theme\n  - First branch\n    - Detail\n    - Detail\n  - Second branch\n    - Detail\n\n")
+        append("--- DIGEST START ---\n")
+        append(digest.trim())
+        append("\n--- DIGEST END ---\n")
+    }
 }
