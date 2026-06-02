@@ -915,11 +915,12 @@ class NativeLmViewModel(app: Application) : ViewModel() {
     }
 
     /**
-     * Generate a Briefing artifact from the open project's sources via map-reduce.
-     * [sourceId] 0 = whole project, else a single source. Frees the chat session for
-     * the duration (LiteRT-LM allows one conversation per engine), then reopens it.
+     * Generate a Studio artifact of [type] from the open project's sources via
+     * map-reduce. [sourceId] 0 = whole project, else a single source. Frees the chat
+     * session for the duration (LiteRT-LM allows one conversation per engine), then
+     * reopens it.
      */
-    fun generateBriefing(sourceId: Long = 0L) {
+    fun generate(type: StudioArtifactType, sourceId: Long = 0L) {
         val projectId = _currentProjectId.value
         if (projectId <= 0L || _studio.value.generating) return
         if (_engineLoad.value !is EngineLoad.Ready) {
@@ -937,15 +938,19 @@ class NativeLmViewModel(app: Application) : ViewModel() {
                 check(sources.isNotEmpty()) { "This project has no readable sources yet." }
                 val scopeLabel = studioScopeLabel(sourceId)
                 val generator = StudioGenerator { prompt, maxTokens -> studioOneShot(prompt, maxTokens) }
-                val content = generator.briefing(sources, scopeLabel) { p ->
+                val onProgress: (StudioGenerator.Progress) -> Unit = { p ->
                     _studio.update { it.copy(progress = StudioProgress(p.phase, p.current, p.total)) }
                 }
+                val content = when (type) {
+                    StudioArtifactType.BRIEFING -> generator.briefing(sources, scopeLabel, onProgress)
+                    StudioArtifactType.FAQ -> generator.faq(sources, scopeLabel, onProgress)
+                }
                 val now = System.currentTimeMillis()
-                val title = studioTitleFrom(content, StudioArtifactType.BRIEFING, scopeLabel)
+                val title = studioTitleFrom(content, type, scopeLabel)
                 val id = studioRepo.put(
                     StudioArtifactEntity().apply {
                         this.projectId = projectId
-                        type = StudioArtifactType.BRIEFING.name
+                        this.type = type.name
                         this.title = title
                         this.content = content
                         this.sourceId = sourceId
@@ -959,7 +964,7 @@ class NativeLmViewModel(app: Application) : ViewModel() {
                     it.copy(
                         generating = false,
                         progress = null,
-                        open = StudioArtifactView(id, StudioArtifactType.BRIEFING, title, content, scopeLabel, now),
+                        open = StudioArtifactView(id, type, title, content, scopeLabel, now),
                     )
                 }
             } catch (c: CancellationException) {
@@ -1020,9 +1025,7 @@ class NativeLmViewModel(app: Application) : ViewModel() {
     fun regenerateArtifact(id: Long) {
         viewModelScope.launch {
             val a = studioRepo.get(id) ?: return@launch
-            when (StudioArtifactType.fromName(a.type)) {
-                StudioArtifactType.BRIEFING -> generateBriefing(a.sourceId)
-            }
+            generate(StudioArtifactType.fromName(a.type), a.sourceId)
         }
     }
 

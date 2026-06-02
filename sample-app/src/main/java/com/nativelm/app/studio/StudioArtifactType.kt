@@ -10,7 +10,8 @@ package com.nativelm.app.studio
  * easiest→hardest (see `docs/STUDIO_PLAN.md`); v1 ships [BRIEFING] only.
  */
 enum class StudioArtifactType(val label: String) {
-    BRIEFING("Briefing");
+    BRIEFING("Briefing"),
+    FAQ("FAQ");
 
     companion object {
         fun fromName(name: String): StudioArtifactType =

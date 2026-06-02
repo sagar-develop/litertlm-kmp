@@ -54,4 +54,20 @@ internal object StudioPrompts {
         append(digest.trim())
         append("\n--- DIGEST END ---\n")
     }
+
+    /** FINAL (FAQ): turn the digest into grounded question/answer pairs in markdown. */
+    fun faq(scopeLabel: String, digest: String): String = buildString {
+        append("You are writing a FAQ based ONLY on the digest of source material below ")
+        append("(scope: ").append(scopeLabel).append(").\n")
+        append("Produce 6 to 10 of the questions a reader is most likely to ask, each with a ")
+        append("concise, grounded answer. Format as **Markdown**:\n")
+        append("- Start each question with a \"### \" heading containing the question itself.\n")
+        append("- Put the answer in plain prose on the lines after the heading.\n")
+        append("Order from most to least important. Write numbers and units as plain text ")
+        append("(e.g. 9.5 g/dL, 68.3%) — never LaTeX or math notation.\n")
+        append("Use only information supported by the digest; do not invent facts. No preamble.\n\n")
+        append("--- DIGEST START ---\n")
+        append(digest.trim())
+        append("\n--- DIGEST END ---\n")
+    }
 }

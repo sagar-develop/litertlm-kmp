@@ -48,6 +48,21 @@ class StudioGenerator(
             .ifBlank { error("The model produced an empty briefing.") }
     }
 
+    /**
+     * Build a FAQ (markdown, `### question` headings) over [sources]. Same digest
+     * pipeline as [briefing]; only the final prompt differs.
+     */
+    suspend fun faq(
+        sources: List<Source>,
+        scopeLabel: String,
+        onProgress: (Progress) -> Unit,
+    ): String {
+        val digest = digest(sources, onProgress)
+        onProgress(Progress("Writing FAQ", 1, 1))
+        return llm(StudioPrompts.faq(scopeLabel, digest.take(MAX_DIGEST_CHARS)), FAQ_TOKENS)
+            .ifBlank { error("The model produced an empty FAQ.") }
+    }
+
     /** MAP + REDUCE: produce a single context-budget digest from all sources. */
     private suspend fun digest(sources: List<Source>, onProgress: (Progress) -> Unit): String {
         val windows = windows(sources)
@@ -138,5 +153,6 @@ class StudioGenerator(
         private const val MAX_DIGEST_CHARS = 4000
         private const val MAX_REDUCE_PASSES = 3
         private const val BRIEFING_TOKENS = 768
+        private const val FAQ_TOKENS = 1024
     }
 }

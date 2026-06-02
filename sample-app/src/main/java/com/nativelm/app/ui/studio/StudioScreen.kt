@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -27,12 +28,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -60,6 +64,9 @@ import com.nativelm.app.llm.NativeLmViewModel
 import com.nativelm.app.llm.StudioArtifactSummary
 import com.nativelm.app.llm.StudioArtifactView
 import com.nativelm.app.llm.StudioProgress
+import com.nativelm.app.studio.FaqItem
+import com.nativelm.app.studio.StudioArtifactType
+import com.nativelm.app.studio.parseFaq
 import com.nativelm.app.ui.chat.MarkdownText
 import com.nativelm.app.ui.theme.JetBrainsMono
 
@@ -89,7 +96,8 @@ fun StudioScreen(vm: NativeLmViewModel, onBack: () -> Unit) {
         return
     }
 
-    var showScope by remember { mutableStateOf(false) }
+    var showType by remember { mutableStateOf(false) }
+    var pendingType by remember { mutableStateOf<StudioArtifactType?>(null) }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -131,17 +139,17 @@ fun StudioScreen(vm: NativeLmViewModel, onBack: () -> Unit) {
             )
 
             Button(
-                onClick = { showScope = true },
+                onClick = { showType = true },
                 enabled = !studio.generating && documents.isNotEmpty(),
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Icon(Icons.Filled.AutoAwesome, contentDescription = null)
                 Spacer(Modifier.size(8.dp))
-                Text("Generate Briefing")
+                Text("Generate")
             }
             if (documents.isEmpty()) {
                 Text(
-                    "Import sources first to generate a briefing.",
+                    "Import sources first to generate an overview.",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 6.dp),
@@ -180,20 +188,52 @@ fun StudioScreen(vm: NativeLmViewModel, onBack: () -> Unit) {
         }
     }
 
-    if (showScope) {
+    if (showType) {
+        TypeDialog(
+            onDismiss = { showType = false },
+            onPick = { type ->
+                showType = false
+                pendingType = type
+            },
+        )
+    }
+
+    pendingType?.let { type ->
         ScopeDialog(
+            title = "${type.label} from…",
             sources = documents.map { it.id to it.title },
-            onDismiss = { showScope = false },
+            onDismiss = { pendingType = null },
             onPick = { sourceId ->
-                showScope = false
-                vm.generateBriefing(sourceId)
+                pendingType = null
+                vm.generate(type, sourceId)
             },
         )
     }
 }
 
 @Composable
+private fun TypeDialog(
+    onDismiss: () -> Unit,
+    onPick: (StudioArtifactType) -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        title = { Text("Generate…") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                StudioArtifactType.entries.forEach { type ->
+                    ScopeOption(type.label) { onPick(type) }
+                }
+            }
+        },
+    )
+}
+
+@Composable
 private fun ScopeDialog(
+    title: String,
     sources: List<Pair<Long, String>>,
     onDismiss: () -> Unit,
     onPick: (Long) -> Unit,
@@ -202,7 +242,7 @@ private fun ScopeDialog(
         onDismissRequest = onDismiss,
         confirmButton = {},
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-        title = { Text("Briefing from…") },
+        title = { Text(title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 ScopeOption("Whole project") { onPick(0L) }
@@ -370,9 +410,51 @@ private fun ArtifactViewer(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 8.dp),
         ) {
-            MarkdownText(markdown = artifact.content)
+            // FAQ renders as an expandable Q/A list; a degraded parse falls back to
+            // plain markdown so the user never loses the generated text.
+            val faq = if (artifact.type == StudioArtifactType.FAQ) parseFaq(artifact.content) else emptyList()
+            if (faq.isNotEmpty()) {
+                faq.forEach { item -> FaqRow(item) }
+            } else {
+                MarkdownText(markdown = artifact.content)
+            }
             Spacer(Modifier.height(32.dp))
         }
+    }
+}
+
+@Composable
+private fun FaqRow(item: FaqItem) {
+    var expanded by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxWidth()) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clickable { expanded = !expanded }
+                .padding(vertical = 12.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Text(
+                item.question,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f),
+            )
+            Icon(
+                if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                contentDescription = if (expanded) "Collapse" else "Expand",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (expanded && item.answer.isNotBlank()) {
+            MarkdownText(
+                markdown = item.answer,
+                modifier = Modifier.padding(bottom = 12.dp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
     }
 }
 
