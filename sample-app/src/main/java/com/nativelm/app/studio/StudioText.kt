@@ -49,9 +49,17 @@ internal fun sanitizeStudioMarkdown(raw: String): String {
     // 6. Thin/explicit spaces; LaTeX line break `\\` → newline.
     s = s.replace(Regex("\\\\[,;:! ]"), " ").replace("\\\\", "\n")
 
-    // 7. Super/subscripts.
+    // 6b. Natural-language math the model writes despite the prompt — normalise
+    //     conservatively (only adjacent to digits so prose isn't mangled):
+    //     "10 to the power of 6" → "10^6", "3.72 times 10" → "3.72 × 10",
+    //     "68.3 percent" → "68.3%". The "^6" is turned into a superscript in step 7.
+    s = s.replace(Regex("\\s*(?:raised\\s+)?to the power of\\s*", RegexOption.IGNORE_CASE), "^")
+    s = s.replace(Regex("(?<=[0-9)])\\s*times\\s*(?=[0-9])", RegexOption.IGNORE_CASE), " × ")
+    s = s.replace(Regex("(\\d(?:\\.\\d+)?)\\s*percent\\b", RegexOption.IGNORE_CASE), "$1%")
+
+    // 7. Super/subscripts (multi-digit exponents too, e.g. "^12").
     s = s.replace(Regex("\\^\\{([^{}]*)\\}")) { superscript(it.groupValues[1]) }
-    s = s.replace(Regex("\\^([0-9n+\\-])")) { superscript(it.groupValues[1]) }
+    s = s.replace(Regex("\\^([0-9n+\\-]+)")) { superscript(it.groupValues[1]) }
     s = s.replace(Regex("_\\{([^{}]*)\\}")) { it.groupValues[1] }
 
     // 8. Any leftover command: drop the backslash, keep the letters.

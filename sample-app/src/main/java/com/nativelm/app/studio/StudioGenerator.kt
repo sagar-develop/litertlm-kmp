@@ -78,6 +78,21 @@ class StudioGenerator(
             .ifBlank { error("The model produced no topics.") }
     }
 
+    /**
+     * Build a Study Guide (markdown, `## Key Terms` / `## Review Questions` sections)
+     * over [sources]. Same digest pipeline; only the final prompt differs.
+     */
+    suspend fun studyGuide(
+        sources: List<Source>,
+        scopeLabel: String,
+        onProgress: (Progress) -> Unit,
+    ): String {
+        val digest = digest(sources, onProgress)
+        onProgress(Progress("Writing study guide", 1, 1))
+        return llm(StudioPrompts.studyGuide(scopeLabel, digest.take(MAX_DIGEST_CHARS)), STUDY_GUIDE_TOKENS)
+            .ifBlank { error("The model produced an empty study guide.") }
+    }
+
     /** MAP + REDUCE: produce a single context-budget digest from all sources. */
     private suspend fun digest(sources: List<Source>, onProgress: (Progress) -> Unit): String {
         val windows = windows(sources)
@@ -170,5 +185,6 @@ class StudioGenerator(
         private const val BRIEFING_TOKENS = 768
         private const val FAQ_TOKENS = 1024
         private const val TOPICS_TOKENS = 768
+        private const val STUDY_GUIDE_TOKENS = 1280
     }
 }

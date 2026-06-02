@@ -67,8 +67,10 @@ import com.nativelm.app.llm.StudioArtifactView
 import com.nativelm.app.llm.StudioProgress
 import com.nativelm.app.studio.FaqItem
 import com.nativelm.app.studio.StudioArtifactType
+import com.nativelm.app.studio.TermItem
 import com.nativelm.app.studio.TopicItem
 import com.nativelm.app.studio.parseFaq
+import com.nativelm.app.studio.parseStudyGuide
 import com.nativelm.app.studio.parseTopics
 import com.nativelm.app.ui.chat.MarkdownText
 import com.nativelm.app.ui.theme.JetBrainsMono
@@ -441,6 +443,21 @@ private fun ArtifactViewer(
                         MarkdownText(artifact.content)
                     }
                 }
+                StudioArtifactType.STUDY_GUIDE -> {
+                    val guide = parseStudyGuide(artifact.content)
+                    if (guide != null) {
+                        if (guide.terms.isNotEmpty()) {
+                            SectionHeader("Key terms")
+                            guide.terms.forEach { TermDefRow(it) }
+                        }
+                        if (guide.questions.isNotEmpty()) {
+                            SectionHeader("Review questions")
+                            guide.questions.forEach { FaqRow(it) }
+                        }
+                    } else {
+                        MarkdownText(artifact.content)
+                    }
+                }
                 else -> MarkdownText(markdown = artifact.content)
             }
             Spacer(Modifier.height(32.dp))
@@ -521,6 +538,42 @@ private fun TopicRow(item: TopicItem, onAsk: () -> Unit) {
             )
         }
     }
+}
+
+@Composable
+private fun SectionHeader(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.SemiBold,
+        color = MaterialTheme.colorScheme.onSurface,
+        modifier = Modifier.padding(top = 16.dp, bottom = 4.dp),
+    )
+}
+
+@Composable
+private fun TermDefRow(item: TermItem) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+    ) {
+        Text(
+            item.term,
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        if (item.definition.isNotBlank()) {
+            Spacer(Modifier.height(2.dp))
+            Text(
+                item.definition,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 }
 
 @Composable

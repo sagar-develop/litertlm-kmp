@@ -11,6 +11,19 @@ package com.nativelm.app.studio
  */
 internal object StudioPrompts {
 
+    /**
+     * Shared number/unit formatting rule. Small models otherwise swing between two
+     * bad extremes — LaTeX (`$9.5 \text{g/dL}$`) or spelled-out words ("times 10 to
+     * the power of 6") — so we ask for compact Unicode and back it with
+     * [sanitizeStudioMarkdown].
+     */
+    private const val NUMBER_STYLE: String =
+        "Format numbers and units compactly with Unicode symbols: use × for multiplication, " +
+            "superscript digits (⁰¹²³⁴⁵⁶⁷⁸⁹) for powers, % for percent and µ for micro — " +
+            "e.g. \"3.72 ×10⁶/µL\", \"9.5 g/dL\", \"68.3%\". Do NOT spell these out as words " +
+            "(no \"times\", \"to the power of\", \"percent\") and do NOT use LaTeX or math notation " +
+            "(no \$, \\text, \\times, ^)."
+
     /** MAP: compress one window of a single source into a dense factual summary. */
     fun map(sourceTitle: String, windowText: String): String = buildString {
         append("You are summarizing part of a document titled \"")
@@ -18,7 +31,7 @@ internal object StudioPrompts {
         append("\" so it can later be combined with other parts.\n")
         append("Write a dense, factual summary of the excerpt below: keep names, numbers, ")
         append("dates, definitions, and conclusions; drop filler. Use plain prose, no preamble. ")
-        append("Write numbers and units as plain text (e.g. 9.5 g/dL, 68.3%) — never LaTeX or math notation.\n\n")
+        append(NUMBER_STYLE).append("\n\n")
         append("--- EXCERPT START ---\n")
         append(windowText.trim())
         append("\n--- EXCERPT END ---\n\n")
@@ -47,8 +60,7 @@ internal object StudioPrompts {
         append("- When the digest has several numeric results (measurements, metrics, line items), ")
         append("add a \"## Figures\" section presenting them as a GitHub-flavored Markdown table, e.g.:\n")
         append("  | Parameter | Value | Reference range |\n  | --- | --- | --- |\n  | Hemoglobin | 9.5 g/dL | 12.0 – 15.0 g/dL |\n")
-        append("Write numbers and units as plain text (e.g. 9.5 g/dL, 3.72 ×10⁶/cu.mm, 68.3%) — ")
-        append("NEVER use LaTeX or math notation (no \$, \\text, \\times, ^, \\%).\n")
+        append(NUMBER_STYLE).append("\n")
         append("Use only information supported by the digest; do not invent facts. No preamble before the title.\n\n")
         append("--- DIGEST START ---\n")
         append(digest.trim())
@@ -63,8 +75,7 @@ internal object StudioPrompts {
         append("concise, grounded answer. Format as **Markdown**:\n")
         append("- Start each question with a \"### \" heading containing the question itself.\n")
         append("- Put the answer in plain prose on the lines after the heading.\n")
-        append("Order from most to least important. Write numbers and units as plain text ")
-        append("(e.g. 9.5 g/dL, 68.3%) — never LaTeX or math notation.\n")
+        append("Order from most to least important. ").append(NUMBER_STYLE).append("\n")
         append("Use only information supported by the digest; do not invent facts. No preamble.\n\n")
         append("--- DIGEST START ---\n")
         append(digest.trim())
@@ -78,8 +89,24 @@ internal object StudioPrompts {
         append("List 5 to 8 distinct topics, most important first. Format as **Markdown**:\n")
         append("- Start each topic with a \"### \" heading containing a short topic name (2 to 5 words).\n")
         append("- On the next line, give a single-sentence description of what the sources say about it.\n")
-        append("Write numbers and units as plain text — never LaTeX or math notation.\n")
+        append(NUMBER_STYLE).append("\n")
         append("Use only information supported by the digest; do not invent topics. No preamble.\n\n")
+        append("--- DIGEST START ---\n")
+        append(digest.trim())
+        append("\n--- DIGEST END ---\n")
+    }
+
+    /** FINAL (Study Guide): a sectioned guide — key terms + definitions, review questions. */
+    fun studyGuide(scopeLabel: String, digest: String): String = buildString {
+        append("You are writing a study guide based ONLY on the digest of source material below ")
+        append("(scope: ").append(scopeLabel).append(").\n")
+        append("Use exactly these two Markdown sections, in this order:\n")
+        append("\"## Key Terms\" — then for each important term a \"### \" heading with the term, ")
+        append("followed by a one-sentence definition on the next line (8 to 12 terms).\n")
+        append("\"## Review Questions\" — then for each question a \"### \" heading with the question, ")
+        append("followed by a short model answer on the next line (5 to 8 questions).\n")
+        append(NUMBER_STYLE).append("\n")
+        append("Use only information supported by the digest; do not invent facts. No preamble.\n\n")
         append("--- DIGEST START ---\n")
         append(digest.trim())
         append("\n--- DIGEST END ---\n")
