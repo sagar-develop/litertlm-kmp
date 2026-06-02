@@ -36,6 +36,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
@@ -103,6 +104,7 @@ fun ChatScreen(
     onOpenSettings: () -> Unit,
     onOpenDocuments: () -> Unit,
     onOpenPdf: () -> Unit,
+    onOpenStudio: () -> Unit,
 ) {
     val chat by vm.chat.collectAsState()
     val activeModel by vm.activeModelName.collectAsState()
@@ -185,6 +187,9 @@ fun ChatScreen(
                     },
                     actions = {
                         if (projectName != null) {
+                            IconButton(onClick = onOpenStudio) {
+                                Icon(Icons.Filled.AutoAwesome, contentDescription = "Studio")
+                            }
                             IconButton(onClick = onOpenDocuments) {
                                 Icon(Icons.Filled.Description, contentDescription = "Sources")
                             }

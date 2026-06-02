@@ -214,10 +214,66 @@
         }
       ],
       "relations": []
+    },
+    {
+      "id": "6:1299178295424942462",
+      "lastPropertyId": "9:4450425583345816956",
+      "name": "StudioArtifactEntity",
+      "properties": [
+        {
+          "id": "1:8640836811952648693",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:2506329021715970487",
+          "name": "projectId",
+          "indexId": "7:537233441547839549",
+          "type": 6,
+          "flags": 8
+        },
+        {
+          "id": "3:6790844915683355454",
+          "name": "type",
+          "type": 9
+        },
+        {
+          "id": "4:1373203899534830454",
+          "name": "title",
+          "type": 9
+        },
+        {
+          "id": "5:8869318527913892442",
+          "name": "content",
+          "type": 9
+        },
+        {
+          "id": "6:1566243486315177594",
+          "name": "sourceId",
+          "type": 6
+        },
+        {
+          "id": "7:1922665026125414093",
+          "name": "scopeLabel",
+          "type": 9
+        },
+        {
+          "id": "8:4936157885263380239",
+          "name": "createdAt",
+          "type": 6
+        },
+        {
+          "id": "9:4450425583345816956",
+          "name": "updatedAt",
+          "type": 6
+        }
+      ],
+      "relations": []
     }
   ],
-  "lastEntityId": "5:485618447567748290",
-  "lastIndexId": "6:8852085121153424895",
+  "lastEntityId": "6:1299178295424942462",
+  "lastIndexId": "7:537233441547839549",
   "lastRelationId": "0:0",
   "lastSequenceId": "0:0",
   "modelVersion": 5,

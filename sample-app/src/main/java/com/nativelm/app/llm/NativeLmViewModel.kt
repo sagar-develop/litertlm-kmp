@@ -25,11 +25,17 @@ import com.nativelm.app.data.db.ConversationRepository
 import com.nativelm.app.data.db.DocumentEntity
 import com.nativelm.app.data.db.MessageEntity
 import com.nativelm.app.data.db.ProjectRepository
+import com.nativelm.app.data.db.StudioArtifactEntity
+import com.nativelm.app.data.db.StudioRepository
 import com.nativelm.app.metrics.MetricsRepository
 import com.nativelm.app.rag.Citation
 import com.nativelm.app.rag.CitationJson
 import com.nativelm.app.rag.IngestState
+import com.nativelm.app.studio.StudioArtifactType
+import com.nativelm.app.studio.StudioGenerator
+import com.nativelm.app.studio.sanitizeStudioMarkdown
 import io.github.aakira.napier.Napier
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -54,6 +60,7 @@ const val ROUTE_CHAT = "chat"
 const val ROUTE_SETTINGS = "settings"
 const val ROUTE_DOCUMENTS = "documents"
 const val ROUTE_PDF_VIEWER = "pdf_viewer"
+const val ROUTE_STUDIO = "studio"
 
 /** Per-model UI status derived from disk + active + in-flight download state. */
 sealed interface ModelStatus {
@@ -140,6 +147,38 @@ data class ProjectSummary(
     val updatedAt: Long,
 )
 
+/** A Studio artifact row for the Studio list. */
+data class StudioArtifactSummary(
+    val id: Long,
+    val type: StudioArtifactType,
+    val title: String,
+    val scopeLabel: String,
+    val createdAt: Long,
+)
+
+/** A Studio artifact opened in the viewer. */
+data class StudioArtifactView(
+    val id: Long,
+    val type: StudioArtifactType,
+    val title: String,
+    val content: String,
+    val scopeLabel: String,
+    val createdAt: Long,
+)
+
+/** Coarse progress of an in-flight Studio generation. */
+data class StudioProgress(val phase: String, val current: Int, val total: Int)
+
+/** UI state for the Studio screen of the open project. */
+data class StudioState(
+    val artifacts: List<StudioArtifactSummary> = emptyList(),
+    val generating: Boolean = false,
+    val progress: StudioProgress? = null,
+    /** Non-null when an artifact is open in the viewer. */
+    val open: StudioArtifactView? = null,
+    val error: String? = null,
+)
+
 class NativeLmViewModel(app: Application) : ViewModel() {
 
     private val engineHolder = EngineHolder(app)
@@ -148,6 +187,7 @@ class NativeLmViewModel(app: Application) : ViewModel() {
     private val secureStore = SecureStore(app)
     private val repo = ConversationRepository()
     private val projectRepo = ProjectRepository()
+    private val studioRepo = StudioRepository()
     private val catalog = NativeLmModelCatalog()
     val metrics = MetricsRepository()
 
@@ -217,7 +257,12 @@ class NativeLmViewModel(app: Application) : ViewModel() {
 
     private val downloadJobs = mutableMapOf<String, Job>()
     private var generationJob: Job? = null
+    private var studioJob: Job? = null
     private var nextChatMessageId = 0L
+
+    /** Studio (artifact generation) state for the open project. */
+    private val _studio = MutableStateFlow(StudioState())
+    val studio: StateFlow<StudioState> = _studio.asStateFlow()
 
     /** The live KV-cache chat session for the open conversation. */
     private var chatSession: ChatSession? = null
@@ -498,6 +543,7 @@ class NativeLmViewModel(app: Application) : ViewModel() {
     fun newChat() {
         generationJob?.cancel()
         generationJob = null
+        resetStudioState()
         metrics.tokens.requestEnded()
         _currentProjectId.value = 0L
         _currentProjectName.value = null
@@ -512,6 +558,7 @@ class NativeLmViewModel(app: Application) : ViewModel() {
         if (id == _currentConversationId.value && !_chat.value.isGenerating) return
         generationJob?.cancel()
         generationJob = null
+        resetStudioState()
         metrics.tokens.requestEnded()
         _currentProjectId.value = 0L
         _currentProjectName.value = null
@@ -720,6 +767,7 @@ class NativeLmViewModel(app: Application) : ViewModel() {
         viewModelScope.launch {
             repo.deleteForProject(id)
             ragHolder.deleteDocumentsOfProject(id)
+            studioRepo.deleteForProject(id)
             projectRepo.delete(id)
             if (id == _currentProjectId.value) newChat()
             refreshProjects()
@@ -731,6 +779,7 @@ class NativeLmViewModel(app: Application) : ViewModel() {
         val project = projectRepo.get(id) ?: return
         generationJob?.cancel()
         generationJob = null
+        resetStudioState()
         metrics.tokens.requestEnded()
         val convId = repo.firstForProject(id)?.id
             ?: repo.create(id, project.name, System.currentTimeMillis())
@@ -837,6 +886,181 @@ class NativeLmViewModel(app: Application) : ViewModel() {
         viewModelScope.launch { prefs.setThemeMode(mode) }
     }
 
+    // ---- Studio (artifact generation from a project's sources) ----
+
+    /** Open/refresh the Studio screen for the current project: reload its artifacts. */
+    fun openStudio() {
+        _studio.update { it.copy(error = null) }
+        refreshArtifacts()
+    }
+
+    private fun refreshArtifacts() {
+        val projectId = _currentProjectId.value
+        viewModelScope.launch {
+            val list = if (projectId <= 0L) {
+                emptyList()
+            } else {
+                studioRepo.list(projectId).map {
+                    StudioArtifactSummary(
+                        id = it.id,
+                        type = StudioArtifactType.fromName(it.type),
+                        title = it.title,
+                        scopeLabel = it.scopeLabel,
+                        createdAt = it.createdAt,
+                    )
+                }
+            }
+            _studio.update { it.copy(artifacts = list) }
+        }
+    }
+
+    /**
+     * Generate a Briefing artifact from the open project's sources via map-reduce.
+     * [sourceId] 0 = whole project, else a single source. Frees the chat session for
+     * the duration (LiteRT-LM allows one conversation per engine), then reopens it.
+     */
+    fun generateBriefing(sourceId: Long = 0L) {
+        val projectId = _currentProjectId.value
+        if (projectId <= 0L || _studio.value.generating) return
+        if (_engineLoad.value !is EngineLoad.Ready) {
+            _studio.update { it.copy(error = "Load a model first to use Studio.") }
+            return
+        }
+        val startConvId = _currentConversationId.value
+        studioJob?.cancel()
+        studioJob = viewModelScope.launch {
+            _studio.update { it.copy(generating = true, progress = StudioProgress("Preparing", 0, 0), error = null) }
+            chatSession?.close()
+            chatSession = null
+            try {
+                val sources = buildStudioSources(projectId, sourceId)
+                check(sources.isNotEmpty()) { "This project has no readable sources yet." }
+                val scopeLabel = studioScopeLabel(sourceId)
+                val generator = StudioGenerator { prompt, maxTokens -> studioOneShot(prompt, maxTokens) }
+                val content = generator.briefing(sources, scopeLabel) { p ->
+                    _studio.update { it.copy(progress = StudioProgress(p.phase, p.current, p.total)) }
+                }
+                val now = System.currentTimeMillis()
+                val title = studioTitleFrom(content, StudioArtifactType.BRIEFING, scopeLabel)
+                val id = studioRepo.put(
+                    StudioArtifactEntity().apply {
+                        this.projectId = projectId
+                        type = StudioArtifactType.BRIEFING.name
+                        this.title = title
+                        this.content = content
+                        this.sourceId = sourceId
+                        this.scopeLabel = scopeLabel
+                        createdAt = now
+                        updatedAt = now
+                    },
+                )
+                refreshArtifacts()
+                _studio.update {
+                    it.copy(
+                        generating = false,
+                        progress = null,
+                        open = StudioArtifactView(id, StudioArtifactType.BRIEFING, title, content, scopeLabel, now),
+                    )
+                }
+            } catch (c: CancellationException) {
+                _studio.update { it.copy(generating = false, progress = null) }
+                throw c
+            } catch (e: Exception) {
+                Napier.e("Studio briefing failed", e, tag = TAG)
+                _studio.update { it.copy(generating = false, progress = null, error = e.message ?: "Generation failed.") }
+            } finally {
+                // Reopen the chat session — but only if we're still on the same
+                // conversation (the user may have switched projects mid-generation).
+                if (_currentConversationId.value == startConvId && _engineLoad.value is EngineLoad.Ready) {
+                    openSession(_chat.value.messages, showWarming = false)
+                }
+            }
+        }
+    }
+
+    /** Cancel an in-flight Studio generation (the chat session is reopened by the job's finally). */
+    fun cancelStudio() {
+        studioJob?.cancel()
+        studioJob = null
+    }
+
+    /** Drop Studio state when the open conversation/project changes. */
+    private fun resetStudioState() {
+        studioJob?.cancel()
+        studioJob = null
+        _studio.value = StudioState()
+    }
+
+    fun openArtifact(id: Long) {
+        viewModelScope.launch {
+            val a = studioRepo.get(id) ?: return@launch
+            _studio.update {
+                it.copy(
+                    open = StudioArtifactView(
+                        a.id, StudioArtifactType.fromName(a.type), a.title, a.content, a.scopeLabel, a.createdAt,
+                    ),
+                )
+            }
+        }
+    }
+
+    fun closeArtifact() = _studio.update { it.copy(open = null) }
+
+    fun clearStudioError() = _studio.update { it.copy(error = null) }
+
+    fun deleteArtifact(id: Long) {
+        viewModelScope.launch {
+            studioRepo.delete(id)
+            _studio.update { if (it.open?.id == id) it.copy(open = null) else it }
+            refreshArtifacts()
+        }
+    }
+
+    /** Regenerate an artifact with the same type + scope (produces a fresh artifact). */
+    fun regenerateArtifact(id: Long) {
+        viewModelScope.launch {
+            val a = studioRepo.get(id) ?: return@launch
+            when (StudioArtifactType.fromName(a.type)) {
+                StudioArtifactType.BRIEFING -> generateBriefing(a.sourceId)
+            }
+        }
+    }
+
+    /** Build the per-source chunk text for map-reduce, grouped by document, in reading order. */
+    private suspend fun buildStudioSources(projectId: Long, sourceId: Long): List<StudioGenerator.Source> {
+        val titles = ragHolder.documents(projectId).associate { it.id to it.title }
+        return ragHolder.chunksForProject(projectId, sourceId)
+            .groupBy { it.documentId }
+            .map { (docId, list) ->
+                StudioGenerator.Source(
+                    title = titles[docId] ?: "Source",
+                    chunks = list.map { it.text },
+                )
+            }
+            .filter { src -> src.chunks.any { it.isNotBlank() } }
+    }
+
+    private suspend fun studioScopeLabel(sourceId: Long): String =
+        if (sourceId <= 0L) "Whole project" else ragHolder.document(sourceId)?.title ?: "Source"
+
+    /** Prefer the artifact's own H1 title; fall back to "<Type> · <scope>". */
+    private fun studioTitleFrom(content: String, type: StudioArtifactType, scopeLabel: String): String {
+        val h1 = content.lineSequence()
+            .map { it.trim() }
+            .firstOrNull { it.startsWith("# ") }
+            ?.removePrefix("# ")?.trim()
+        return (h1?.takeIf { it.isNotBlank() } ?: "${type.label} · $scopeLabel").take(80)
+    }
+
+    /** One-shot, stateless generation for Studio map-reduce; strips <think> spans + LaTeX. */
+    private suspend fun studioOneShot(prompt: String, maxTokens: Int): String {
+        val sb = StringBuilder()
+        engineHolder.generate(
+            AiEngineRequest(formattedPrompt = prompt, temperature = 0.3f, maxTokens = maxTokens),
+        ).collect { st -> if (st is EngineState.TokenGenerated<String>) sb.append(st.data) }
+        return sanitizeStudioMarkdown(renderAssistantText(sb.toString()).trim())
+    }
+
     fun clearAllData() {
         viewModelScope.launch {
             downloadJobs.values.forEach { it.cancel() }
@@ -849,11 +1073,14 @@ class NativeLmViewModel(app: Application) : ViewModel() {
             catalog.all().forEach { engineHolder.deleteModel(it.fileName) }
             secureStore.clearHfToken()
             _conversations.value.forEach { repo.delete(it.id) }
+            studioJob?.cancel()
             _projects.value.forEach { p ->
                 repo.deleteForProject(p.id)
                 ragHolder.deleteDocumentsOfProject(p.id)
+                studioRepo.deleteForProject(p.id)
                 projectRepo.delete(p.id)
             }
+            _studio.value = StudioState()
             ragHolder.deleteAllSourceFiles()
             _pdfViewTarget.value = null
             _currentProjectId.value = 0L

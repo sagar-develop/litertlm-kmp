@@ -53,6 +53,14 @@ interface DocumentRepository {
     /** Sources in [projectId], newest first. */
     suspend fun listDocuments(projectId: Long): List<DocumentEntity>
 
+    /**
+     * Every chunk in [projectId] (or just [documentId] when > 0), ordered by
+     * document then [DocumentChunkEntity.chunkIndex] so a source reads top-to-bottom.
+     * Backs Studio's map-reduce, which must see the *whole* source set rather than a
+     * top-k retrieval slice. Embeddings are not needed here.
+     */
+    suspend fun chunksForProject(projectId: Long, documentId: Long = 0): List<DocumentChunkEntity>
+
     /** Delete a document and all its chunks (tx-split). */
     suspend fun deleteDocument(documentId: Long)
 
