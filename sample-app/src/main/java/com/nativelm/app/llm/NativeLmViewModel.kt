@@ -16,6 +16,7 @@ import com.sagar.aicore.ChatTurn
 import com.sagar.aicore.DownloadState
 import com.sagar.aicore.EngineState
 import com.sagar.aicore.ModelDescriptor
+import com.sagar.aicore.Language
 import com.sagar.aicore.ModelRole
 import com.sagar.aicore.SessionState
 import com.sagar.aicore.TurnRole
@@ -278,6 +279,10 @@ class NativeLmViewModel(app: Application) : ViewModel() {
     val appLockEnabled: StateFlow<Boolean> =
         prefs.appLockEnabled.stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
+    /** The language the model answers in (prompt-only; works cross-lingual over English docs). */
+    val outputLanguage: StateFlow<Language> =
+        prefs.outputLanguage.stateIn(viewModelScope, SharingStarted.Eagerly, Language.DEFAULT)
+
     /** True while the app is locked and the [com.nativelm.app.ui.lock.LockScreen] should cover content. */
     private val _locked = MutableStateFlow(false)
     val locked: StateFlow<Boolean> = _locked.asStateFlow()
@@ -535,7 +540,7 @@ class NativeLmViewModel(app: Application) : ViewModel() {
             // RAG: when grounding is on, retrieve context, fold it into this turn's
             // prompt, and surface citations under the answer. Otherwise send only the
             // new message so the KV cache keeps TTFT flat.
-            val turnPrompt = ragTurnPrompt(input)
+            val turnPrompt = withLanguage(ragTurnPrompt(input))
             val request = AiEngineRequest(formattedPrompt = turnPrompt, temperature = 0.7f, maxTokens = 1024)
             // Accumulate the raw stream separately so we can hide reasoning models'
             // <think>…</think> span; the message text shows only the rendered answer.
@@ -679,7 +684,7 @@ class NativeLmViewModel(app: Application) : ViewModel() {
             val sb = StringBuilder()
             runCatching {
                 engineHolder.generate(
-                    AiEngineRequest(formattedPrompt = prompt, temperature = 0.3f, maxTokens = 24),
+                    AiEngineRequest(formattedPrompt = withLanguage(prompt), temperature = 0.3f, maxTokens = 24),
                 ).collect { st -> if (st is EngineState.TokenGenerated<String>) sb.append(st.data) }
             }
             val title = sb.toString()
@@ -947,6 +952,22 @@ class NativeLmViewModel(app: Application) : ViewModel() {
 
     fun setThemeMode(mode: ThemeMode) {
         viewModelScope.launch { prefs.setThemeMode(mode) }
+    }
+
+    fun setOutputLanguage(language: Language) {
+        viewModelScope.launch { prefs.setOutputLanguage(language) }
+    }
+
+    /**
+     * Append the output-language directive to a generation prompt. No-op for English (the
+     * model's default), so the common path stays clean; for other languages this is the
+     * one-line, prompt-only mechanism that makes the answer come out in [outputLanguage]
+     * (with strict-script emphasis for Kannada/Punjabi).
+     */
+    private fun withLanguage(prompt: String): String {
+        val lang = outputLanguage.value
+        if (lang == Language.ENGLISH) return prompt
+        return "$prompt\n\nOutput language: ${lang.outputDirective}."
     }
 
     // ---- Local encrypted backup (export / import) ----

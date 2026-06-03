@@ -90,6 +90,7 @@ import androidx.compose.ui.unit.dp
 import com.nativelm.app.llm.ChatMessage
 import com.nativelm.app.llm.ConversationSummary
 import com.nativelm.app.llm.NativeLmViewModel
+import com.nativelm.app.ui.settings.LanguagePickerSheet
 import com.nativelm.app.llm.ProjectSummary
 import com.nativelm.app.rag.Citation
 import com.nativelm.app.ui.theme.JetBrainsMono
@@ -112,6 +113,7 @@ fun ChatScreen(
     val currentId by vm.currentConversationId.collectAsState()
     val projects by vm.projects.collectAsState()
     val projectName by vm.currentProjectName.collectAsState()
+    val outputLanguage by vm.outputLanguage.collectAsState()
     val listState = rememberLazyListState()
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -121,6 +123,7 @@ fun ChatScreen(
     var saveSheetText by remember { mutableStateOf<String?>(null) }
     var newProjectName by remember { mutableStateOf<String?>(null) } // non-null => dialog open
     var pendingSaveText by remember { mutableStateOf<String?>(null) } // save after creating project
+    var showLanguagePicker by remember { mutableStateOf(false) }
 
     LaunchedEffect(chat.messages.size) {
         if (chat.messages.isNotEmpty()) listState.animateScrollToItem(0)
@@ -186,6 +189,15 @@ fun ChatScreen(
                         }
                     },
                     actions = {
+                        TextButton(
+                            onClick = { showLanguagePicker = true },
+                            contentPadding = PaddingValues(horizontal = 10.dp),
+                        ) {
+                            Text(
+                                outputLanguage.code.uppercase(),
+                                style = MaterialTheme.typography.labelLarge.copy(fontFamily = JetBrainsMono),
+                            )
+                        }
                         if (projectName != null) {
                             IconButton(onClick = onOpenStudio) {
                                 Icon(Icons.Filled.AutoAwesome, contentDescription = "Studio")
@@ -302,6 +314,14 @@ fun ChatScreen(
                 saveSheetText = null
                 newProjectName = ""
             },
+        )
+    }
+
+    if (showLanguagePicker) {
+        LanguagePickerSheet(
+            current = outputLanguage,
+            onSelect = vm::setOutputLanguage,
+            onDismiss = { showLanguagePicker = false },
         )
     }
 }
