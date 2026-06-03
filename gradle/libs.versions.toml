@@ -25,6 +25,7 @@ androidx-security-crypto = "1.1.0-alpha06"
 androidx-core-splashscreen = "1.0.1"
 objectbox = "5.4.2"
 pdfbox-android = "2.0.27.0"
+signal-argon2 = "13.1"
 junit = "4.13.2"
 
 [libraries]
@@ -64,6 +65,8 @@ objectbox-processor = { module = "io.objectbox:objectbox-processor", version.ref
 pdfbox-android = { module = "com.tom-roush:pdfbox-android", version.ref = "pdfbox-android" }
 # On-device OCR (bundled Latin model — runs locally, no Play Services download).
 mlkit-text-recognition = { module = "com.google.mlkit:text-recognition", version.ref = "mlkit-text-recognition" }
+# Argon2id (native, JNI) for passphrase-derived backup encryption keys. Standalone AAR, no transitive deps.
+signal-argon2 = { module = "org.signal:argon2", version.ref = "signal-argon2" }
 junit = { module = "junit:junit", version.ref = "junit" }
 
 [plugins]
@@ -73,5 +76,6 @@ kotlinMultiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref =
 kotlinAndroid = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 composeCompiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 kotlinKapt = { id = "org.jetbrains.kotlin.kapt", version.ref = "kotlin" }
+kotlinSerialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 objectbox = { id = "io.objectbox", version.ref = "objectbox" }

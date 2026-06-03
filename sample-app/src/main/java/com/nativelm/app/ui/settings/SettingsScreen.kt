@@ -133,6 +133,9 @@ fun SettingsScreen(
                 }
             }
 
+            Section("Backup")
+            BackupControls(vm)
+
             Section("About")
             ValueRow(label = "Version", value = BuildConfig.VERSION_NAME, mono = true)
             ValueRow(label = "License", value = "AGPL-3.0", mono = true)
