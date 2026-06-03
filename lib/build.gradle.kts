@@ -8,7 +8,7 @@ plugins {
 }
 
 group = "com.sagar"
-version = "0.6.0"
+version = "0.8.0"
 
 // Keep the published artifact id stable as "litertlm-kmp" even though the
 // Gradle module is now ":lib" (sample-app is a sibling subproject). Without

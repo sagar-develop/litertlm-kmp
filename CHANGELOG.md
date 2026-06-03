@@ -9,19 +9,21 @@ and the project loosely follows [Semantic Versioning](https://semver.org/).
 > `com.sagar:litertlm-kmp`) and the **showcase app** (`sample-app/`, NativeLM)
 > live in one repo and share a single version line. Entries below note which
 > surface a change lands on. The engine library version in
-> `lib/build.gradle.kts` tracks the latest release (`0.6.0`).
+> `lib/build.gradle.kts` tracks the latest release (`0.8.0`).
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-06-03
+
 ### Added
-- GitHub Actions CI workflow (`.github/workflows/ci.yml`) that builds the
-  library module (`:lib:assemble`) on pushes to `main` and on pull requests.
-- `CHANGELOG.md` (this file).
-- README: CI status badge and an Installation section pointing at JitPack.
+- **App lock** — optional biometric / device-credential gate to open the app (a UI lock; at-rest DB encryption deferred).
+- **Local encrypted backup** — export/import your whole knowledge base to a passphrase-encrypted `.nlmbak` file you control (Argon2id → AES-256-GCM). No server, no account, no key we hold.
+- **Local peer-to-peer sync** — beam your data device-to-device over Wi-Fi (NSD/mDNS + socket), GMS-free. No cloud.
+- **Multilingual answers** — pick the language the model answers in (English + Indian + global languages), prompt-only, including cross-lingual over English documents.
+- **On-device voice input** — dictate by voice, transcribed locally via Whisper (whisper.cpp); the Whisper model is a downloadable "Audio" entry in the model catalog.
 
 ### Changed
-- Engine library version bumped to `0.6.0` so `lib/build.gradle.kts` tracks the
-  unified release line (was `0.3.0`); README/doc version references aligned to match.
+- Engine library version bumped to `0.8.0`.
 
 ## [0.6.1] — 2026-06-03
 
@@ -116,7 +118,9 @@ and the project loosely follows [Semantic Versioning](https://semver.org/).
   with resume + SHA-256 validation, OEM-aware hardware-tier provider, and
   function-calling schema conversion (typed Kotlin → OpenAPI JSON).
 
-[Unreleased]: https://github.com/sagar-develop/litertlm-kmp/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/sagar-develop/litertlm-kmp/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/sagar-develop/litertlm-kmp/compare/v0.6.1...v0.8.0
+[0.6.1]: https://github.com/sagar-develop/litertlm-kmp/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/sagar-develop/litertlm-kmp/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/sagar-develop/litertlm-kmp/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/sagar-develop/litertlm-kmp/compare/v0.3.0...v0.4.0
