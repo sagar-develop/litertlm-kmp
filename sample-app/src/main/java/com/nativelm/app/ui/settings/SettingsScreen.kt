@@ -46,6 +46,7 @@ import com.nativelm.app.BuildConfig
 import com.nativelm.app.data.ThemeMode
 import com.nativelm.app.llm.NativeLmViewModel
 import com.nativelm.app.ui.lock.canAuthenticate
+import com.nativelm.app.ui.sync.SyncControls
 import com.nativelm.app.ui.theme.JetBrainsMono
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -169,6 +170,9 @@ fun SettingsScreen(
 
             Section("Backup")
             BackupControls(vm)
+
+            Section("Sync")
+            SyncControls(vm)
 
             Section("About")
             ValueRow(label = "Version", value = BuildConfig.VERSION_NAME, mono = true)
