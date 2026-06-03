@@ -132,6 +132,7 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.androidx.security.crypto)
+    implementation(libs.androidx.biometric)
     implementation(libs.androidx.core.splashscreen)
 
     // ObjectBox — multi-conversation persistence + document-chunk HNSW vector index.

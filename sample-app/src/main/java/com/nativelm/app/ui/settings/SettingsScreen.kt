@@ -27,6 +27,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -39,10 +40,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.nativelm.app.BuildConfig
 import com.nativelm.app.data.ThemeMode
 import com.nativelm.app.llm.NativeLmViewModel
+import com.nativelm.app.ui.lock.canAuthenticate
 import com.nativelm.app.ui.theme.JetBrainsMono
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -55,7 +58,11 @@ fun SettingsScreen(
     val themeMode by vm.themeMode.collectAsState()
     val activeModel by vm.activeModelName.collectAsState()
     val hasToken by vm.hasToken.collectAsState()
+    val appLockEnabled by vm.appLockEnabled.collectAsState()
     var confirmClear by remember { mutableStateOf(false) }
+
+    val context = LocalContext.current
+    val canAuth = remember { canAuthenticate(context) }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -115,6 +122,33 @@ fun SettingsScreen(
                     }
                 },
             )
+
+            Section("Security")
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Column(Modifier.weight(1f).padding(end = 12.dp)) {
+                    Text("App lock", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        if (canAuth) {
+                            "Require fingerprint, face, or your screen lock to open NativeLM."
+                        } else {
+                            "Set up a fingerprint or screen lock on your device to use this."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = appLockEnabled && canAuth,
+                    onCheckedChange = { vm.setAppLockEnabled(it) },
+                    enabled = canAuth,
+                )
+            }
 
             Section("Data")
             Row(
