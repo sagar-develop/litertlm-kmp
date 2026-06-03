@@ -129,7 +129,9 @@ class SyncManager(
             try {
                 _state.value = SyncState.Receiving(0)
                 val inFile = File(context.cacheDir, IN_NAME).also { receivedFile = it }
-                SocketTransfer.receiveFile(peer.host, peer.port, inFile) { received, total ->
+                // Connect on the agreed fixed port (peer.port from NSD is unreliable on some
+                // OEM mDNS daemons); discovery is used only to find peer.host.
+                SocketTransfer.receiveFile(peer.host, SocketTransfer.SYNC_PORT, inFile) { received, total ->
                     _state.value = SyncState.Receiving(percent(received, total))
                 }
                 nsd.stopDiscovery()

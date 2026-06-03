@@ -29,8 +29,21 @@ object SocketTransfer {
     /** A guard so a malformed/hostile length prefix can't trigger an unbounded allocation. */
     private const val MAX_BYTES = 2L * 1024 * 1024 * 1024 // 2 GB
 
-    /** Bind a server socket on an ephemeral port. The caller advertises [ServerSocket.getLocalPort]. */
-    fun openServerSocket(): ServerSocket = ServerSocket(0).apply { soTimeout = ACCEPT_TIMEOUT_MS }
+    /**
+     * Fixed transfer port. NSD/mDNS reliably resolves the peer's **host** but its **SRV
+     * port** is flaky on some OEM mDNS daemons (it can return a stale port from a previous
+     * advertisement → the receiver connects to a dead port and gets ECONNREFUSED). So both
+     * sides agree on this constant and discovery is used only to find the host. Each device
+     * runs a single app instance, so there's no same-device port contention.
+     */
+    const val SYNC_PORT = 47821
+
+    /** Bind the server socket on [SYNC_PORT] (SO_REUSEADDR so a quick re-send isn't blocked by TIME_WAIT). */
+    fun openServerSocket(): ServerSocket = ServerSocket().apply {
+        reuseAddress = true
+        bind(java.net.InetSocketAddress(SYNC_PORT))
+        soTimeout = ACCEPT_TIMEOUT_MS
+    }
 
     /**
      * Accept one inbound connection on [serverSocket] and stream [file] to it. Closes the
