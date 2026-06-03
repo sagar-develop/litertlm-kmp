@@ -60,7 +60,9 @@ fun SettingsScreen(
     val activeModel by vm.activeModelName.collectAsState()
     val hasToken by vm.hasToken.collectAsState()
     val appLockEnabled by vm.appLockEnabled.collectAsState()
+    val outputLanguage by vm.outputLanguage.collectAsState()
     var confirmClear by remember { mutableStateOf(false) }
+    var showLanguagePicker by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
     val canAuth = remember { canAuthenticate(context) }
@@ -111,6 +113,30 @@ fun SettingsScreen(
             Section("Models")
             NavRow(label = "Manage models", onClick = onOpenModels)
             ValueRow(label = "Active model", value = activeModel ?: "None")
+
+            Section("Language")
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clickable { showLanguagePicker = true }
+                    .padding(vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Column(Modifier.weight(1f).padding(end = 12.dp)) {
+                    Text("Answer language", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        "The AI answers in this language, even over English documents.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Text(
+                    outputLanguage.nativeName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
 
             Section("HuggingFace")
             ValueRow(
@@ -199,6 +225,14 @@ fun SettingsScreen(
                 }
             },
             dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("Cancel") } },
+        )
+    }
+
+    if (showLanguagePicker) {
+        LanguagePickerSheet(
+            current = outputLanguage,
+            onSelect = vm::setOutputLanguage,
+            onDismiss = { showLanguagePicker = false },
         )
     }
 }
