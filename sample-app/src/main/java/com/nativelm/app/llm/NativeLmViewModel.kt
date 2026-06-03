@@ -5,6 +5,7 @@
 package com.nativelm.app.llm
 
 import android.app.Application
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
@@ -18,9 +19,12 @@ import com.sagar.aicore.ModelDescriptor
 import com.sagar.aicore.ModelRole
 import com.sagar.aicore.SessionState
 import com.sagar.aicore.TurnRole
+import com.nativelm.app.BuildConfig
 import com.nativelm.app.data.AppPreferences
 import com.nativelm.app.data.SecureStore
 import com.nativelm.app.data.ThemeMode
+import com.nativelm.app.data.backup.BackupException
+import com.nativelm.app.data.backup.BackupManager
 import com.nativelm.app.data.db.ConversationRepository
 import com.nativelm.app.data.db.DocumentEntity
 import com.nativelm.app.data.db.MessageEntity
@@ -191,10 +195,12 @@ data class StudioState(
 
 class NativeLmViewModel(app: Application) : ViewModel() {
 
+    private val appContext: Application = app
     private val engineHolder = EngineHolder(app)
     private val ragHolder = RagHolder(app, engineHolder)
     private val prefs = AppPreferences(app)
     private val secureStore = SecureStore(app)
+    private val backupManager = BackupManager(app)
     private val repo = ConversationRepository()
     private val projectRepo = ProjectRepository()
     private val studioRepo = StudioRepository()
@@ -256,6 +262,10 @@ class NativeLmViewModel(app: Application) : ViewModel() {
     /** One-shot user message (e.g. "source not available"); cleared after shown. */
     private val _transientMessage = MutableStateFlow<String?>(null)
     val transientMessage: StateFlow<String?> = _transientMessage.asStateFlow()
+
+    /** Non-null progress label while a backup export/import runs; null when idle. */
+    private val _backupBusy = MutableStateFlow<String?>(null)
+    val backupBusy: StateFlow<String?> = _backupBusy.asStateFlow()
 
     val themeMode: StateFlow<ThemeMode> =
         prefs.themeMode.stateIn(viewModelScope, SharingStarted.Eagerly, ThemeMode.SYSTEM)
@@ -922,6 +932,52 @@ class NativeLmViewModel(app: Application) : ViewModel() {
     fun setThemeMode(mode: ThemeMode) {
         viewModelScope.launch { prefs.setThemeMode(mode) }
     }
+
+    // ---- Local encrypted backup (export / import) ----
+
+    /** Export the whole knowledge base to [uri] as an encrypted `.nlmbak`. Clears [passphrase]. */
+    fun exportBackup(uri: Uri, passphrase: CharArray) {
+        viewModelScope.launch {
+            _backupBusy.value = "Backing up…"
+            try {
+                appContext.contentResolver.openOutputStream(uri)?.use { out ->
+                    backupManager.export(out, passphrase, BuildConfig.VERSION_NAME, System.currentTimeMillis())
+                } ?: throw BackupException("Couldn't open the destination file.")
+                _transientMessage.value = "Backup saved."
+            } catch (e: Exception) {
+                android.util.Log.e(TAG, "Backup export failed", e)
+                _transientMessage.value = backupError(e)
+            } finally {
+                passphrase.fill(' ')
+                _backupBusy.value = null
+            }
+        }
+    }
+
+    /** Restore (additively) from the `.nlmbak` at [uri]. Clears [passphrase]. */
+    fun importBackup(uri: Uri, passphrase: CharArray) {
+        viewModelScope.launch {
+            _backupBusy.value = "Restoring…"
+            try {
+                val result = appContext.contentResolver.openInputStream(uri)?.use { input ->
+                    backupManager.import(input, passphrase, prefs)
+                } ?: throw BackupException("Couldn't open the backup file.")
+                refreshConversations()
+                refreshProjects()
+                _transientMessage.value =
+                    "Restored ${result.projects} project(s) and ${result.documents} source(s)."
+            } catch (e: Exception) {
+                android.util.Log.e(TAG, "Backup import failed", e)
+                _transientMessage.value = backupError(e)
+            } finally {
+                passphrase.fill(' ')
+                _backupBusy.value = null
+            }
+        }
+    }
+
+    private fun backupError(e: Exception): String =
+        (e as? BackupException)?.message ?: "Backup failed. Please try again."
 
     // ---- App lock ----
 

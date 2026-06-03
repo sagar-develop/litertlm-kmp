@@ -42,6 +42,21 @@
 -keep class com.google.crypto.tink.** { *; }
 -dontwarn com.google.crypto.tink.**
 
+# ---- Signal Argon2 (native JNI key derivation for encrypted backups) ----
+# Argon2Native.hash is a native method bound by JNI; keep the JNI surface so R8
+# doesn't strip the method/class the native library resolves by name.
+-keep class org.signal.argon2.** { *; }
+-dontwarn org.signal.argon2.**
+
+# ---- kotlinx.serialization (@Serializable backup DTOs) ----
+# Keep the generated $serializer + serializer() accessors for the backup models so
+# the minified release can encode/decode them.
+-keepclassmembers class com.nativelm.app.data.backup.** {
+    *** Companion;
+    kotlinx.serialization.KSerializer serializer(...);
+}
+-keep,includedescriptorclasses class com.nativelm.app.data.backup.**$$serializer { *; }
+
 # Keep ViewModel + Application entry points (instantiated reflectively).
 -keep class com.nativelm.app.SampleApplication { *; }
 -keep class com.nativelm.app.MainActivity { *; }

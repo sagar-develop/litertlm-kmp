@@ -6,6 +6,7 @@ plugins {
     alias(libs.plugins.kotlinAndroid)
     alias(libs.plugins.composeCompiler)
     alias(libs.plugins.kotlinKapt)
+    alias(libs.plugins.kotlinSerialization)
     // ObjectBox plugin must be applied AFTER the Kotlin plugins — it generates
     // MyObjectBox + the model from @Entity classes and wires the kapt processor.
     alias(libs.plugins.objectbox)
@@ -143,6 +144,8 @@ dependencies {
     implementation(libs.pdfbox.android)
     // ML Kit on-device OCR (bundled model) — text from scanned PDFs and images.
     implementation(libs.mlkit.text.recognition)
+    // Argon2id (native) — derives the AES key for encrypted local backups from a passphrase.
+    implementation(libs.signal.argon2)
 
     implementation(libs.kotlinx.coroutines.android)
     // Runtime-only JSON (no compiler plugin, matching :lib's usage) — used to

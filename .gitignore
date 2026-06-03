@@ -59,3 +59,7 @@ _session/
 
 # ObjectBox model backups
 *.bak
+
+# Local-only scratch (never commit)
+ANTIGRAVITY.md
+_testpdfs/
