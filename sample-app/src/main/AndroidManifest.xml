@@ -5,6 +5,13 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- ACCESS_NETWORK_STATE is merged in from :lib's manifest. -->
 
+    <!-- Local peer-to-peer sync (phone <-> tablet on the same Wi-Fi): NSD/mDNS
+         discovery needs a multicast lock; the transfer is a plain TCP socket on the
+         local network. No internet, no Play Services, no location permission — device
+         data moves directly between the user's own devices, never via a server. -->
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
     <!-- Android 11+ package visibility: bind to an on-device text-to-speech
          engine for Studio read-aloud (no network; speech stays on device). -->
     <queries>

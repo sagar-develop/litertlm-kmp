@@ -25,6 +25,9 @@ import com.nativelm.app.data.SecureStore
 import com.nativelm.app.data.ThemeMode
 import com.nativelm.app.data.backup.BackupException
 import com.nativelm.app.data.backup.BackupManager
+import com.nativelm.app.sync.SyncManager
+import com.nativelm.app.sync.SyncPeer
+import com.nativelm.app.sync.SyncState
 import com.nativelm.app.data.db.ConversationRepository
 import com.nativelm.app.data.db.DocumentEntity
 import com.nativelm.app.data.db.MessageEntity
@@ -201,6 +204,7 @@ class NativeLmViewModel(app: Application) : ViewModel() {
     private val prefs = AppPreferences(app)
     private val secureStore = SecureStore(app)
     private val backupManager = BackupManager(app)
+    private val syncManager = SyncManager(app, backupManager, prefs, viewModelScope)
     private val repo = ConversationRepository()
     private val projectRepo = ProjectRepository()
     private val studioRepo = StudioRepository()
@@ -329,6 +333,18 @@ class NativeLmViewModel(app: Application) : ViewModel() {
         refreshConversations()
         refreshProjects()
         viewModelScope.launch { decideStartRoute() }
+        // After a sync receive imports a bundle, refresh the drawer + projects so the
+        // restored chats/notebooks appear without a restart. Reference syncManager.state
+        // directly — the `syncState` property is declared later in the class and isn't
+        // assigned yet when this init block runs.
+        viewModelScope.launch {
+            syncManager.state.collect { state ->
+                if (state is SyncState.ReceiveComplete) {
+                    refreshConversations()
+                    refreshProjects()
+                }
+            }
+        }
     }
 
     private fun refreshConversations() {
@@ -978,6 +994,25 @@ class NativeLmViewModel(app: Application) : ViewModel() {
 
     private fun backupError(e: Exception): String =
         (e as? BackupException)?.message ?: "Backup failed. Please try again."
+
+    // ---- Local peer-to-peer sync (NSD/mDNS + socket; no cloud) ----
+
+    val syncState: StateFlow<SyncState> = syncManager.state
+
+    /** Begin advertising this device and serving an encrypted bundle to a peer that connects. */
+    fun startSyncSend() = syncManager.startSend(BuildConfig.VERSION_NAME)
+
+    /** Begin discovering nearby devices that are sending. */
+    fun startSyncReceive() = syncManager.startReceive()
+
+    /** Connect to a discovered sender and pull its bundle. */
+    fun connectSyncPeer(peer: SyncPeer) = syncManager.connectTo(peer)
+
+    /** Decrypt + import the received bundle using the code shown on the sender. */
+    fun importSyncReceived(code: CharArray) = syncManager.importReceived(code)
+
+    /** Stop any in-flight sync and reset. */
+    fun cancelSync() = syncManager.cancel()
 
     // ---- App lock ----
 
