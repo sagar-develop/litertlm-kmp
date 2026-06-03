@@ -46,6 +46,8 @@ import com.nativelm.app.studio.StudioArtifactType
 import com.nativelm.app.studio.StudioGenerator
 import com.nativelm.app.studio.TtsController
 import com.nativelm.app.studio.parsePodcast
+import com.nativelm.app.voice.AudioRecorder
+import com.nativelm.app.voice.WhisperSpeechToText
 import com.nativelm.app.studio.sanitizeStudioMarkdown
 import com.nativelm.app.studio.stripForSpeech
 import io.github.aakira.napier.Napier
@@ -79,6 +81,12 @@ const val ROUTE_STUDIO = "studio"
 /** Grace window before the app re-locks after going to the background (avoids
  *  re-prompting on quick returns like the system file picker). */
 private const val LOCK_GRACE_MS = 30_000L
+
+/** State of an in-progress voice-input dictation. */
+enum class VoiceState { Idle, Recording, Transcribing }
+
+/** Filename of the on-device Whisper voice model — must match its catalog descriptor. */
+const val WHISPER_FILE = "whisper-tiny-q5_1.bin"
 
 /** Per-model UI status derived from disk + active + in-flight download state. */
 sealed interface ModelStatus {
@@ -204,6 +212,12 @@ class NativeLmViewModel(app: Application) : ViewModel() {
     private val ragHolder = RagHolder(app, engineHolder)
     private val prefs = AppPreferences(app)
     private val secureStore = SecureStore(app)
+
+    // Voice input (on-device Whisper). The model downloads via the engine model manager.
+    private val audioRecorder = AudioRecorder()
+    private var speechToText: WhisperSpeechToText? = null
+    private val _voiceState = MutableStateFlow(VoiceState.Idle)
+    val voiceState: StateFlow<VoiceState> = _voiceState.asStateFlow()
     private val backupManager = BackupManager(app)
     private val syncManager = SyncManager(app, backupManager, prefs, viewModelScope)
     private val repo = ConversationRepository()
@@ -509,6 +523,61 @@ class NativeLmViewModel(app: Application) : ViewModel() {
     // ---- Chat ----
 
     fun setInput(text: String) = _chat.update { it.copy(input = text) }
+
+    // ---- Voice input (on-device Whisper speech-to-text) ----
+
+    /** True once the Whisper voice model has been downloaded. */
+    fun isVoiceModelReady(): Boolean = engineHolder.isModelDownloaded(WHISPER_FILE)
+
+    /**
+     * Tap the mic: if the Whisper model isn't downloaded yet, fetch it (with progress);
+     * otherwise start recording. Caller must hold RECORD_AUDIO.
+     */
+    fun startVoiceRecording() {
+        if (_voiceState.value != VoiceState.Idle) return
+        if (!engineHolder.isModelDownloaded(WHISPER_FILE)) {
+            _transientMessage.value = "Download the voice model in Settings → Models first."
+            return
+        }
+        runCatching { audioRecorder.start(viewModelScope) }
+            .onSuccess { _voiceState.value = VoiceState.Recording }
+            .onFailure { _transientMessage.value = "Couldn't start the microphone." }
+    }
+
+    fun cancelVoiceRecording() {
+        audioRecorder.cancel()
+        _voiceState.value = VoiceState.Idle
+    }
+
+    /** Stop recording, transcribe on-device, and put the text in the input field. */
+    fun stopVoiceAndTranscribe() {
+        if (_voiceState.value != VoiceState.Recording) return
+        _voiceState.value = VoiceState.Transcribing
+        viewModelScope.launch {
+            try {
+                val pcm = audioRecorder.stop()
+                if (pcm.isEmpty()) return@launch
+                val stt = speechToText
+                    ?: WhisperSpeechToText.fromModelFile(engineHolder.modelPath(WHISPER_FILE)).also { speechToText = it }
+                // Force Whisper to the selected answer language (the language chip): the
+                // tiny model's auto-detect is weak for non-English (it romanizes Hindi into
+                // gibberish), so honoring the user's choice gives correct native-script
+                // transcription. English speakers keep "en".
+                val text = stt.transcribe(pcm, languageCode = outputLanguage.value.code)
+                if (text.isNotBlank()) {
+                    val existing = _chat.value.input
+                    setInput(if (existing.isBlank()) text else "$existing $text")
+                } else {
+                    _transientMessage.value = "Didn't catch that — try again."
+                }
+            } catch (e: Throwable) {
+                android.util.Log.e(TAG, "Voice transcription failed", e)
+                _transientMessage.value = "Voice transcription failed."
+            } finally {
+                _voiceState.value = VoiceState.Idle
+            }
+        }
+    }
 
     fun sendChatMessage() {
         val input = _chat.value.input.trim()
@@ -1370,6 +1439,7 @@ class NativeLmViewModel(app: Application) : ViewModel() {
         "phi-4-mini-instruct-litertlm" -> "Phi-4 mini"
         "qwen3-4b-litertlm" -> "Qwen3 4B"
         "universal-sentence-encoder" -> "Universal Sentence Encoder"
+        "whisper-tiny-q5_1" -> "Whisper Tiny (voice input)"
         else -> d.fileName
     }
 

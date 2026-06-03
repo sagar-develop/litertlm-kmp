@@ -128,6 +128,19 @@ class NativeLmModelCatalog : ModelCatalog {
             minDeviceRamMb = 0,
             requiresAuth = false,
         ),
+        // ── Audio (voice input) — Whisper tiny, multilingual, q5_1 quantized (~31 MB).
+        // On-device speech-to-text via whisper.cpp; auto-detects the spoken language. ──
+        ModelDescriptor(
+            id = "whisper-tiny-q5_1",
+            url = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny-q5_1.bin",
+            fileName = "whisper-tiny-q5_1.bin",
+            sizeBytes = 32_152_673L,
+            sha256 = "818710568da3ca15689e31a743197b520007872ff9576237bda97bd1b469c3d7",
+            format = ModelFormat.WHISPER_GGML,
+            role = ModelRole.SPEECH_TO_TEXT,
+            minDeviceRamMb = 2000,
+            requiresAuth = false,
+        ),
     )
 
     override fun all(): List<ModelDescriptor> = entries

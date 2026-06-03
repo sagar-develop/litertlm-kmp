@@ -12,6 +12,10 @@
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+    <!-- Voice input: record dictated audio for on-device (Whisper) speech-to-text.
+         Audio is transcribed locally and never leaves the device. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
     <!-- Android 11+ package visibility: bind to an on-device text-to-speech
          engine for Studio read-aloud (no network; speech stays on device). -->
     <queries>

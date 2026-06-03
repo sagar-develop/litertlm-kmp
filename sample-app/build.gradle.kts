@@ -114,6 +114,15 @@ android {
             }
         }
     }
+
+    // Whisper (on-device speech-to-text) — builds libwhisper.so from the whisper.cpp
+    // submodule via CMake. arm64-v8a only (matches abiFilters above).
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
+    }
 }
 
 dependencies {

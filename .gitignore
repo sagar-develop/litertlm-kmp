@@ -63,3 +63,7 @@ _session/
 # Local-only scratch (never commit)
 ANTIGRAVITY.md
 _testpdfs/
+
+# Native build cache (CMake/NDK)
+sample-app/.cxx/
+.cxx/

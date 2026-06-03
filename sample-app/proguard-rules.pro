@@ -57,6 +57,13 @@
 }
 -keep,includedescriptorclasses class com.nativelm.app.data.backup.**$$serializer { *; }
 
+# ---- Whisper JNI (on-device speech-to-text) ----
+# libwhisper.so resolves the native methods by their mangled Kotlin names
+# (Java_com_nativelm_app_voice_WhisperNative_00024Companion_*), so the class +
+# its companion's native methods must not be renamed or stripped.
+-keep class com.nativelm.app.voice.WhisperNative { *; }
+-keep class com.nativelm.app.voice.WhisperNative$Companion { *; }
+
 # Keep ViewModel + Application entry points (instantiated reflectively).
 -keep class com.nativelm.app.SampleApplication { *; }
 -keep class com.nativelm.app.MainActivity { *; }
