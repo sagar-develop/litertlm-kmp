@@ -44,6 +44,8 @@ enum class ModelFormat {
     LITERTLM,
     /** MediaPipe Tasks Text Embedder `.tflite` (universal sentence encoder). */
     MEDIAPIPE_TEXT_EMBEDDER,
+    /** Whisper GGML/GGUF weights for on-device speech-to-text (whisper.cpp). */
+    WHISPER_GGML,
 }
 
 enum class ModelRole {
@@ -51,6 +53,12 @@ enum class ModelRole {
     LLM_PRIMARY,
     /** Embedding model for RAG retrieval. */
     EMBEDDING,
+    /**
+     * Speech-to-text (voice input). The "Audio" model category — a Whisper model used to
+     * transcribe dictated audio entirely on-device. Surfaced as its own group in model UIs
+     * and downloaded on first use of voice input.
+     */
+    SPEECH_TO_TEXT,
 }
 
 interface ModelCatalog {

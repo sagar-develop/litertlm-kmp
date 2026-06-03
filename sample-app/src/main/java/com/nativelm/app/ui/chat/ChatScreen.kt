@@ -89,7 +89,16 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.nativelm.app.llm.ChatMessage
 import com.nativelm.app.llm.ConversationSummary
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.core.content.ContextCompat
 import com.nativelm.app.llm.NativeLmViewModel
+import com.nativelm.app.llm.VoiceState
 import com.nativelm.app.ui.settings.LanguagePickerSheet
 import com.nativelm.app.llm.ProjectSummary
 import com.nativelm.app.rag.Citation
@@ -124,6 +133,11 @@ fun ChatScreen(
     var newProjectName by remember { mutableStateOf<String?>(null) } // non-null => dialog open
     var pendingSaveText by remember { mutableStateOf<String?>(null) } // save after creating project
     var showLanguagePicker by remember { mutableStateOf(false) }
+    val voiceState by vm.voiceState.collectAsState()
+    val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) vm.startVoiceRecording()
+        else Toast.makeText(context, "Microphone permission is needed for voice input.", Toast.LENGTH_SHORT).show()
+    }
 
     LaunchedEffect(chat.messages.size) {
         if (chat.messages.isNotEmpty()) listState.animateScrollToItem(0)
@@ -146,6 +160,18 @@ fun ChatScreen(
             Toast.makeText(context, "Saved to $projectName", Toast.LENGTH_SHORT).show()
         } else {
             saveSheetText = text
+        }
+    }
+
+    fun toggleMic() {
+        when (voiceState) {
+            VoiceState.Recording -> vm.stopVoiceAndTranscribe()
+            VoiceState.Transcribing -> Unit
+            VoiceState.Idle -> {
+                val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+                    PackageManager.PERMISSION_GRANTED
+                if (granted) vm.startVoiceRecording() else micPermission.launch(Manifest.permission.RECORD_AUDIO)
+            }
         }
     }
 
@@ -250,9 +276,11 @@ fun ChatScreen(
                     value = chat.input,
                     generating = chat.isGenerating,
                     canSend = activeModel != null && !chat.isWarming,
+                    voiceState = voiceState,
                     onValueChange = vm::setInput,
                     onSend = vm::sendChatMessage,
                     onStop = vm::stopGeneration,
+                    onMicToggle = { toggleMic() },
                 )
             }
         }
@@ -792,9 +820,11 @@ private fun InputBar(
     value: String,
     generating: Boolean,
     canSend: Boolean,
+    voiceState: VoiceState,
     onValueChange: (String) -> Unit,
     onSend: () -> Unit,
     onStop: () -> Unit,
+    onMicToggle: () -> Unit,
 ) {
     Surface(color = MaterialTheme.colorScheme.background) {
         Row(
@@ -806,16 +836,36 @@ private fun InputBar(
                 value = value,
                 onValueChange = onValueChange,
                 enabled = !generating && canSend,
-                placeholder = { Text("Message NativeLM…") },
+                placeholder = {
+                    val hint = when (voiceState) {
+                        VoiceState.Recording -> "Listening…"
+                        VoiceState.Transcribing -> "Transcribing…"
+                        VoiceState.Idle -> "Message NativeLM…"
+                    }
+                    Text(hint)
+                },
                 shape = RoundedCornerShape(24.dp),
                 modifier = Modifier.weight(1f),
             )
-            if (generating) {
-                FilledIconButton(onClick = onStop) { Icon(Icons.Filled.Stop, contentDescription = "Stop") }
-            } else {
-                FilledIconButton(onClick = onSend, enabled = canSend && value.isNotBlank()) {
-                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send")
-                }
+            when {
+                generating ->
+                    FilledIconButton(onClick = onStop) { Icon(Icons.Filled.Stop, contentDescription = "Stop") }
+                value.isNotBlank() ->
+                    FilledIconButton(onClick = onSend, enabled = canSend) {
+                        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send")
+                    }
+                voiceState == VoiceState.Transcribing ->
+                    FilledIconButton(onClick = {}, enabled = false) {
+                        CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                    }
+                voiceState == VoiceState.Recording ->
+                    FilledIconButton(onClick = onMicToggle) {
+                        Icon(Icons.Filled.Stop, contentDescription = "Stop recording")
+                    }
+                else ->
+                    FilledIconButton(onClick = onMicToggle, enabled = canSend) {
+                        Icon(Icons.Filled.Mic, contentDescription = "Dictate")
+                    }
             }
         }
     }

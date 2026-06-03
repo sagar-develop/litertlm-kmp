@@ -72,6 +72,7 @@ fun ModelManagementScreen(
 
     val llms = models.filter { it.descriptor.role == ModelRole.LLM_PRIMARY }
     val embedders = models.filter { it.descriptor.role == ModelRole.EMBEDDING }
+    val audio = models.filter { it.descriptor.role == ModelRole.SPEECH_TO_TEXT }
     val context = LocalContext.current
     var licensePrompt by remember { mutableStateOf<ModelUi?>(null) }
     // Gated models need their HF license accepted with the token's account;
@@ -142,6 +143,21 @@ fun ModelManagementScreen(
             }
             items(embedders, key = { it.descriptor.id }) { model ->
                 ModelCard(model, vm, onDownloadRequest)
+            }
+
+            if (audio.isNotEmpty()) {
+                item {
+                    SectionHeader("Audio")
+                    Text(
+                        "for voice input (speech-to-text, on-device)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 4.dp, bottom = 4.dp),
+                    )
+                }
+                items(audio, key = { it.descriptor.id }) { model ->
+                    ModelCard(model, vm, onDownloadRequest)
+                }
             }
         }
     }
