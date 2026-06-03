@@ -68,6 +68,10 @@ const val ROUTE_DOCUMENTS = "documents"
 const val ROUTE_PDF_VIEWER = "pdf_viewer"
 const val ROUTE_STUDIO = "studio"
 
+/** Grace window before the app re-locks after going to the background (avoids
+ *  re-prompting on quick returns like the system file picker). */
+private const val LOCK_GRACE_MS = 30_000L
+
 /** Per-model UI status derived from disk + active + in-flight download state. */
 sealed interface ModelStatus {
     data object NotDownloaded : ModelStatus
@@ -256,6 +260,17 @@ class NativeLmViewModel(app: Application) : ViewModel() {
     val themeMode: StateFlow<ThemeMode> =
         prefs.themeMode.stateIn(viewModelScope, SharingStarted.Eagerly, ThemeMode.SYSTEM)
 
+    /** Whether the user has enabled biometric / device-credential app lock. */
+    val appLockEnabled: StateFlow<Boolean> =
+        prefs.appLockEnabled.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    /** True while the app is locked and the [com.nativelm.app.ui.lock.LockScreen] should cover content. */
+    private val _locked = MutableStateFlow(false)
+    val locked: StateFlow<Boolean> = _locked.asStateFlow()
+
+    /** When the app last entered the background, for the lock grace window. */
+    private var lastBackgroundedAt = 0L
+
     /** Friendly name of the active LLM, shown in the chat top bar. */
     val activeModelName: StateFlow<String?> = _activeModelId
         .map { id -> id?.let { catalog.byId(it) }?.let(::displayName) }
@@ -318,6 +333,10 @@ class NativeLmViewModel(app: Application) : ViewModel() {
             _startRoute.value = ROUTE_ONBOARDING
             return
         }
+        // Apply the app lock before any content is shown. The splash is held until
+        // startRoute resolves (below), so setting this first guarantees the lock
+        // screen covers the app from the very first frame.
+        if (prefs.appLockEnabled.first()) _locked.value = true
         val selectedId = prefs.selectedModelId.first()
         val descriptor = selectedId?.let { catalog.byId(it) }
         _startRoute.value = if (descriptor != null && engineHolder.isModelDownloaded(descriptor.fileName)) {
@@ -902,6 +921,36 @@ class NativeLmViewModel(app: Application) : ViewModel() {
 
     fun setThemeMode(mode: ThemeMode) {
         viewModelScope.launch { prefs.setThemeMode(mode) }
+    }
+
+    // ---- App lock ----
+
+    fun setAppLockEnabled(enabled: Boolean) {
+        viewModelScope.launch { prefs.setAppLockEnabled(enabled) }
+    }
+
+    /** Called by the lock screen once biometric / device-credential auth succeeds. */
+    fun onUnlocked() {
+        _locked.value = false
+    }
+
+    /** App moved to the background: stamp the time so we can re-lock after a grace window. */
+    fun onEnterBackground() {
+        lastBackgroundedAt = System.currentTimeMillis()
+    }
+
+    /**
+     * App returned to the foreground. Re-lock only if lock is enabled and the app was
+     * backgrounded for longer than [LOCK_GRACE_MS] — the grace window avoids re-prompting
+     * on quick returns (e.g. the system file picker during import/export).
+     */
+    fun onEnterForeground() {
+        if (appLockEnabled.value &&
+            lastBackgroundedAt > 0L &&
+            System.currentTimeMillis() - lastBackgroundedAt > LOCK_GRACE_MS
+        ) {
+            _locked.value = true
+        }
     }
 
     // ---- Studio (artifact generation from a project's sources) ----

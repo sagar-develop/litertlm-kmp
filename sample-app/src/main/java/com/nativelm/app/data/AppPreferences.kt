@@ -41,6 +41,10 @@ class AppPreferences(private val context: Context) {
             }
         }
 
+    /** Whether biometric / device-credential app lock is required to open the app. */
+    val appLockEnabled: Flow<Boolean> =
+        context.dataStore.data.map { it[KEY_APP_LOCK] ?: false }
+
     suspend fun setOnboardingCompleted(done: Boolean) {
         context.dataStore.edit { it[KEY_ONBOARDING] = done }
     }
@@ -55,6 +59,10 @@ class AppPreferences(private val context: Context) {
         context.dataStore.edit { it[KEY_THEME] = mode.name.lowercase() }
     }
 
+    suspend fun setAppLockEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_APP_LOCK] = enabled }
+    }
+
     suspend fun clearAll() {
         context.dataStore.edit { it.clear() }
     }
@@ -63,5 +71,6 @@ class AppPreferences(private val context: Context) {
         val KEY_ONBOARDING = booleanPreferencesKey("onboarding_completed")
         val KEY_SELECTED_MODEL = stringPreferencesKey("selected_model_id")
         val KEY_THEME = stringPreferencesKey("theme_mode")
+        val KEY_APP_LOCK = booleanPreferencesKey("app_lock_enabled")
     }
 }
