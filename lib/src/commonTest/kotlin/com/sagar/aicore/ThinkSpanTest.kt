@@ -2,10 +2,10 @@
  * Copyright (C) 2026 Sagar Gupta
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
-package com.nativelm.app.llm
+package com.sagar.aicore
 
-import org.junit.Assert.assertEquals
-import org.junit.Test
+import kotlin.test.Test
+import kotlin.test.assertEquals
 
 class ThinkSpanTest {
 
@@ -24,18 +24,19 @@ class ThinkSpanTest {
     }
 
     @Test fun openThinkStillStreamingShowsNothing() {
-        // Mid-reasoning: block opened, not yet closed → empty (bubble shows typing dots).
         assertEquals("", renderAssistantText("<think> still reasoning about the question"))
     }
 
     @Test fun partialOpeningTagShowsNothing() {
-        // The opening tag itself streams in token-by-token.
         assertEquals("", renderAssistantText("<thi"))
         assertEquals("", renderAssistantText("<think"))
     }
 
     @Test fun nonThinkAngleBracketAnswerIsKept() {
-        // An answer that legitimately starts with '<' must not be suppressed.
         assertEquals("<html> tag example", renderAssistantText("<html> tag example"))
+    }
+
+    @Test fun customTagsAreHonored() {
+        assertEquals("answer", renderAssistantText("<reason>x</reason>answer", openTag = "<reason>", closeTag = "</reason>"))
     }
 }

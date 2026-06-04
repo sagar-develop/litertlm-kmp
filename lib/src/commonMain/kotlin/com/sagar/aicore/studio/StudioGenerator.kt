@@ -21,6 +21,10 @@ package com.sagar.aicore.studio
 class StudioGenerator(
     /** One-shot, stateless generation: prompt + token cap → full decoded text. */
     private val llm: suspend (prompt: String, maxTokens: Int) -> String,
+    /** Prompt templates (override to retune tone/wording/language). */
+    private val prompts: StudioPrompts = DefaultStudioPrompts,
+    /** Map-reduce sizing + per-artifact token budgets. */
+    private val config: StudioConfig = StudioConfig(),
 ) {
 
     /** A source and its chunk texts in reading order. */
@@ -44,7 +48,7 @@ class StudioGenerator(
     ): String {
         val digest = digest(sources, onProgress)
         onProgress(Progress("Writing briefing", 1, 1))
-        return llm(StudioPrompts.briefing(scopeLabel, digest.take(MAX_DIGEST_CHARS)), BRIEFING_TOKENS)
+        return llm(prompts.briefing(scopeLabel, digest.take(config.maxDigestChars)), config.briefingTokens)
             .ifBlank { error("The model produced an empty briefing.") }
     }
 
@@ -59,7 +63,7 @@ class StudioGenerator(
     ): String {
         val digest = digest(sources, onProgress)
         onProgress(Progress("Writing FAQ", 1, 1))
-        return llm(StudioPrompts.faq(scopeLabel, digest.take(MAX_DIGEST_CHARS)), FAQ_TOKENS)
+        return llm(prompts.faq(scopeLabel, digest.take(config.maxDigestChars)), config.faqTokens)
             .ifBlank { error("The model produced an empty FAQ.") }
     }
 
@@ -74,7 +78,7 @@ class StudioGenerator(
     ): String {
         val digest = digest(sources, onProgress)
         onProgress(Progress("Finding topics", 1, 1))
-        return llm(StudioPrompts.keyTopics(scopeLabel, digest.take(MAX_DIGEST_CHARS)), TOPICS_TOKENS)
+        return llm(prompts.keyTopics(scopeLabel, digest.take(config.maxDigestChars)), config.topicsTokens)
             .ifBlank { error("The model produced no topics.") }
     }
 
@@ -89,7 +93,7 @@ class StudioGenerator(
     ): String {
         val digest = digest(sources, onProgress)
         onProgress(Progress("Writing study guide", 1, 1))
-        return llm(StudioPrompts.studyGuide(scopeLabel, digest.take(MAX_DIGEST_CHARS)), STUDY_GUIDE_TOKENS)
+        return llm(prompts.studyGuide(scopeLabel, digest.take(config.maxDigestChars)), config.studyGuideTokens)
             .ifBlank { error("The model produced an empty study guide.") }
     }
 
@@ -106,9 +110,9 @@ class StudioGenerator(
     ): String {
         val digest = digest(sources, onProgress)
         onProgress(Progress("Building timeline", 1, 1))
-        val content = llm(StudioPrompts.timeline(scopeLabel, digest.take(MAX_DIGEST_CHARS)), TIMELINE_TOKENS)
+        val content = llm(prompts.timeline(scopeLabel, digest.take(config.maxDigestChars)), config.timelineTokens)
             .ifBlank { error("The model produced an empty timeline.") }
-        if (content.contains(StudioPrompts.NO_DATES) || parseTimeline(content).isEmpty()) {
+        if (content.contains(prompts.noDates) || parseTimeline(content).isEmpty()) {
             error("These sources don't have enough dated events for a timeline. Try a Briefing or FAQ instead.")
         }
         return content
@@ -126,7 +130,7 @@ class StudioGenerator(
     ): String {
         val digest = digest(sources, onProgress)
         onProgress(Progress("Building mind map", 1, 1))
-        return llm(StudioPrompts.mindMap(scopeLabel, digest.take(MAX_DIGEST_CHARS)), MIND_MAP_TOKENS)
+        return llm(prompts.mindMap(scopeLabel, digest.take(config.maxDigestChars)), config.mindMapTokens)
             .ifBlank { error("The model produced an empty mind map.") }
     }
 
@@ -142,7 +146,7 @@ class StudioGenerator(
     ): String {
         val digest = digest(sources, onProgress)
         onProgress(Progress("Writing audio overview", 1, 1))
-        return llm(StudioPrompts.audioOverview(scopeLabel, digest.take(MAX_DIGEST_CHARS)), AUDIO_OVERVIEW_TOKENS)
+        return llm(prompts.audioOverview(scopeLabel, digest.take(config.maxDigestChars)), config.audioOverviewTokens)
             .ifBlank { error("The model produced an empty audio overview.") }
     }
 
@@ -158,7 +162,7 @@ class StudioGenerator(
     ): String {
         val digest = digest(sources, onProgress)
         onProgress(Progress("Writing podcast", 1, 1))
-        return llm(StudioPrompts.podcast(scopeLabel, digest.take(MAX_DIGEST_CHARS)), PODCAST_TOKENS)
+        return llm(prompts.podcast(scopeLabel, digest.take(config.maxDigestChars)), config.podcastTokens)
             .ifBlank { error("The model produced an empty podcast script.") }
     }
 
@@ -168,13 +172,13 @@ class StudioGenerator(
         check(windows.isNotEmpty()) { "These sources have no extractable text yet." }
 
         // MAP — summarize each window. A lone short window needs no compression.
-        if (windows.size == 1 && windows.first().text.length <= MAP_WINDOW_CHARS) {
+        if (windows.size == 1 && windows.first().text.length <= config.mapWindowChars) {
             return windows.first().text
         }
         val summaries = ArrayList<String>(windows.size)
         windows.forEachIndexed { i, w ->
             onProgress(Progress("Summarizing sources", i + 1, windows.size))
-            llm(StudioPrompts.map(w.sourceTitle, w.text), MAP_TOKENS)
+            llm(prompts.map(w.sourceTitle, w.text), config.mapTokens)
                 .trim()
                 .takeIf { it.isNotBlank() }
                 ?.let { summaries.add(it) }
@@ -185,21 +189,21 @@ class StudioGenerator(
         // groups summaries into context-sized batches; a single pass usually suffices.
         var current = summaries
         var pass = 0
-        while (current.joinToString("\n\n").length > MAX_DIGEST_CHARS && current.size > 1 && pass < MAX_REDUCE_PASSES) {
+        while (current.joinToString("\n\n").length > config.maxDigestChars && current.size > 1 && pass < config.maxReducePasses) {
             pass++
-            val groups = groupByBudget(current, REDUCE_GROUP_CHARS)
+            val groups = groupByBudget(current, config.reduceGroupChars)
             if (groups.size == current.size) break // no progress possible — stop folding
             val folded = ArrayList<String>(groups.size)
             groups.forEachIndexed { i, group ->
                 onProgress(Progress("Combining summaries", i + 1, groups.size))
-                folded.add(llm(StudioPrompts.reduce(group), REDUCE_TOKENS).trim())
+                folded.add(llm(prompts.reduce(group), config.reduceTokens).trim())
             }
             current = folded
         }
         return current.joinToString("\n\n")
     }
 
-    /** Pack each source's chunks into ≤ [MAP_WINDOW_CHARS] windows; never cross a source. */
+    /** Pack each source's chunks into ≤ [config.mapWindowChars] windows; never cross a source. */
     private fun windows(sources: List<Source>): List<Window> {
         val out = ArrayList<Window>()
         for (src in sources) {
@@ -211,13 +215,13 @@ class StudioGenerator(
             for (chunk in src.chunks) {
                 val text = chunk.trim()
                 if (text.isEmpty()) continue
-                if (text.length >= MAP_WINDOW_CHARS) {
+                if (text.length >= config.mapWindowChars) {
                     // Oversized single chunk: flush what we have, then hard-split it.
                     flush()
-                    text.chunked(MAP_WINDOW_CHARS).forEach { out.add(Window(src.title, it)) }
+                    text.chunked(config.mapWindowChars).forEach { out.add(Window(src.title, it)) }
                     continue
                 }
-                if (buf.length + text.length + 2 > MAP_WINDOW_CHARS) flush()
+                if (buf.length + text.length + 2 > config.mapWindowChars) flush()
                 if (buf.isNotEmpty()) buf.append("\n\n")
                 buf.append(text)
             }
@@ -244,20 +248,4 @@ class StudioGenerator(
         return groups
     }
 
-    companion object {
-        private const val MAP_WINDOW_CHARS = 3000
-        private const val MAP_TOKENS = 256
-        private const val REDUCE_GROUP_CHARS = 3500
-        private const val REDUCE_TOKENS = 384
-        private const val MAX_DIGEST_CHARS = 4000
-        private const val MAX_REDUCE_PASSES = 3
-        private const val BRIEFING_TOKENS = 768
-        private const val FAQ_TOKENS = 1024
-        private const val TOPICS_TOKENS = 768
-        private const val STUDY_GUIDE_TOKENS = 1280
-        private const val TIMELINE_TOKENS = 1280
-        private const val MIND_MAP_TOKENS = 1024
-        private const val AUDIO_OVERVIEW_TOKENS = 1024
-        private const val PODCAST_TOKENS = 1536
-    }
 }

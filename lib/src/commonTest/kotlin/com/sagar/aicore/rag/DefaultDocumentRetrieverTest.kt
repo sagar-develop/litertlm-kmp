@@ -56,12 +56,12 @@ class DefaultDocumentRetrieverTest {
     }
 
     @Test fun farHitsWithNoKeywordMatchAreEmpty() = runTest {
-        val r = DefaultDocumentRetriever(embedder, FakeStore(listOf(scored(0.9), scored(0.95))), maxDistance = 0.5)
+        val r = DefaultDocumentRetriever(embedder, FakeStore(listOf(scored(0.9), scored(0.95))), config = RagConfig(relevanceMaxDistance = 0.5))
         assertTrue(r.retrieve(1, "off topic").isEmpty)
     }
 
     @Test fun nearVectorHitsAreKept() = runTest {
-        val r = DefaultDocumentRetriever(embedder, FakeStore(listOf(scored(0.2, id = 1), scored(0.9, id = 2))), maxDistance = 0.5)
+        val r = DefaultDocumentRetriever(embedder, FakeStore(listOf(scored(0.2, id = 1), scored(0.9, id = 2))), config = RagConfig(relevanceMaxDistance = 0.5))
         val ctx = r.retrieve(1, "on topic")
         assertFalse(ctx.isEmpty)
         assertEquals(1, ctx.citations.size)
@@ -74,7 +74,7 @@ class DefaultDocumentRetrieverTest {
                 hits = listOf(scored(0.9, id = 1)),
                 keyword = listOf(storedChunk(5, "the project codename is ZEPHYR NINE")),
             ),
-            maxDistance = 0.5,
+            config = RagConfig(relevanceMaxDistance = 0.5),
         )
         val ctx = r.retrieve(1, "what is zephyr nine")
         assertFalse(ctx.isEmpty)

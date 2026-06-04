@@ -38,10 +38,10 @@ object SocketTransfer {
      */
     const val SYNC_PORT = 47821
 
-    /** Bind the server socket on [SYNC_PORT] (SO_REUSEADDR so a quick re-send isn't blocked by TIME_WAIT). */
-    fun openServerSocket(): ServerSocket = ServerSocket().apply {
+    /** Bind the server socket on [port] (SO_REUSEADDR so a quick re-send isn't blocked by TIME_WAIT). */
+    fun openServerSocket(port: Int = SYNC_PORT): ServerSocket = ServerSocket().apply {
         reuseAddress = true
-        bind(java.net.InetSocketAddress(SYNC_PORT))
+        bind(java.net.InetSocketAddress(port))
         soTimeout = ACCEPT_TIMEOUT_MS
     }
 

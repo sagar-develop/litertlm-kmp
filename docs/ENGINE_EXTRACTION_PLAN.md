@@ -94,6 +94,26 @@ pervasive entity→DTO rewrite of the ViewModel for **speculative API with no co
 Do it when a real engine-side consumer appears (the natural trigger is the backup-codec
 extraction in Phase 3), so the contract is shaped by an actual caller.
 
+## Configurability — domain tunables externalized  ✅ DONE
+
+Once the engine owned RAG + Studio, it also carried that logic's *tuning* as
+hardcoded constants and prompt text — opinions a consumer couldn't change without
+forking. Those are now externalized as config objects (current values kept as
+defaults, so every existing call site is unchanged):
+
+- **`RagConfig`** — chunk size/overlap, relevance-distance gate, vector/keyword pool
+  sizes, max context chars. `DefaultDocumentRetriever(…, config = RagConfig())`.
+- **`StudioConfig`** — map-reduce window/group sizes, reduce passes, and per-artifact
+  token budgets. `StudioGenerator(llm, prompts, config = StudioConfig())`.
+- **`StudioPrompts`** is now an **interface** (`DefaultStudioPrompts` ships the
+  wording) so a consumer can fully override prompt tone/language/instructions.
+- **`renderAssistantText(raw, openTag, closeTag)`** — reasoning-span delimiters are
+  overridable (default `<think>`/`</think>`).
+- **`SocketTransfer.openServerSocket(port = SYNC_PORT)`** — sync port overridable.
+
+What remains intentionally hardcoded: the `InMemoryModelCatalog` sample (consumers
+supply their own `ModelCatalog`) and the `Language` strict-script table.
+
 ---
 
 ## Stays in the app (by design)

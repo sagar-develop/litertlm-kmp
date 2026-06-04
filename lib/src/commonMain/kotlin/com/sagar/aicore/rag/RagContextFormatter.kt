@@ -22,13 +22,17 @@ object RagContextFormatter {
     private const val SNIPPET_LEN = 140
     private const val DEDUP_KEY_LEN = 120
 
-    fun format(chunks: List<ScoredChunk>, titleOf: (Long) -> String): RetrievedContext {
+    fun format(
+        chunks: List<ScoredChunk>,
+        maxContextChars: Int = MAX_CONTEXT_CHARS,
+        titleOf: (Long) -> String,
+    ): RetrievedContext {
         if (chunks.isEmpty()) return RetrievedContext.EMPTY
 
         val seen = HashSet<String>()
         val sb = StringBuilder().append(START_MARKER).append('\n')
         val citations = ArrayList<Citation>()
-        var budget = MAX_CONTEXT_CHARS
+        var budget = maxContextChars
 
         for (scored in chunks) {
             val chunk = scored.chunk

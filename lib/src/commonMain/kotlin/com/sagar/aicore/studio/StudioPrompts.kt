@@ -4,18 +4,47 @@
  */
 package com.sagar.aicore.studio
 
+/** Sentinel the model is asked to emit when the sources contain no dated events. */
+const val STUDIO_NO_DATES: String = "NO_DATES"
+
 /**
- * Prompt templates for Studio's map-reduce. Kept pure (no engine, no Android) so
- * they're easy to read and tweak. Each artifact type adds a final-stage prompt;
- * the map (summarize a window) and reduce (combine summaries) prompts are shared.
+ * Prompt set for Studio's map-reduce. An interface so a consumer can override the
+ * wording (tone, language, artifact instructions) without forking the engine;
+ * [DefaultStudioPrompts] is the shipped implementation. [StudioGenerator] calls
+ * these and never embeds prompt text itself.
  */
-internal object StudioPrompts {
+interface StudioPrompts {
+    /** MAP: compress one window of a single source into a dense factual summary. */
+    fun map(sourceTitle: String, windowText: String): String
+
+    /** REDUCE: fold several partial summaries into one shorter combined summary. */
+    fun reduce(summaries: List<String>): String
+
+    fun briefing(scopeLabel: String, digest: String): String
+    fun faq(scopeLabel: String, digest: String): String
+    fun keyTopics(scopeLabel: String, digest: String): String
+    fun studyGuide(scopeLabel: String, digest: String): String
+    fun timeline(scopeLabel: String, digest: String): String
+    fun mindMap(scopeLabel: String, digest: String): String
+    fun audioOverview(scopeLabel: String, digest: String): String
+    fun podcast(scopeLabel: String, digest: String): String
+
+    /** The sentinel a timeline prompt asks for when no dated events exist. */
+    val noDates: String get() = STUDIO_NO_DATES
+}
+
+/**
+ * Default prompt templates. Kept pure (no engine, no Android) so they're easy to
+ * read and tweak. Each artifact type adds a final-stage prompt; the map (summarize
+ * a window) and reduce (combine summaries) prompts are shared.
+ */
+object DefaultStudioPrompts : StudioPrompts {
 
     /**
      * Shared number/unit formatting rule. Small models otherwise swing between two
      * bad extremes — LaTeX (`$9.5 \text{g/dL}$`) or spelled-out words ("times 10 to
      * the power of 6") — so we ask for compact Unicode and back it with
-     * [sanitizeStudioMarkdown].
+     * `sanitizeStudioMarkdown`.
      */
     private const val NUMBER_STYLE: String =
         "Format numbers and units compactly with Unicode symbols: use × for multiplication, " +
@@ -24,8 +53,7 @@ internal object StudioPrompts {
             "(no \"times\", \"to the power of\", \"percent\") and do NOT use LaTeX or math notation " +
             "(no \$, \\text, \\times, ^)."
 
-    /** MAP: compress one window of a single source into a dense factual summary. */
-    fun map(sourceTitle: String, windowText: String): String = buildString {
+    override fun map(sourceTitle: String, windowText: String): String = buildString {
         append("You are summarizing part of a document titled \"")
         append(sourceTitle)
         append("\" so it can later be combined with other parts.\n")
@@ -38,8 +66,7 @@ internal object StudioPrompts {
         append("Summary:")
     }
 
-    /** REDUCE: fold several partial summaries into one shorter combined summary. */
-    fun reduce(summaries: List<String>): String = buildString {
+    override fun reduce(summaries: List<String>): String = buildString {
         append("Combine the partial summaries below into one coherent, non-repetitive summary. ")
         append("Preserve key facts, names, numbers and conclusions; merge overlaps. Plain prose, no preamble.\n\n")
         summaries.forEachIndexed { i, s ->
@@ -48,8 +75,7 @@ internal object StudioPrompts {
         append("Combined summary:")
     }
 
-    /** FINAL (Briefing): turn the reduced digest into an executive briefing in markdown. */
-    fun briefing(scopeLabel: String, digest: String): String = buildString {
+    override fun briefing(scopeLabel: String, digest: String): String = buildString {
         append("You are writing an executive briefing based ONLY on the digest of source material below ")
         append("(scope: ").append(scopeLabel).append(").\n")
         append("Write clear, well-structured **Markdown**:\n")
@@ -67,8 +93,7 @@ internal object StudioPrompts {
         append("\n--- DIGEST END ---\n")
     }
 
-    /** FINAL (FAQ): turn the digest into grounded question/answer pairs in markdown. */
-    fun faq(scopeLabel: String, digest: String): String = buildString {
+    override fun faq(scopeLabel: String, digest: String): String = buildString {
         append("You are writing a FAQ based ONLY on the digest of source material below ")
         append("(scope: ").append(scopeLabel).append(").\n")
         append("Produce 6 to 10 of the questions a reader is most likely to ask, each with a ")
@@ -82,8 +107,7 @@ internal object StudioPrompts {
         append("\n--- DIGEST END ---\n")
     }
 
-    /** FINAL (Key Topics): cluster the digest into themes, each with a one-line description. */
-    fun keyTopics(scopeLabel: String, digest: String): String = buildString {
+    override fun keyTopics(scopeLabel: String, digest: String): String = buildString {
         append("You are identifying the key topics covered by the source material in the ")
         append("digest below (scope: ").append(scopeLabel).append(").\n")
         append("List 5 to 8 distinct topics, most important first. Format as **Markdown**:\n")
@@ -96,8 +120,7 @@ internal object StudioPrompts {
         append("\n--- DIGEST END ---\n")
     }
 
-    /** FINAL (Study Guide): a sectioned guide — key terms + definitions, review questions. */
-    fun studyGuide(scopeLabel: String, digest: String): String = buildString {
+    override fun studyGuide(scopeLabel: String, digest: String): String = buildString {
         append("You are writing a study guide based ONLY on the digest of source material below ")
         append("(scope: ").append(scopeLabel).append(").\n")
         append("Use exactly these two Markdown sections, in this order:\n")
@@ -112,11 +135,7 @@ internal object StudioPrompts {
         append("\n--- DIGEST END ---\n")
     }
 
-    /** Sentinel the model is asked to emit when the sources contain no dated events. */
-    const val NO_DATES: String = "NO_DATES"
-
-    /** FINAL (Timeline): extract dated events from the digest into chronological order. */
-    fun timeline(scopeLabel: String, digest: String): String = buildString {
+    override fun timeline(scopeLabel: String, digest: String): String = buildString {
         append("You are extracting a chronological timeline of events from the digest of source ")
         append("material below (scope: ").append(scopeLabel).append(").\n")
         append("Find the events that have a date or time and list them earliest first. Format as **Markdown**:\n")
@@ -126,15 +145,14 @@ internal object StudioPrompts {
         append("- On the next line, a one to two sentence description of what happened.\n")
         append("Order strictly from earliest to latest. Use only events supported by the digest; ")
         append("do not invent dates. ").append(NUMBER_STYLE).append("\n")
-        append("If the sources contain no dated events at all, reply with exactly: ").append(NO_DATES).append("\n")
+        append("If the sources contain no dated events at all, reply with exactly: ").append(noDates).append("\n")
         append("No preamble before the first heading.\n\n")
         append("--- DIGEST START ---\n")
         append(digest.trim())
         append("\n--- DIGEST END ---\n")
     }
 
-    /** FINAL (Mind Map): a nested indented-bullet outline → parsed into a node graph. */
-    fun mindMap(scopeLabel: String, digest: String): String = buildString {
+    override fun mindMap(scopeLabel: String, digest: String): String = buildString {
         append("You are building a mind map of the source material in the digest below ")
         append("(scope: ").append(scopeLabel).append(").\n")
         append("Output ONLY a nested outline as an indented Markdown bullet list — nothing else:\n")
@@ -152,13 +170,7 @@ internal object StudioPrompts {
         append("\n--- DIGEST END ---\n")
     }
 
-    /**
-     * FINAL (Audio Overview): a single-narrator spoken script — written for the ear,
-     * not the eye. Deliberately omits [NUMBER_STYLE]: this is read aloud, so numbers
-     * should be spelled the way they're spoken, and there is no Markdown to sanitize.
-     * Studio Step 7 (single-voice now; a two-host conversation can layer on later).
-     */
-    fun audioOverview(scopeLabel: String, digest: String): String = buildString {
+    override fun audioOverview(scopeLabel: String, digest: String): String = buildString {
         append("You are writing the script for a short spoken audio overview, based ONLY on the ")
         append("digest of source material below (scope: ").append(scopeLabel).append(").\n")
         append("A single narrator will READ THIS ALOUD, so write for the ear, not the eye:\n")
@@ -180,13 +192,7 @@ internal object StudioPrompts {
         append("\n--- DIGEST END ---\n")
     }
 
-    /**
-     * FINAL (Podcast): a two-host conversational script — Studio Step 7b. Strict
-     * "Name:" line prefixes so [parsePodcast] can split it into turns, each spoken by
-     * one of two distinct on-device voices. Like [audioOverview] it is written for the
-     * ear (spoken prose, no Markdown, spoken numbers).
-     */
-    fun podcast(scopeLabel: String, digest: String): String = buildString {
+    override fun podcast(scopeLabel: String, digest: String): String = buildString {
         append("You are writing the script for a short two-host audio podcast that explains the ")
         append("source material in the digest below (scope: ").append(scopeLabel).append(").\n")
         append("The two hosts are Alex and Sam. Write a natural, friendly conversation in which ")

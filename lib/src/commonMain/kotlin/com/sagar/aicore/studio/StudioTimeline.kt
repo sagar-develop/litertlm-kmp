@@ -15,12 +15,12 @@ private val TL_BOLD_LEAD = Regex("^\\*\\*(.+?)\\*\\*\\s*[:—\\-]*\\s*(.*)$")
  * Tolerantly parse a Timeline into ordered events. Primary form is `### <date>`
  * headings (level-1 `#` title lines are ignored) with the description on the lines
  * below; falls back to "- **date** — event" / "- date: event" bullets. Returns an
- * empty list when nothing usable parsed (or the model emitted [StudioPrompts.NO_DATES]),
+ * empty list when nothing usable parsed (or the model emitted [STUDIO_NO_DATES]),
  * so the caller can degrade to plain markdown or suggest a different artifact.
  */
 fun parseTimeline(content: String): List<TimelineEvent> {
     val text = content.trim()
-    if (text.isEmpty() || text.equals(StudioPrompts.NO_DATES, ignoreCase = true)) return emptyList()
+    if (text.isEmpty() || text.equals(STUDIO_NO_DATES, ignoreCase = true)) return emptyList()
 
     val items = ArrayList<TimelineEvent>()
     var head: String? = null
