@@ -4,6 +4,7 @@
  */
 package com.nativelm.app.ui.models
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,6 +19,8 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
@@ -71,9 +74,18 @@ fun ModelManagementScreen(
     val activeId by vm.activeModelId.collectAsState()
 
     val llms = models.filter { it.descriptor.role == ModelRole.LLM_PRIMARY }
+    // Split the chat models by whether they need a Hugging Face account. The
+    // ungated (Apache-2.0 / MIT) models download with no token — the friction-free
+    // path for a fresh install — so they lead. The gated Gemma tier sits behind a
+    // collapsed "Advanced" section together with the token field.
+    val recommendedLlms = llms.filter { !it.descriptor.requiresAuth }
+    val advancedLlms = llms.filter { it.descriptor.requiresAuth }
     val embedders = models.filter { it.descriptor.role == ModelRole.EMBEDDING }
     val audio = models.filter { it.descriptor.role == ModelRole.SPEECH_TO_TEXT }
+    val recommendedId = vm.recommendedModelId
+
     val context = LocalContext.current
+    var advancedExpanded by remember { mutableStateOf(hasToken) }
     var licensePrompt by remember { mutableStateOf<ModelUi?>(null) }
     // Gated models need their HF license accepted with the token's account;
     // intercept the download to remind the user (with a link) rather than letting
@@ -125,17 +137,23 @@ fun ModelManagementScreen(
             contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            item { TokenCard(hasToken = hasToken, onSave = vm::setToken, onClear = vm::clearToken) }
-
-            item { SectionHeader("Language models") }
-            items(llms, key = { it.descriptor.id }) { model ->
-                ModelCard(model, vm, onDownloadRequest)
+            item {
+                SectionHeader("Recommended")
+                Text(
+                    "Free, open models — no account needed. Downloads start right away.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 4.dp, bottom = 4.dp),
+                )
+            }
+            items(recommendedLlms, key = { it.descriptor.id }) { model ->
+                ModelCard(model, vm, onDownloadRequest, recommended = model.descriptor.id == recommendedId)
             }
 
             item {
                 SectionHeader("Document / RAG models")
                 Text(
-                    "for upcoming document chat",
+                    "for document chat (Projects)",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(start = 4.dp, bottom = 4.dp),
@@ -157,6 +175,21 @@ fun ModelManagementScreen(
                 }
                 items(audio, key = { it.descriptor.id }) { model ->
                     ModelCard(model, vm, onDownloadRequest)
+                }
+            }
+
+            if (advancedLlms.isNotEmpty()) {
+                item {
+                    AdvancedHeader(
+                        expanded = advancedExpanded,
+                        onToggle = { advancedExpanded = !advancedExpanded },
+                    )
+                }
+                if (advancedExpanded) {
+                    item { TokenCard(hasToken = hasToken, onSave = vm::setToken, onClear = vm::clearToken) }
+                    items(advancedLlms, key = { it.descriptor.id }) { model ->
+                        ModelCard(model, vm, onDownloadRequest)
+                    }
                 }
             }
         }
@@ -200,6 +233,36 @@ private fun SectionHeader(text: String) {
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(top = 8.dp, start = 4.dp, bottom = 4.dp),
     )
+}
+
+/** Collapsible header for the gated (Hugging Face account) tier. */
+@Composable
+private fun AdvancedHeader(expanded: Boolean, onToggle: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onToggle)
+            .padding(top = 8.dp, start = 4.dp, end = 4.dp, bottom = 4.dp),
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = "ADVANCED — HUGGING FACE ACCOUNT",
+                style = MaterialTheme.typography.labelMedium.copy(fontFamily = JetBrainsMono),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                "Gemma models. Free, but need a Hugging Face account + token and a one-time license accept.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Icon(
+            imageVector = if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+            contentDescription = if (expanded) "Collapse" else "Expand",
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -272,7 +335,12 @@ private fun TokenCard(hasToken: Boolean, onSave: (String) -> Unit, onClear: () -
 }
 
 @Composable
-private fun ModelCard(model: ModelUi, vm: NativeLmViewModel, onDownload: (ModelUi) -> Unit) {
+private fun ModelCard(
+    model: ModelUi,
+    vm: NativeLmViewModel,
+    onDownload: (ModelUi) -> Unit,
+    recommended: Boolean = false,
+) {
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         modifier = Modifier.fillMaxWidth(),
@@ -284,12 +352,19 @@ private fun ModelCard(model: ModelUi, vm: NativeLmViewModel, onDownload: (ModelU
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Column(Modifier.weight(1f)) {
-                    Text(
-                        model.displayName,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = if (model.supported) MaterialTheme.colorScheme.onSurface
-                        else MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            model.displayName,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = if (model.supported) MaterialTheme.colorScheme.onSurface
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        if (recommended && model.supported) {
+                            androidx.compose.foundation.layout.Box(Modifier.padding(start = 8.dp)) {
+                                AssistBadge("Recommended")
+                            }
+                        }
+                    }
                     Spacer(Modifier.height(2.dp))
                     Text(
                         metadataLine(model),

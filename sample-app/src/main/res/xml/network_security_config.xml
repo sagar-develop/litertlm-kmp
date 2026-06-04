@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Zero cleartext over the platform HTTP stack. The only network the app does
+  through it is model downloads, which are HTTPS (Hugging Face / Google CDNs),
+  so cleartext is disabled outright — this both hardens the app and signals to
+  Play that no plaintext HTTP is used.
+
+  Local peer-to-peer sync is NOT affected: it uses raw java.net.Socket
+  (see sync/SocketTransfer.kt), which is not governed by this policy, and the
+  bytes on that socket are already AES-GCM ciphertext regardless.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+</network-security-config>
