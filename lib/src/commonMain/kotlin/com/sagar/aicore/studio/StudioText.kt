@@ -20,10 +20,11 @@ fun sanitizeStudioMarkdown(raw: String): String {
 
     // 1. Unwrap math delimiters, keeping the inner text. Inline `$…$` is not allowed
     //    to cross a newline so a stray `$` can't swallow a paragraph.
-    s = s.replace(Regex("\\$\\$(.+?)\\$\\$", RegexOption.DOT_MATCHES_ALL)) { it.groupValues[1] }
+    //    `[\s\S]` = "any char incl. newline" (DOTALL is JVM-only RegexOption, not in commonMain).
+    s = s.replace(Regex("\\$\\$([\\s\\S]+?)\\$\\$")) { it.groupValues[1] }
     s = s.replace(Regex("(?<!\\\\)\\$([^$\\n]+?)(?<!\\\\)\\$")) { it.groupValues[1] }
-    s = s.replace(Regex("\\\\\\((.+?)\\\\\\)", RegexOption.DOT_MATCHES_ALL)) { it.groupValues[1] }
-    s = s.replace(Regex("\\\\\\[(.+?)\\\\\\]", RegexOption.DOT_MATCHES_ALL)) { it.groupValues[1] }
+    s = s.replace(Regex("\\\\\\(([\\s\\S]+?)\\\\\\)")) { it.groupValues[1] }
+    s = s.replace(Regex("\\\\\\[([\\s\\S]+?)\\\\\\]")) { it.groupValues[1] }
 
     // 2. Text wrappers → inner content.
     s = s.replace(Regex("\\\\(?:text|mathrm|mathbf|mathit|operatorname)\\{([^{}]*)\\}")) { it.groupValues[1] }
