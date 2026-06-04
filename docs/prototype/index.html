@@ -1,0 +1,929 @@
+<!doctype html>
+<!--
+  NativeLM — Adaptive UI redesign prototype
+  Copyright (C) 2026 Sagar Gupta · SPDX-License-Identifier: AGPL-3.0-or-later
+
+  A self-contained, offline visualization of the elevated, multi-device UI.
+  No network, no build step — open this file in any browser.
+
+  Controls (top bar):
+    • Device   — Phone (compact) / Foldable (medium) / Tablet (expanded)
+    • Theme    — Light / Dark
+    • Screen   — pick any screen from the left list
+
+  The SAME screen reflows across breakpoints: compact = single pane + bottom
+  bar, medium = navigation rail, expanded = rail + list-detail two-pane.
+
+  This is a design artifact for sign-off, not the shipped Compose code.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NativeLM — Adaptive UI Prototype</title>
+<style>
+/* ============================================================= TOKENS */
+:root{
+  /* Brand */
+  --sage:#7FA980;
+  --sage-press:#6E9870;
+
+  /* Light (warm) canvas — matches Color.kt */
+  --bg:#FAF9F6;
+  --surface:#FFFFFF;
+  --surface-2:#EFEDE8;
+  --surface-3:#F4F2EE;
+  --on-bg:#1C1B1A;
+  --on-muted:#6B6862;
+  --outline:#DAD8D2;
+  --outline-soft:#E7E5DF;
+  --primary-container:#E9F0E9;
+  --on-primary-container:#2E3B2E;
+  --error:#BA4A42;
+  --error-container:#F6E4E2;
+
+  /* Elevation — soft, warm, low-contrast (premium-minimal) */
+  --shadow-1:0 1px 2px rgba(28,27,26,.04), 0 1px 3px rgba(28,27,26,.05);
+  --shadow-2:0 2px 6px rgba(28,27,26,.06), 0 6px 18px rgba(28,27,26,.06);
+  --shadow-3:0 10px 30px rgba(28,27,26,.10), 0 2px 8px rgba(28,27,26,.06);
+
+  /* 8pt spacing scale */
+  --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:20px; --s6:24px; --s8:32px; --s10:40px; --s12:48px;
+
+  /* Radius */
+  --r-sm:10px; --r-md:14px; --r-lg:20px; --r-xl:28px; --r-pill:999px;
+
+  /* Type */
+  --font:"Inter","Helvetica Neue",-apple-system,system-ui,sans-serif;
+  --mono:"JetBrains Mono","SF Mono",ui-monospace,Menlo,monospace;
+
+  --ease:cubic-bezier(.2,.7,.2,1);
+}
+.device[data-theme="dark"]{
+  --bg:#1C1B1A;
+  --surface:#232220;
+  --surface-2:#2C2A27;
+  --surface-3:#282623;
+  --on-bg:#ECEAE4;
+  --on-muted:#A8A49C;
+  --outline:#3A3833;
+  --outline-soft:#322F2B;
+  --primary-container:#2E3B2E;
+  --on-primary-container:#C8E0C8;
+  --error:#E5938B;
+  --error-container:#3A2A28;
+  --shadow-1:0 1px 2px rgba(0,0,0,.3);
+  --shadow-2:0 2px 8px rgba(0,0,0,.35);
+  --shadow-3:0 14px 40px rgba(0,0,0,.5);
+}
+
+/* ============================================================= RESET / PAGE CHROME */
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{
+  font-family:var(--font);
+  background:
+    radial-gradient(1200px 600px at 80% -10%, rgba(127,169,128,.10), transparent 60%),
+    radial-gradient(1000px 500px at -10% 110%, rgba(127,169,128,.07), transparent 55%),
+    #15181a;
+  color:#e8e8e6;
+  -webkit-font-smoothing:antialiased;
+  display:flex; flex-direction:column; height:100vh; overflow:hidden;
+}
+.chrome{
+  display:flex; align-items:center; gap:var(--s5);
+  padding:14px 20px; border-bottom:1px solid rgba(255,255,255,.08);
+  background:rgba(20,23,25,.7); backdrop-filter:blur(8px);
+  flex:0 0 auto; flex-wrap:wrap;
+}
+.chrome .brand{display:flex; align-items:center; gap:10px; font-weight:600; letter-spacing:.2px}
+.chrome .brand small{font-weight:400; color:#8d938f; font-size:12px}
+.spacer{flex:1}
+.seg{display:inline-flex; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.09); border-radius:var(--r-pill); padding:3px}
+.seg button{
+  appearance:none; border:0; background:transparent; color:#b9bdba; cursor:pointer;
+  font:inherit; font-size:13px; font-weight:500; padding:6px 14px; border-radius:var(--r-pill); transition:.18s var(--ease);
+}
+.seg button.on{background:var(--sage); color:#15241a; box-shadow:0 1px 6px rgba(127,169,128,.5)}
+.lbl{font-size:11px; text-transform:uppercase; letter-spacing:.12em; color:#7e837f; margin-right:8px}
+
+/* Stage */
+.stage{flex:1; display:flex; min-height:0; overflow:hidden}
+
+/* Screen picker */
+.picker{
+  width:228px; flex:0 0 auto; border-right:1px solid rgba(255,255,255,.07);
+  padding:14px 12px; overflow:auto; background:rgba(255,255,255,.015);
+}
+.picker .grp{font-size:11px; text-transform:uppercase; letter-spacing:.12em; color:#7e837f; margin:14px 10px 6px}
+.picker .grp:first-child{margin-top:2px}
+.picker a{
+  display:flex; align-items:center; gap:10px; padding:9px 10px; border-radius:10px;
+  color:#cfd3d0; text-decoration:none; font-size:13.5px; cursor:pointer; transition:.15s var(--ease);
+}
+.picker a:hover{background:rgba(255,255,255,.05)}
+.picker a.on{background:rgba(127,169,128,.16); color:#dff0df}
+.picker a svg{width:17px;height:17px;opacity:.85;flex:0 0 auto}
+
+/* Device viewport */
+.viewport{flex:1; display:flex; align-items:flex-start; justify-content:center; padding:26px; overflow:auto; min-width:0}
+.device{
+  --w:390px;
+  width:var(--w); max-width:100%;
+  height:780px; max-height:calc(100vh - 120px);
+  background:var(--bg); color:var(--on-bg);
+  border-radius:30px; overflow:hidden; position:relative;
+  box-shadow:var(--shadow-3), 0 0 0 9px #0c0e0f, 0 0 0 10px rgba(255,255,255,.06);
+  transition:width .42s var(--ease);
+  font-size:14px; line-height:1.45;
+}
+.device[data-device="foldable"]{--w:720px; height:560px}
+.device[data-device="tablet"]{--w:1040px; height:720px}
+.dim{font-size:11px; color:#7e837f; font-family:var(--mono); margin-top:10px; text-align:center}
+
+/* ============================================================= APP SHELL */
+.app{position:absolute; inset:0; display:flex; background:var(--bg); overflow:hidden}
+
+/* Navigation rail (medium + expanded) */
+.rail{
+  width:84px; flex:0 0 auto; background:var(--bg); border-right:1px solid var(--outline-soft);
+  display:none; flex-direction:column; align-items:center; padding:16px 0 12px; gap:6px; z-index:5;
+}
+.rail .logo{margin-bottom:10px}
+.rail .ritem{
+  width:60px; padding:8px 0; border-radius:var(--r-md); display:flex; flex-direction:column; align-items:center; gap:5px;
+  color:var(--on-muted); cursor:pointer; font-size:10.5px; font-weight:500; transition:.15s var(--ease); border:0; background:transparent;
+}
+.rail .ritem svg{width:22px;height:22px}
+.rail .ritem:hover{background:var(--surface-2)}
+.rail .ritem.on{color:var(--on-primary-container)}
+.rail .ritem.on .pill{background:var(--primary-container)}
+.rail .pill{width:46px;height:30px;border-radius:var(--r-pill);display:flex;align-items:center;justify-content:center;transition:.15s var(--ease)}
+.rail .rspacer{flex:1}
+
+/* Main column */
+.main{flex:1; min-width:0; display:flex; flex-direction:column; position:relative}
+
+/* List pane (expanded two-pane) */
+.listpane{
+  width:300px; flex:0 0 auto; border-right:1px solid var(--outline-soft); background:var(--bg);
+  display:none; flex-direction:column; min-height:0;
+}
+
+/* Top app bar */
+.topbar{
+  height:60px; flex:0 0 auto; display:flex; align-items:center; gap:6px; padding:0 8px 0 6px;
+  border-bottom:1px solid transparent; background:var(--bg); z-index:4;
+}
+.topbar.bordered{border-bottom-color:var(--outline-soft)}
+.topbar .tt{flex:1; min-width:0; padding:0 6px}
+.topbar .tt .t1{font-weight:600; font-size:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.topbar .tt .t2{font-family:var(--mono); font-size:11px; color:var(--on-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.iconbtn{
+  width:40px;height:40px;border-radius:var(--r-pill);border:0;background:transparent;color:var(--on-bg);
+  display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:.15s var(--ease);flex:0 0 auto;
+}
+.iconbtn:hover{background:var(--surface-2)}
+.iconbtn svg{width:21px;height:21px}
+.iconbtn.ghost{color:var(--on-muted)}
+.codebtn{font-family:var(--mono);font-size:12px;font-weight:600;padding:0 12px;height:34px;border-radius:var(--r-pill);
+  border:1px solid var(--outline);background:transparent;color:var(--on-bg);cursor:pointer}
+
+/* Content scroll area */
+.body{flex:1; min-height:0; overflow:auto; position:relative}
+.pad{padding:var(--s4) var(--s4) var(--s8)}
+.maxw{max-width:760px;margin:0 auto;width:100%}
+
+/* ============================================================= PRIMITIVES */
+.btn{
+  appearance:none;border:0;cursor:pointer;font:inherit;font-weight:600;font-size:14px;
+  border-radius:var(--r-pill);padding:11px 18px;background:var(--sage);color:#15241a;transition:.15s var(--ease);
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+}
+.btn:hover{background:var(--sage-press)}
+.btn.block{width:100%}
+.btn.tonal{background:var(--primary-container);color:var(--on-primary-container)}
+.btn.outline{background:transparent;border:1px solid var(--outline);color:var(--on-bg)}
+.btn.outline:hover{background:var(--surface-2)}
+.btn.text{background:transparent;color:var(--sage);padding:10px 12px}
+.btn.text:hover{background:var(--surface-2)}
+.btn.sm{padding:8px 14px;font-size:13px}
+.btn.danger{color:var(--error)}
+.btn svg{width:18px;height:18px}
+
+.card{background:var(--surface);border:1px solid var(--outline-soft);border-radius:var(--r-lg);box-shadow:var(--shadow-1)}
+.card.pad{padding:var(--s4)}
+.section-label{font-family:var(--mono);font-size:11px;letter-spacing:.1em;color:var(--on-muted);text-transform:uppercase;margin:var(--s5) 4px var(--s2)}
+.mono{font-family:var(--mono)}
+.muted{color:var(--on-muted)}
+.hr{height:1px;background:var(--outline-soft);border:0;margin:var(--s4) 0}
+
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:500;padding:4px 11px;border-radius:var(--r-pill);
+  background:var(--surface-2);color:var(--on-muted)}
+.chip.tint{background:var(--primary-container);color:var(--on-primary-container)}
+.chip.mono{font-family:var(--mono);font-size:11px}
+
+.badge{font-family:var(--mono);font-size:10.5px;font-weight:600;letter-spacing:.04em;padding:3px 8px;border-radius:8px;
+  background:var(--primary-container);color:var(--on-primary-container)}
+
+.switch{width:46px;height:28px;border-radius:var(--r-pill);background:var(--outline);position:relative;cursor:pointer;flex:0 0 auto;transition:.18s var(--ease)}
+.switch::after{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#fff;box-shadow:var(--shadow-1);transition:.18s var(--ease)}
+.switch.on{background:var(--sage)}
+.switch.on::after{left:21px}
+
+/* progress */
+.prog{height:6px;border-radius:var(--r-pill);background:var(--surface-2);overflow:hidden}
+.prog > i{display:block;height:100%;background:var(--sage);border-radius:inherit}
+.prog.indet > i{width:40%;animation:indet 1.3s var(--ease) infinite}
+@keyframes indet{0%{margin-left:-40%}100%{margin-left:100%}}
+
+/* list row */
+.row{display:flex;align-items:center;gap:var(--s3);padding:13px 4px}
+.row .lead{width:38px;height:38px;border-radius:var(--r-md);background:var(--surface-2);display:flex;align-items:center;justify-content:center;color:var(--on-muted);flex:0 0 auto}
+.row .grow{flex:1;min-width:0}
+.row .title{font-weight:500}
+.row .sub{font-size:12.5px;color:var(--on-muted)}
+.row .sub.mono{font-family:var(--mono);font-size:11.5px}
+.tap{cursor:pointer;border-radius:var(--r-md)}
+.tap:hover{background:var(--surface-2)}
+
+/* settings rows */
+.setrow{display:flex;align-items:center;gap:var(--s4);padding:14px 6px;border-radius:var(--r-md)}
+.setrow .grow{flex:1;min-width:0}
+.setrow .k{font-weight:500}
+.setrow .d{font-size:12.5px;color:var(--on-muted);margin-top:2px}
+.setrow .v{color:var(--sage);font-weight:500}
+
+/* segmented control */
+.segctl{display:inline-flex;background:var(--surface-2);border-radius:var(--r-pill);padding:3px}
+.segctl button{border:0;background:transparent;font:inherit;font-size:13px;font-weight:500;color:var(--on-muted);padding:6px 16px;border-radius:var(--r-pill);cursor:pointer}
+.segctl button.on{background:var(--surface);color:var(--on-bg);box-shadow:var(--shadow-1)}
+
+/* ============================================================= SCREENS (visibility) */
+.screen{display:none;position:absolute;inset:0}
+.screen.on{display:block}
+/* full-bleed flow screens replace the whole device */
+.flow{display:none;position:absolute;inset:0;background:var(--bg);z-index:20}
+.flow.on{display:flex}
+
+/* ---- adaptive shell rules ---- */
+/* compact: rail hidden, top bar shows hamburger, single pane */
+.device[data-device="phone"] .rail{display:none}
+.device[data-device="phone"] .listpane{display:none}
+.device[data-device="phone"] .show-compact{display:flex}
+.device[data-device="phone"] .hide-compact{display:none}
+
+/* medium: rail shown, single detail pane */
+.device[data-device="foldable"] .rail{display:flex}
+.device[data-device="foldable"] .show-compact{display:none}
+
+/* expanded: rail + list pane (two-pane) */
+.device[data-device="tablet"] .rail{display:flex}
+.device[data-device="tablet"] .listpane{display:flex}
+.device[data-device="tablet"] .show-compact{display:none}
+.device[data-device="tablet"] .twopane .menu-btn{display:none}
+
+/* ============================================================= CHAT */
+.thread{display:flex;flex-direction:column;min-height:0;flex:1}
+.msgs{flex:1;overflow:auto;padding:var(--s4)}
+.msgwrap{max-width:720px;margin:0 auto;width:100%;display:flex;flex-direction:column;gap:var(--s5)}
+.msg{display:flex;flex-direction:column;gap:6px}
+.msg .who{font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--on-muted);text-transform:uppercase}
+.msg.user{align-items:flex-end}
+.bubble{padding:11px 15px;border-radius:18px;max-width:86%}
+.msg.user .bubble{background:var(--primary-container);color:var(--on-primary-container);border-bottom-right-radius:6px}
+.msg.ai .bubble{background:transparent;padding:2px 0;max-width:100%}
+.bubble p{margin:0 0 8px}.bubble p:last-child{margin:0}
+.bubble code{font-family:var(--mono);font-size:12.5px;background:var(--surface-2);padding:1px 6px;border-radius:6px}
+.bubble pre{font-family:var(--mono);font-size:12.5px;background:var(--surface-2);padding:12px 14px;border-radius:12px;overflow:auto;margin:8px 0}
+.sources{margin-top:10px}
+.sources .head{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--on-muted);cursor:pointer}
+.cite{display:flex;align-items:center;gap:9px;padding:9px 11px;margin-top:8px;border:1px solid var(--outline-soft);border-radius:12px;background:var(--surface);cursor:pointer;transition:.15s var(--ease)}
+.cite:hover{background:var(--surface-2)}
+.cite .ct{flex:1;min-width:0;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cite .cp{font-family:var(--mono);font-size:11px;color:var(--on-muted)}
+.typing{display:inline-flex;gap:5px;padding:8px 2px}
+.typing i{width:7px;height:7px;border-radius:50%;background:var(--on-muted);animation:blink 1.2s infinite}
+.typing i:nth-child(2){animation-delay:.2s}.typing i:nth-child(3){animation-delay:.4s}
+@keyframes blink{0%,60%,100%{opacity:.25;transform:translateY(0)}30%{opacity:1;transform:translateY(-3px)}}
+
+/* composer */
+.composer{flex:0 0 auto;padding:12px var(--s4) calc(12px + env(safe-area-inset-bottom));background:linear-gradient(transparent,var(--bg) 22%)}
+.composer .inner{max-width:720px;margin:0 auto;display:flex;align-items:flex-end;gap:10px;
+  background:var(--surface);border:1px solid var(--outline);border-radius:26px;padding:6px 6px 6px 16px;box-shadow:var(--shadow-1)}
+.composer textarea{flex:1;border:0;background:transparent;resize:none;font:inherit;font-size:15px;color:var(--on-bg);padding:9px 0;max-height:120px;outline:none}
+.composer textarea::placeholder{color:var(--on-muted)}
+.fab{width:42px;height:42px;border-radius:50%;background:var(--sage);color:#15241a;border:0;display:flex;align-items:center;justify-content:center;cursor:pointer;flex:0 0 auto}
+.fab svg{width:20px;height:20px}
+.fab.ghost{background:var(--surface-2);color:var(--on-muted)}
+
+/* empty greeting */
+.greet{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:var(--s8);gap:14px}
+.greet h2{font-size:24px;font-weight:600;margin:6px 0 0}
+.greet p{color:var(--on-muted);max-width:340px;margin:0}
+.suggest{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-top:8px;max-width:440px}
+.suggest .s{padding:10px 14px;border:1px solid var(--outline);border-radius:14px;background:var(--surface);font-size:13px;cursor:pointer;text-align:left}
+.suggest .s:hover{background:var(--surface-2)}
+
+/* conversation list (drawer + list pane share markup) */
+.convhead{display:flex;align-items:center;gap:10px;padding:16px 16px 10px}
+.convhead .nm{font-weight:600;font-size:16px}
+.convsearch{margin:0 12px 8px;display:flex;align-items:center;gap:8px;background:var(--surface-2);border-radius:var(--r-pill);padding:9px 14px;color:var(--on-muted);font-size:13px}
+.convsearch svg{width:16px;height:16px}
+.convlist{flex:1;overflow:auto;padding:4px 8px}
+.conv{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;cursor:pointer;color:var(--on-bg)}
+.conv:hover{background:var(--surface-2)}
+.conv.on{background:var(--primary-container);color:var(--on-primary-container)}
+.conv .cn{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13.5px}
+.conv svg{width:16px;height:16px;opacity:.7;flex:0 0 auto}
+.newchat{margin:8px 12px;display:flex;align-items:center;justify-content:center;gap:8px;border:1px dashed var(--outline);border-radius:14px;padding:11px;color:var(--on-bg);cursor:pointer;font-weight:500;font-size:13.5px}
+.newchat:hover{background:var(--surface-2)}
+
+/* modal drawer (compact) */
+.scrim{position:absolute;inset:0;background:rgba(0,0,0,.42);z-index:30;display:none}
+.scrim.open{display:block}
+.drawer{position:absolute;top:0;left:0;bottom:0;width:300px;max-width:84%;background:var(--bg);z-index:31;
+  transform:translateX(-104%);transition:transform .32s var(--ease);box-shadow:var(--shadow-3);display:flex;flex-direction:column}
+.drawer.open{transform:none}
+
+/* ============================================================= ONBOARDING / SPLASH / LOCK */
+.flow{flex-direction:column;align-items:center;justify-content:center;padding:34px;text-align:center}
+.flow .ic{width:96px;height:96px;border-radius:30px;background:var(--primary-container);color:var(--on-primary-container);display:flex;align-items:center;justify-content:center;margin-bottom:8px}
+.flow .ic svg{width:44px;height:44px}
+.flow h1{font-size:26px;font-weight:700;margin:18px 0 8px}
+.flow p{color:var(--on-muted);max-width:420px;margin:0;line-height:1.55}
+.dots{display:flex;gap:8px;margin:26px 0}
+.dots i{width:8px;height:8px;border-radius:50%;background:var(--outline)}
+.dots i.on{background:var(--sage);width:22px;border-radius:var(--r-pill)}
+.flow .nav{display:flex;align-items:center;justify-content:space-between;width:100%;max-width:480px;margin-top:6px}
+.flow .terms{margin-top:26px;font-size:12px;color:var(--on-muted)}
+.flow .terms a{color:var(--sage);text-decoration:none;margin:0 6px}
+
+/* ============================================================= utils */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.device[data-device="phone"] .grid3{grid-template-columns:1fr 1fr}
+.stk{display:flex;flex-direction:column}
+.stk.g2>*+*{margin-top:8px}.stk.g3>*+*{margin-top:12px}.stk.g4>*+*{margin-top:16px}
+.flexr{display:flex;align-items:center}
+.between{justify-content:space-between}
+.gap8{gap:8px}.gap12{gap:12px}
+.note{font-size:12.5px;color:var(--on-muted);line-height:1.5}
+
+/* studio create card */
+.create{display:flex;flex-direction:column;gap:10px;padding:16px;border:1px solid var(--outline-soft);border-radius:18px;background:var(--surface);cursor:pointer;box-shadow:var(--shadow-1);transition:.15s var(--ease)}
+.create:hover{box-shadow:var(--shadow-2);transform:translateY(-1px)}
+.create .ci{width:40px;height:40px;border-radius:12px;background:var(--primary-container);color:var(--on-primary-container);display:flex;align-items:center;justify-content:center}
+.create .ct{font-weight:600}
+.create .cd{font-size:12px;color:var(--on-muted)}
+.hero{display:flex;align-items:center;gap:14px;padding:16px;border-radius:18px;background:var(--surface);border:1px solid var(--outline-soft);box-shadow:var(--shadow-1)}
+.hero .hi{width:48px;height:48px;border-radius:14px;background:var(--primary-container);color:var(--on-primary-container);display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+.hero .hg{flex:1}
+.hero .ht{font-weight:600}
+.hero .hb{font-size:12.5px;color:var(--on-muted)}
+.playbtn{width:44px;height:44px;border-radius:50%;background:var(--sage);color:#15241a;display:flex;align-items:center;justify-content:center;cursor:pointer;flex:0 0 auto}
+
+/* pdf */
+.pdfwrap{display:flex;flex-direction:column;height:100%}
+.page{flex:1;display:flex;align-items:center;justify-content:center;background:var(--surface-2);overflow:auto;padding:18px}
+.sheet{width:340px;max-width:100%;aspect-ratio:1/1.3;background:#fff;border-radius:6px;box-shadow:var(--shadow-2);padding:28px;color:#222;font-size:11px;line-height:1.7;position:relative}
+.sheet .mark{background:rgba(127,169,128,.32);border-radius:3px;padding:1px 2px}
+.pagebar{display:flex;align-items:center;justify-content:center;gap:18px;padding:12px;border-top:1px solid var(--outline-soft);font-family:var(--mono);font-size:12px;color:var(--on-muted)}
+.callout{margin:12px 16px 0;padding:12px 14px;border-radius:14px;background:var(--primary-container);color:var(--on-primary-container)}
+.callout .cl{font-family:var(--mono);font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;opacity:.8}
+
+/* timeline (studio sample) */
+.tl{position:relative;padding-left:22px}
+.tl::before{content:"";position:absolute;left:5px;top:6px;bottom:6px;width:2px;background:var(--outline)}
+.tl .ev{position:relative;padding:0 0 18px}
+.tl .ev::before{content:"";position:absolute;left:-21px;top:5px;width:11px;height:11px;border-radius:50%;background:var(--sage);box-shadow:0 0 0 4px var(--bg)}
+.tl .ev .dt{font-family:var(--mono);font-size:12px;color:var(--sage);font-weight:600}
+.tl .ev .ds{font-size:13px;color:var(--on-muted);margin-top:2px}
+
+::-webkit-scrollbar{width:9px;height:9px}
+::-webkit-scrollbar-thumb{background:rgba(128,128,128,.32);border-radius:9px;border:2px solid transparent;background-clip:content-box}
+</style>
+</head>
+<body>
+
+<!-- ============================ TOP CHROME ============================ -->
+<div class="chrome">
+  <div class="brand">
+    <svg width="22" height="22" viewBox="0 0 56 56" fill="none" stroke="#7FA980" stroke-width="3.5">
+      <rect x="12" y="8" width="29" height="40" rx="4.5"/><line x1="18" y1="22" x2="35" y2="22"/><line x1="18" y1="30" x2="29" y2="30"/>
+      <path d="M45 13.5l1.6 4 4 1.6-4 1.6L45 24.7l-1.6-4-4-1.6 4-1.6z" fill="#7FA980" stroke="none"/>
+    </svg>
+    NativeLM <small>· adaptive UI prototype</small>
+  </div>
+  <div class="spacer"></div>
+  <div><span class="lbl">Device</span>
+    <div class="seg" id="devSeg">
+      <button data-dev="phone" class="on">Phone</button>
+      <button data-dev="foldable">Foldable</button>
+      <button data-dev="tablet">Tablet</button>
+    </div>
+  </div>
+  <div><span class="lbl">Theme</span>
+    <div class="seg" id="themeSeg">
+      <button data-theme="light" class="on">Light</button>
+      <button data-theme="dark">Dark</button>
+    </div>
+  </div>
+</div>
+
+<div class="stage">
+  <!-- ============================ SCREEN PICKER ============================ -->
+  <nav class="picker" id="picker">
+    <div class="grp">Main</div>
+    <a data-screen="chat" class="on">$ICON_chat Chat</a>
+    <a data-screen="models">$ICON_models Models</a>
+    <a data-screen="sources">$ICON_doc Sources</a>
+    <a data-screen="studio">$ICON_studio Studio</a>
+    <a data-screen="settings">$ICON_gear Settings</a>
+    <div class="grp">Reading</div>
+    <a data-screen="pdf">$ICON_book PDF viewer</a>
+    <div class="grp">Flows</div>
+    <a data-screen="onboarding">$ICON_spark Onboarding</a>
+    <a data-screen="splash">$ICON_spark Splash</a>
+    <a data-screen="lock">$ICON_lock Lock</a>
+  </nav>
+
+  <!-- ============================ DEVICE ============================ -->
+  <div class="viewport">
+    <div>
+      <div class="device" id="device" data-device="phone" data-theme="light">
+        <div class="app">
+
+          <!-- ===== NAV RAIL (medium + expanded) ===== -->
+          <aside class="rail" id="rail">
+            <div class="logo">
+              <svg width="30" height="30" viewBox="0 0 56 56" fill="none" stroke="var(--sage)" stroke-width="3.2">
+                <rect x="12" y="8" width="29" height="40" rx="4.5"/><line x1="18" y1="22" x2="35" y2="22"/><line x1="18" y1="30" x2="29" y2="30"/>
+                <path d="M45 13.5l1.6 4 4 1.6-4 1.6L45 24.7l-1.6-4-4-1.6 4-1.6z" fill="var(--sage)" stroke="none"/>
+              </svg>
+            </div>
+            <button class="ritem on" data-screen="chat"><span class="pill">$ICON_chat</span>Chat</button>
+            <button class="ritem" data-screen="models"><span class="pill">$ICON_models</span>Models</button>
+            <button class="ritem" data-screen="sources"><span class="pill">$ICON_doc</span>Sources</button>
+            <button class="ritem" data-screen="studio"><span class="pill">$ICON_studio</span>Studio</button>
+            <div class="rspacer"></div>
+            <button class="ritem" data-screen="settings"><span class="pill">$ICON_gear</span>Settings</button>
+          </aside>
+
+          <!-- ===== CHAT ===== -->
+          <section class="screen on twopane" data-screen="chat" style="flex:1;display:flex">
+            <!-- list pane (expanded) -->
+            <div class="listpane">
+              <div class="convhead"><span class="nm">Conversations</span><span class="spacer" style="flex:1"></span>
+                <button class="iconbtn ghost">$ICON_plus</button></div>
+              <div class="convsearch">$ICON_search Search chats</div>
+              <div class="convlist">
+                <div class="conv on">$ICON_chatline<span class="cn">Refactoring the sync layer</span></div>
+                <div class="conv">$ICON_chatline<span class="cn">Summarize lease agreement</span></div>
+                <div class="conv">$ICON_chatline<span class="cn">Trip packing checklist</span></div>
+                <div class="conv">$ICON_chatline<span class="cn">Explain transformer attention</span></div>
+                <div class="section-label" style="padding-left:8px">Projects</div>
+                <div class="conv">$ICON_folder<span class="cn">Q3 Research</span></div>
+                <div class="conv">$ICON_folder<span class="cn">Apartment paperwork</span></div>
+              </div>
+              <div class="newchat">$ICON_plus New chat</div>
+            </div>
+            <!-- thread -->
+            <div class="main">
+              <div class="topbar bordered">
+                <button class="iconbtn menu-btn show-compact" id="openDrawer">$ICON_menu</button>
+                <div class="tt"><div class="t1">Refactoring the sync layer</div><div class="t2">gemma-3n-4b · on-device</div></div>
+                <button class="codebtn">EN</button>
+                <button class="iconbtn ghost hide-compact" title="Studio">$ICON_studio</button>
+                <button class="iconbtn ghost" title="New chat">$ICON_plus</button>
+              </div>
+              <div class="thread">
+                <div class="msgs">
+                  <div class="msgwrap">
+                    <div class="msg user"><div class="who">You</div>
+                      <div class="bubble">How should I structure the peer-to-peer sync so a transfer can resume if the Wi-Fi drops mid-way?</div></div>
+                    <div class="msg ai"><div class="who">NativeLM</div>
+                      <div class="bubble">
+                        <p>Make the transfer <strong>chunked and idempotent</strong> so either side can reconnect and continue from the last acknowledged offset:</p>
+                        <p>1. Split the encrypted bundle into fixed <code>64&nbsp;KiB</code> chunks, each with an index and a SHA-256.<br>
+                        2. The receiver persists a small manifest of chunks it already has.<br>
+                        3. On reconnect, it requests only the missing indices.</p>
+                        <pre>data class Chunk(
+  val index: Int,
+  val sha256: String,
+  val bytes: ByteArray,
+)</pre>
+                        <p>Because each chunk is content-addressed, replaying a chunk is harmless — that's what makes resume safe.</p>
+                        <div class="sources">
+                          <div class="head">$ICON_doc Sources (2) $ICON_chevdown</div>
+                          <div class="cite">$ICON_doc<span class="ct">SocketTransfer — design notes</span><span class="cp">p.3</span></div>
+                          <div class="cite">$ICON_doc<span class="ct">P2P sync RFC (internal)</span><span class="cp">p.12</span></div>
+                        </div>
+                      </div></div>
+                    <div class="msg user"><div class="who">You</div>
+                      <div class="bubble">Nice. Show me what the resume handshake looks like.</div></div>
+                    <div class="msg ai"><div class="who">NativeLM</div>
+                      <div class="bubble"><div class="typing"><i></i><i></i><i></i></div></div></div>
+                  </div>
+                </div>
+                <div class="composer">
+                  <div class="inner">
+                    <button class="fab ghost" title="Attach">$ICON_plus</button>
+                    <textarea rows="1" placeholder="Message NativeLM…"></textarea>
+                    <button class="fab" title="Send">$ICON_send</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- compact modal drawer -->
+            <div class="scrim" id="scrim"></div>
+            <aside class="drawer" id="drawer">
+              <div class="convhead">
+                <svg width="22" height="22" viewBox="0 0 56 56" fill="none" stroke="var(--sage)" stroke-width="3.2"><rect x="12" y="8" width="29" height="40" rx="4.5"/><line x1="18" y1="22" x2="35" y2="22"/><line x1="18" y1="30" x2="29" y2="30"/><path d="M45 13.5l1.6 4 4 1.6-4 1.6L45 24.7l-1.6-4-4-1.6 4-1.6z" fill="var(--sage)" stroke="none"/></svg>
+                <span class="nm">NativeLM</span>
+              </div>
+              <div class="newchat">$ICON_plus New chat</div>
+              <div class="convlist">
+                <div class="conv on">$ICON_chatline<span class="cn">Refactoring the sync layer</span></div>
+                <div class="conv">$ICON_chatline<span class="cn">Summarize lease agreement</span></div>
+                <div class="conv">$ICON_chatline<span class="cn">Trip packing checklist</span></div>
+                <div class="section-label" style="padding-left:8px">Projects</div>
+                <div class="conv">$ICON_folder<span class="cn">Q3 Research</span></div>
+                <div class="conv">$ICON_folder<span class="cn">Apartment paperwork</span></div>
+              </div>
+              <div class="hr" style="margin:6px 12px"></div>
+              <div style="padding:4px 8px 14px">
+                <div class="conv" data-screen="models">$ICON_models<span class="cn">Models</span></div>
+                <div class="conv" data-screen="settings">$ICON_gear<span class="cn">Settings</span></div>
+              </div>
+            </aside>
+          </section>
+
+          <!-- ===== MODELS ===== -->
+          <section class="screen" data-screen="models">
+            <div class="main">
+              <div class="topbar">
+                <button class="iconbtn menu-btn show-compact navhome">$ICON_back</button>
+                <div class="tt"><div class="t1">Models</div></div>
+              </div>
+              <div class="body"><div class="pad maxw">
+                <div class="section-label" style="margin-top:0">Recommended</div>
+                <div class="note" style="margin:0 4px 12px">Free, open models — no account needed. Downloads start right away.</div>
+
+                <div class="card pad stk g3" style="margin-bottom:12px">
+                  <div class="flexr between">
+                    <div><div class="flexr gap8"><strong>Llama 3.2 3B Instruct</strong><span class="badge">Recommended</span></div>
+                      <div class="sub mono muted" style="margin-top:3px">llama-3.2-3b-instruct.gguf · 1.92 GB</div></div>
+                    <button class="btn tonal sm">Set active</button>
+                  </div>
+                  <div class="flexr gap8"><span class="chip">Text</span></div>
+                </div>
+
+                <div class="card pad stk g3" style="margin-bottom:12px">
+                  <div class="flexr between">
+                    <div><strong>Gemma 3n 4B</strong>
+                      <div class="sub mono muted" style="margin-top:3px">gemma-3n-4b.task · 4.40 GB · needs 6 GB RAM</div></div>
+                    <span class="badge">Active</span>
+                  </div>
+                  <div class="flexr gap8"><span class="chip">Text</span><span class="chip">Image</span></div>
+                </div>
+
+                <div class="card pad stk g3" style="margin-bottom:12px">
+                  <div class="flexr between">
+                    <div><strong>Qwen2.5 1.5B Instruct</strong>
+                      <div class="sub mono muted" style="margin-top:3px">qwen2.5-1.5b-instruct.gguf · 986 MB</div></div>
+                    <button class="iconbtn ghost">$ICON_close</button>
+                  </div>
+                  <div class="flexr gap8"><span class="chip">Text</span></div>
+                  <div class="prog"><i style="width:62%"></i></div>
+                  <div class="sub mono muted">611 / 986 MB</div>
+                </div>
+
+                <div class="section-label">Document / RAG models</div>
+                <div class="note" style="margin:0 4px 12px">for document chat (Projects)</div>
+                <div class="card pad flexr between" style="margin-bottom:12px">
+                  <div><strong>BGE Small EN v1.5</strong>
+                    <div class="sub mono muted" style="margin-top:3px">bge-small-en-v1.5.gguf · 33.6 MB · needs 1 GB RAM</div></div>
+                  <span class="badge">Active</span>
+                </div>
+
+                <div class="section-label">Advanced — Hugging Face account $ICON_chevdown</div>
+                <div class="note" style="margin:0 4px 12px">Gemma models. Free, but need a Hugging Face account + token and a one-time license accept.</div>
+                <div class="card pad stk g2" style="margin-bottom:12px">
+                  <strong style="font-size:14px">HuggingFace token</strong>
+                  <div class="note">Used to download license-gated models directly from Hugging Face.</div>
+                  <div class="flexr between" style="margin-top:4px">
+                    <span class="mono muted">hf_••••••••••••</span>
+                    <div class="flexr"><button class="btn text sm">Replace</button><button class="btn text sm">Clear</button></div>
+                  </div>
+                </div>
+              </div></div>
+              <div style="flex:0 0 auto;padding:12px 16px;border-top:1px solid var(--outline-soft)">
+                <div class="maxw"><button class="btn block">Continue to chat</button></div>
+              </div>
+            </div>
+          </section>
+
+          <!-- ===== SOURCES (Documents) ===== -->
+          <section class="screen" data-screen="sources">
+            <div class="main">
+              <div class="topbar">
+                <button class="iconbtn menu-btn show-compact navhome">$ICON_back</button>
+                <div class="tt"><div class="t1">Sources</div><div class="t2">Q3 Research</div></div>
+              </div>
+              <div class="body"><div class="pad maxw">
+                <div class="note" style="margin:0 4px 14px">Sources stay on your device. This project's chat answers from them.</div>
+                <button class="btn outline block" style="margin-bottom:16px">$ICON_plus Import PDF, image, or text</button>
+
+                <div class="card pad flexr gap12" style="margin-bottom:12px">
+                  <div class="prog indet" style="flex:1"><i></i></div>
+                  <span class="sub mono muted" style="white-space:nowrap">Indexing 18 / 42…</span>
+                </div>
+
+                <div class="card pad flexr between" style="margin-bottom:10px">
+                  <div class="flexr gap12"><span class="row" style="padding:0"><span class="lead">$ICON_doc</span></span>
+                    <div><div class="title">Residential Lease Agreement.pdf</div>
+                      <div class="sub mono muted">14 pages · 38 sections</div></div></div>
+                  <button class="iconbtn ghost">$ICON_trash</button>
+                </div>
+                <div class="card pad flexr between" style="margin-bottom:10px">
+                  <div class="flexr gap12"><span class="row" style="padding:0"><span class="lead">$ICON_doc</span></span>
+                    <div><div class="title">Q3 market notes.txt</div>
+                      <div class="sub mono muted">9 sections</div></div></div>
+                  <button class="iconbtn ghost">$ICON_trash</button>
+                </div>
+                <div class="card pad flexr between">
+                  <div class="flexr gap12"><span class="row" style="padding:0"><span class="lead">$ICON_doc</span></span>
+                    <div><div class="title">Whiteboard photo.jpg</div>
+                      <div class="sub mono muted">3 sections</div></div></div>
+                  <button class="iconbtn ghost">$ICON_trash</button>
+                </div>
+              </div></div>
+            </div>
+          </section>
+
+          <!-- ===== STUDIO ===== -->
+          <section class="screen" data-screen="studio">
+            <div class="main">
+              <div class="topbar">
+                <button class="iconbtn menu-btn show-compact navhome">$ICON_back</button>
+                <div class="tt"><div class="t1">Studio</div><div class="t2">Q3 Research</div></div>
+              </div>
+              <div class="body"><div class="pad maxw">
+                <div class="note" style="margin:0 4px 16px">Generate overviews from this project's sources. Everything runs on your device.</div>
+
+                <div class="section-label" style="margin-top:0">Audio</div>
+                <div class="hero" style="margin-bottom:10px">
+                  <div class="hi">$ICON_audio</div>
+                  <div class="hg"><div class="ht">Audio Overview</div><div class="hb">A spoken summary, single narrator</div></div>
+                  <div class="playbtn">$ICON_play</div>
+                </div>
+                <div class="hero" style="margin-bottom:4px">
+                  <div class="hi">$ICON_podcast</div>
+                  <div class="hg"><div class="ht">Podcast</div><div class="hb">Two hosts discuss your sources</div></div>
+                  <div class="playbtn">$ICON_play</div>
+                </div>
+
+                <div class="section-label">Create</div>
+                <div class="grid3">
+                  <div class="create"><div class="ci">$ICON_doc</div><div class="ct">Briefing</div><div class="cd">A concise overview</div></div>
+                  <div class="create"><div class="ci">$ICON_faq</div><div class="ct">FAQ</div><div class="cd">Questions & answers</div></div>
+                  <div class="create"><div class="ci">$ICON_topics</div><div class="ct">Key Topics</div><div class="cd">The main themes</div></div>
+                  <div class="create"><div class="ci">$ICON_school</div><div class="ct">Study Guide</div><div class="cd">Terms & review</div></div>
+                  <div class="create"><div class="ci">$ICON_timeline</div><div class="ct">Timeline</div><div class="cd">Events in order</div></div>
+                  <div class="create"><div class="ci">$ICON_mindmap</div><div class="ct">Mind Map</div><div class="cd">A visual tree</div></div>
+                </div>
+
+                <div class="section-label">Outputs</div>
+                <div class="card pad flexr between" style="margin-bottom:10px">
+                  <div class="flexr gap12"><span class="lead" style="width:38px;height:38px;border-radius:12px;display:flex;align-items:center;justify-content:center;background:var(--primary-container);color:var(--on-primary-container)">$ICON_timeline</span>
+                    <div><div class="title">Lease timeline</div><div class="sub mono muted">Timeline · Whole project · 2h ago</div></div></div>
+                  <button class="iconbtn ghost">$ICON_more</button>
+                </div>
+                <div class="card pad flexr between">
+                  <div class="flexr gap12"><span class="lead" style="width:38px;height:38px;border-radius:12px;display:flex;align-items:center;justify-content:center;background:var(--primary-container);color:var(--on-primary-container)">$ICON_faq</span>
+                    <div><div class="title">Tenant rights FAQ</div><div class="sub mono muted">FAQ · Lease Agreement.pdf · yesterday</div></div></div>
+                  <button class="iconbtn ghost">$ICON_more</button>
+                </div>
+
+                <div class="section-label">Preview — Timeline artifact</div>
+                <div class="card pad">
+                  <div class="tl">
+                    <div class="ev"><div class="dt">Day 0 — Move-in</div><div class="ds">Inspection checklist signed; deposit of two months held in escrow.</div></div>
+                    <div class="ev"><div class="dt">Month 6</div><div class="ds">Mid-term review window; either party may give notice.</div></div>
+                    <div class="ev"><div class="dt">Month 11</div><div class="ds">Renewal notice due 30 days before term end.</div></div>
+                    <div class="ev"><div class="dt">Month 12 — Term end</div><div class="ds">Deposit returned within 21 days, less itemized deductions.</div></div>
+                  </div>
+                </div>
+              </div></div>
+            </div>
+          </section>
+
+          <!-- ===== SETTINGS ===== -->
+          <section class="screen" data-screen="settings">
+            <div class="main">
+              <div class="topbar">
+                <button class="iconbtn menu-btn show-compact navhome">$ICON_back</button>
+                <div class="tt"><div class="t1">Settings</div></div>
+              </div>
+              <div class="body"><div class="pad maxw">
+                <div class="section-label" style="margin-top:0">Appearance</div>
+                <div class="card pad">
+                  <div class="setrow"><div class="grow"><div class="k">Theme</div></div>
+                    <div class="segctl"><button>System</button><button class="on">Light</button><button>Dark</button></div></div>
+                </div>
+
+                <div class="section-label">Models</div>
+                <div class="card">
+                  <div class="setrow tap" data-screen="models" style="padding-left:16px;padding-right:16px"><div class="grow"><div class="k">Manage models</div></div>$ICON_chevright</div>
+                  <div class="hr" style="margin:0 16px"></div>
+                  <div class="setrow" style="padding-left:16px;padding-right:16px"><div class="grow"><div class="k">Active model</div></div><div class="v mono">gemma-3n-4b</div></div>
+                </div>
+
+                <div class="section-label">Language</div>
+                <div class="card pad">
+                  <div class="setrow tap"><div class="grow"><div class="k">Answer language</div><div class="d">The AI answers in this language, even over English documents.</div></div><div class="v">English</div></div>
+                </div>
+
+                <div class="section-label">Security</div>
+                <div class="card pad">
+                  <div class="setrow"><div class="grow"><div class="k">App lock</div><div class="d">Require fingerprint, face, or your screen lock to open NativeLM.</div></div>
+                    <div class="switch on" data-toggle></div></div>
+                </div>
+
+                <div class="section-label">Data &amp; backup</div>
+                <div class="card">
+                  <div class="setrow tap" style="padding:14px 16px"><div class="grow"><div class="k">Back up my data</div><div class="d">Save an encrypted copy you control. Nothing is uploaded.</div></div>$ICON_chevright</div>
+                  <div class="hr" style="margin:0 16px"></div>
+                  <div class="setrow tap" style="padding:14px 16px"><div class="grow"><div class="k">Restore from backup</div><div class="d">Import a .nlmbak file. Restored data is added to what's already here.</div></div>$ICON_chevright</div>
+                  <div class="hr" style="margin:0 16px"></div>
+                  <div class="setrow tap" style="padding:14px 16px"><div class="grow"><div class="k">Send to a nearby device</div><div class="d">Beam your data over Wi-Fi. Nothing leaves the network.</div></div>$ICON_chevright</div>
+                  <div class="hr" style="margin:0 16px"></div>
+                  <div class="setrow tap" style="padding:14px 16px"><div class="grow"><div class="k" style="color:var(--error)">Clear all data</div><div class="d">Deletes downloaded models and resets the app.</div></div>$ICON_chevright</div>
+                </div>
+
+                <div class="section-label">About</div>
+                <div class="card">
+                  <div class="setrow" style="padding:14px 16px"><div class="grow"><div class="k">Version</div></div><div class="mono muted">0.8.0</div></div>
+                  <div class="hr" style="margin:0 16px"></div>
+                  <div class="setrow" style="padding:14px 16px"><div class="grow"><div class="k">License</div></div><div class="mono muted">AGPL-3.0</div></div>
+                  <div class="hr" style="margin:0 16px"></div>
+                  <div class="setrow tap" style="padding:14px 16px"><div class="grow"><div class="k">Privacy policy</div></div>$ICON_chevright</div>
+                </div>
+                <div class="mono muted" style="text-align:center;font-size:11px;margin-top:16px">No telemetry · No account · No upload</div>
+              </div></div>
+            </div>
+          </section>
+
+          <!-- ===== PDF VIEWER ===== -->
+          <section class="screen" data-screen="pdf">
+            <div class="main">
+              <div class="topbar bordered">
+                <button class="iconbtn navhome">$ICON_back</button>
+                <div class="tt"><div class="t1">Residential Lease Agreement.pdf</div></div>
+              </div>
+              <div class="pdfwrap">
+                <div class="callout"><div class="cl">Cited passage</div>
+                  <div style="margin-top:4px">The security deposit shall be returned within twenty-one (21) days of the termination of tenancy, less any itemized deductions.</div></div>
+                <div class="page">
+                  <div class="sheet">
+                    <div style="font-weight:700;font-size:13px;margin-bottom:10px;color:#111">RESIDENTIAL LEASE AGREEMENT</div>
+                    <p>This Agreement is entered into between the Landlord and the Tenant for the premises described herein. The term of this lease shall be twelve (12) months commencing on the date of occupancy.</p>
+                    <p>Section 7 — Security Deposit. <span class="mark">The security deposit shall be returned within twenty-one (21) days of the termination of tenancy, less any itemized deductions</span> for damages beyond ordinary wear and tear.</p>
+                    <p>Section 8 — Renewal. Either party may elect to renew this Agreement by providing written notice no fewer than thirty (30) days prior to the end of the term.</p>
+                    <p>Section 9 — Maintenance. The Tenant shall maintain the premises in clean and sanitary condition throughout the tenancy.</p>
+                  </div>
+                </div>
+                <div class="pagebar">$ICON_chevleft<span>Page 3 of 14</span>$ICON_chevright</div>
+              </div>
+            </div>
+          </section>
+
+        </div><!-- /app -->
+
+        <!-- ===== FULL-BLEED FLOWS ===== -->
+        <div class="flow" data-flow="onboarding">
+          <div class="ic">$ICON_shield_lg</div>
+          <h1>Private by design</h1>
+          <p>NativeLM runs entirely on your phone. No account, no servers, no telemetry — your documents and conversations never leave the device.</p>
+          <div class="dots"><i class="on"></i><i></i><i></i><i></i></div>
+          <div class="nav"><button class="btn text">Skip</button><button class="btn">Next</button></div>
+          <div class="terms">Open source (AGPL-3.0). Downloaded models are subject to their own licenses.<br>
+            <a>Source code</a> · <a>Gemma Terms</a></div>
+        </div>
+
+        <div class="flow" data-flow="splash">
+          <svg width="64" height="64" viewBox="0 0 56 56" fill="none" stroke="var(--sage)" stroke-width="3.2"><rect x="12" y="8" width="29" height="40" rx="4.5"/><line x1="18" y1="22" x2="35" y2="22"/><line x1="18" y1="30" x2="29" y2="30"/><path d="M45 13.5l1.6 4 4 1.6-4 1.6L45 24.7l-1.6-4-4-1.6 4-1.6z" fill="var(--sage)" stroke="none"/></svg>
+          <h1 style="margin-top:22px">NativeLM</h1>
+          <p>Your documents and conversations never leave your phone.</p>
+          <div class="prog indet" style="width:140px;margin:30px 0 12px"><i></i></div>
+          <div class="mono muted" style="font-size:11px">On-device · No account · No telemetry</div>
+        </div>
+
+        <div class="flow" data-flow="lock">
+          <div class="ic" style="border-radius:50%">$ICON_lock_lg</div>
+          <h1 style="margin-top:22px">NativeLM is locked</h1>
+          <p>Your documents and chats stay on this device. Unlock to continue.</p>
+          <button class="btn" style="margin-top:26px;padding-left:28px;padding-right:28px">Unlock</button>
+        </div>
+
+      </div><!-- /device -->
+      <div class="dim" id="dim">390 × 780 · compact</div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ---------------- inline icon set (stroke, 24px) ---------------- */
+const I = (p,extra='')=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" ${extra}>${p}</svg>`;
+const ICONS={
+  chat:I('<path d="M21 11.5a8.4 8.4 0 0 1-12.1 7.5L3 21l2-5.9A8.4 8.4 0 1 1 21 11.5Z"/>'),
+  chatline:I('<path d="M21 11.5a8.4 8.4 0 0 1-12.1 7.5L3 21l2-5.9A8.4 8.4 0 1 1 21 11.5Z"/>'),
+  models:I('<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M1 9h3M1 15h3M20 9h3M20 15h3"/>'),
+  doc:I('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h6"/>'),
+  studio:I('<path d="M12 3l1.9 4.6L18.5 9.5 13.9 11.4 12 16l-1.9-4.6L5.5 9.5l4.6-1.9L12 3Z"/><path d="M19 14l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2Z"/>'),
+  gear:I('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 7 19.4a1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 2.6 14H2.5a2 2 0 1 1 0-4h.1A1.6 1.6 0 0 0 4.6 7l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.6 1.6 0 0 0 10 4.6V4.5a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8 1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1Z"/>'),
+  book:I('<path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M19 3v18"/>'),
+  spark:I('<path d="M12 3l1.9 4.6L18.5 9.5 13.9 11.4 12 16l-1.9-4.6L5.5 9.5l4.6-1.9L12 3Z"/>'),
+  lock:I('<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>'),
+  menu:I('<path d="M4 6h16M4 12h16M4 18h16"/>'),
+  plus:I('<path d="M12 5v14M5 12h14"/>'),
+  search:I('<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>'),
+  folder:I('<path d="M3 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>'),
+  send:I('<path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4z"/>'),
+  back:I('<path d="M19 12H5M12 19l-7-7 7-7"/>'),
+  close:I('<path d="M18 6 6 18M6 6l12 12"/>'),
+  trash:I('<path d="M3 6h18M8 6V4h8v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>'),
+  more:I('<circle cx="12" cy="5" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="12" cy="19" r="1.4"/>'),
+  chevdown:I('<path d="M6 9l6 6 6-6"/>'),
+  chevright:I('<path d="M9 6l6 6-6 6"/>','width="18" height="18"'),
+  chevleft:I('<path d="M15 6l-6 6 6 6"/>'),
+  audio:I('<path d="M12 2a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3Z"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>'),
+  podcast:I('<circle cx="12" cy="9" r="3"/><path d="M5.5 15.5a9 9 0 1 1 13 0M8 17.8a5 5 0 1 1 8 0M12 14v8"/>'),
+  play:I('<path d="M7 4v16l13-8z" fill="currentColor" stroke="none"/>'),
+  faq:I('<path d="M9.1 9a3 3 0 1 1 4 2.8c-.9.4-1.6 1.2-1.6 2.2M12 17h.01"/><circle cx="12" cy="12" r="9"/>'),
+  topics:I('<path d="M3 6h13M3 12h13M3 18h9"/><circle cx="20" cy="6" r="1.4"/><circle cx="20" cy="12" r="1.4"/>'),
+  school:I('<path d="M3 9l9-5 9 5-9 5-9-5Z"/><path d="M7 11v5c0 1 2.5 2.5 5 2.5S17 17 17 16v-5"/>'),
+  timeline:I('<circle cx="6" cy="6" r="2"/><circle cx="6" cy="18" r="2"/><path d="M6 8v8M11 6h8M11 18h8"/>'),
+  mindmap:I('<circle cx="5" cy="12" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="18" cy="18" r="2"/><path d="M7 12c4 0 5-6 9-6M7 12c4 0 5 6 9 6"/>'),
+  shield_lg:I('<path d="M12 3l7 3v5c0 4.5-3 8.5-7 10-4-1.5-7-5.5-7-10V6z"/><path d="M9 12l2 2 4-4"/>'),
+  lock_lg:I('<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>'),
+};
+/* expand the ICON placeholders left in the markup */
+document.body.innerHTML = document.body.innerHTML.replace(/\$ICON_(\w+)/g,(m,n)=>ICONS[n]||m);
+
+/* ---------------- controls ---------------- */
+const device=document.getElementById('device'), dim=document.getElementById('dim');
+const DIMS={phone:['390 × 780','compact'],foldable:['720 × 560','medium'],tablet:['1040 × 720','expanded']};
+
+function setDevice(d){
+  device.dataset.device=d; const [a,b]=DIMS[d]; dim.textContent=`${a} · ${b}`;
+  document.querySelectorAll('#devSeg button').forEach(x=>x.classList.toggle('on',x.dataset.dev===d));
+}
+function setTheme(t){
+  device.dataset.theme=t;
+  document.querySelectorAll('#themeSeg button').forEach(x=>x.classList.toggle('on',x.dataset.theme===t));
+}
+document.querySelectorAll('#devSeg button').forEach(b=>b.onclick=()=>setDevice(b.dataset.dev));
+document.querySelectorAll('#themeSeg button').forEach(b=>b.onclick=()=>setTheme(b.dataset.theme));
+
+/* screen routing */
+const FLOWS=['onboarding','splash','lock'];
+function show(screen){
+  const isFlow=FLOWS.includes(screen);
+  document.querySelectorAll('.flow').forEach(f=>f.classList.toggle('on',isFlow&&f.dataset.flow===screen));
+  document.querySelector('.app').style.visibility=isFlow?'hidden':'visible';
+  if(!isFlow){
+    document.querySelectorAll('.screen').forEach(s=>s.classList.toggle('on',s.dataset.screen===screen));
+    document.querySelectorAll('.rail .ritem').forEach(r=>r.classList.toggle('on',r.dataset.screen===screen));
+  }
+  document.querySelectorAll('#picker a').forEach(a=>a.classList.toggle('on',a.dataset.screen===screen));
+  closeDrawer();
+}
+// Only wire genuine nav elements — NOT the <section class="screen"> wrappers,
+// which also carry data-screen and would otherwise hijack inner clicks.
+document.querySelectorAll('.picker a[data-screen], .rail .ritem[data-screen], .conv[data-screen], .setrow[data-screen]').forEach(el=>{
+  el.addEventListener('click',e=>{ e.stopPropagation(); show(el.dataset.screen); });
+});
+
+/* drawer (compact) */
+const scrim=document.getElementById('scrim'),drawer=document.getElementById('drawer');
+function openDrawer(){scrim.classList.add('open');drawer.classList.add('open');}
+function closeDrawer(){scrim&&scrim.classList.remove('open');drawer&&drawer.classList.remove('open');}
+document.getElementById('openDrawer').onclick=openDrawer;
+scrim.onclick=closeDrawer;
+/* back/home buttons on sub-screens return to chat */
+document.querySelectorAll('.navhome').forEach(b=>b.onclick=()=>show('chat'));
+
+/* switch toggles */
+document.querySelectorAll('[data-toggle]').forEach(s=>s.onclick=()=>s.classList.toggle('on'));
+
+/* segmented controls */
+document.querySelectorAll('.segctl').forEach(g=>g.querySelectorAll('button').forEach(b=>b.onclick=()=>{
+  g.querySelectorAll('button').forEach(x=>x.classList.remove('on'));b.classList.add('on');}));
+
+setDevice('phone'); setTheme('light'); show('chat');
+</script>
+</body>
+</html>
