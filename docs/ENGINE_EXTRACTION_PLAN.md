@@ -47,35 +47,52 @@ Tests moved to `lib/src/commonTest/.../rag/` (JUnit → kotlin-test, runs on all
 
 ---
 
-## Phase 2 — deferred (next branches)
+## Phase 2 — Studio engine → `com.sagar.aicore.studio`  ✅ DONE
 
-Each is a self-contained follow-up using the same invert-the-dependency move.
+`StudioGenerator` was already decoupled (injected `llm` lambda + a `Source` of
+strings), so the generator, `StudioPrompts`, `StudioArtifactType`, and every
+tolerant parser (FAQ / topics / timeline / mind-map / podcast / study-guide, with
+their models) moved almost verbatim — pure Kotlin, multiplatform-safe.
+`sanitizeStudioMarkdown` / `stripForSpeech` were promoted `internal → public`.
+`TtsController` / `PodcastController` stay in the app (Android `TextToSpeech`
+playback) and import `PodcastTurn` / `stripForSpeech` from the engine. No
+`TtsSpeaker` interface was needed — generation is engine-side, playback is app-side.
 
-### Studio engine → `com.sagar.aicore.studio`
-`StudioGenerator` is **already fully decoupled** (injected `llm` lambda + `Source`
-of strings), so the generator + `StudioPrompts` + `StudioArtifactType` + the pure
-artifact parsers move almost verbatim. The only friction: the parsers
-(`parseTimeline`, mind-map, podcast) are shared with the Compose UI, so the UI
-imports shift too. Define a `TtsSpeaker` interface in the engine; `TtsController`
-stays in the app and implements it.
+## Phase 3 — Backup crypto → `com.sagar.aicore.backup`  ✅ DONE
 
-### Backup → `com.sagar.aicore.backup`
-- `BackupCrypto` (Argon2id + AES-GCM) and `BackupModels` move to `androidMain`/jvm.
-- `BackupManager` splits: the `.nlmbak` format + orchestration move (over the store
-  interfaces); the `Context`/ObjectBox/`AppPreferences` wiring stays in the app.
+`BackupCrypto` (Argon2id key derivation + AES-256-GCM) moved to `androidMain`; `lib`
+gained the `signal-argon2` dependency. The reusable crypto primitive is now engine
+infrastructure. **`BackupManager`, `BackupModels`, the `.nlmbak` codec stay app-side**
+— that orchestration reads the ObjectBox boxes directly, remaps ids, and touches
+`Context`/`AppPreferences`/`@Serializable`. A full codec extraction is gated on the
+persistence stores below (and would add the kotlinx-serialization compiler plugin to
+the engine, which it deliberately omits today).
 
-### Sync → `com.sagar.aicore.sync`
-- `SocketTransfer` (java.net sockets) → engine `androidMain`/jvm.
-- `NsdHelper` stays in the app behind a new engine `PeerDiscovery` interface.
-- `SyncManager` splits: protocol/state machine → engine; `Context` wiring stays.
+## Phase 4 — P2P transport → `com.sagar.aicore.sync`  ✅ DONE
 
-### Voice → engine `androidMain`
-`WhisperSpeechToText` already implements the engine's `SpeechToText` interface, so
-it + `WhisperNative` (JNI) + `AudioRecorder` move down with little change.
+`SocketTransfer` (plain-TCP, length-prefixed file transfer of the already-encrypted
+`.nlmbak`) moved to `androidMain` — a clean, reusable transport. `NsdHelper` (NSD/mDNS
+discovery) and `SyncManager` (the `Context` + `BackupManager` orchestration / state
+machine) stay app-side; a future `PeerDiscovery` engine interface can follow.
 
-### Conversation / project / studio persistence
-Promote `ConversationStore` / `ProjectStore` / `StudioStore` interfaces (over DTOs)
-into the engine, mirroring `DocumentStore`; ObjectBox impls + entities stay in the app.
+## Phase 5 — Voice  ✅ ALREADY CORRECTLY SPLIT (no change)
+
+The `SpeechToText` interface already lives in the engine; `WhisperSpeechToText`
+implements it in the app. The Whisper impl (`WhisperSpeechToText` / `WhisperNative`
+JNI / `AudioRecorder`) **must stay in the app** because the `libwhisper.so` native
+build (`externalNativeBuild` / CMake / whisper.cpp) is defined in `sample-app` —
+moving the wrapper would drag that native build into every consumer of the published
+library. Interface in engine + native impl in app is the correct end-state.
+
+## Phase 6 — Conversation / project / studio persistence  ⏸ DEFERRED BY DESIGN
+
+Unlike `DocumentStore` (which the engine's RAG pipeline consumes), nothing in the
+engine consumes conversation/project/artifact persistence today — `ConversationRepository`
+/ `ProjectRepository` / `StudioRepository` are concrete ObjectBox classes used only by
+the app's ViewModel. Promoting them to engine interfaces over DTOs now would be a
+pervasive entity→DTO rewrite of the ViewModel for **speculative API with no consumer**.
+Do it when a real engine-side consumer appears (the natural trigger is the backup-codec
+extraction in Phase 3), so the contract is shaped by an actual caller.
 
 ---
 
