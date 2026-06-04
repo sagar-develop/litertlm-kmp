@@ -12,9 +12,18 @@ the Play Console · ⏭️ recommended follow-up (not blocking).
 
 ## 1. Legal & compliance
 
-- ✅ **Privacy policy authored** — see [`PRIVACY.md`](PRIVACY.md).
-  - 🌐 **Host it** at a public URL (e.g. GitHub Pages from this repo) and paste
-    that URL into **Play Console → Policy → App content → Privacy policy**.
+- ✅ **Privacy policy authored & hosting prepared** — source in
+  [`PRIVACY.md`](PRIVACY.md); a static GitHub Pages site is committed under
+  [`docs/`](docs/) (`docs/index.html`, `docs/privacy/index.html`, `docs/.nojekyll`).
+  - 🌐 **Enable GitHub Pages (one-time, free for this public repo):** after this
+    merges to `main`, go to **Settings → Pages → Build and deployment**, set
+    **Source = "Deploy from a branch"**, **Branch = `main`**, **Folder = `/docs`**,
+    and Save. Pages is **free** for public repositories.
+  - 🌐 The privacy URL to paste into **Play Console → Policy → App content →
+    Privacy policy** will then be:
+    **`https://sagar-develop.github.io/litertlm-kmp/privacy/`**
+  - The site root (`https://sagar-develop.github.io/litertlm-kmp/`) is a small
+    landing page linking the policy and the source.
 - ✅ **In-app terms/source disclosure** — the final onboarding slide links the
   AGPL source and Google's Gemma Terms, and the gated-model download flow
   reminds users to accept the model license on Hugging Face.

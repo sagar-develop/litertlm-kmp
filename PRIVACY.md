@@ -98,6 +98,11 @@ responsible for complying with the license of any model you download.
 If this policy changes, the updated version will be published at this URL with a
 new "Last updated" date.
 
+> Hosted copy: this policy is published via GitHub Pages at
+> <https://sagar-develop.github.io/litertlm-kmp/privacy/> (the source of the
+> hosted page is [`docs/privacy/index.html`](docs/privacy/index.html); this
+> Markdown file is the canonical text).
+
 ## Contact
 
 Questions about this policy: **sgupta8874@gmail.com**
