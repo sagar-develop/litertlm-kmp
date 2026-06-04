@@ -2,7 +2,7 @@
  * Copyright (C) 2026 Sagar Gupta
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
-package com.nativelm.app.data.backup
+package com.sagar.aicore.backup
 
 import org.signal.argon2.Argon2
 import org.signal.argon2.Type

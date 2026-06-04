@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 package com.nativelm.app.data.backup
+import com.sagar.aicore.backup.BackupCrypto
 
 import android.content.Context
 import android.util.Base64
