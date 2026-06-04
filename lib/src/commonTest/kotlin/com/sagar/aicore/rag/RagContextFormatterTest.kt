@@ -2,24 +2,25 @@
  * Copyright (C) 2026 Sagar Gupta
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
-package com.nativelm.app.rag
+package com.sagar.aicore.rag
 
-import com.nativelm.app.data.db.DocumentChunkEntity
-import com.nativelm.app.data.db.ScoredChunk
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class RagContextFormatterTest {
 
     private fun scored(docId: Long, text: String, page: Int = 0, score: Double = 0.1) =
         ScoredChunk(
-            DocumentChunkEntity().apply {
-                documentId = docId
-                this.text = text
-                pageNumber = page
-            },
+            StoredChunk(
+                id = 0,
+                documentId = docId,
+                projectId = 0,
+                text = text,
+                pageNumber = page,
+                chunkIndex = 0,
+            ),
             score,
         )
 
@@ -37,7 +38,7 @@ class RagContextFormatterTest {
         assertTrue(ctx.contextText.contains("--- CONTEXT END ---"))
         assertTrue(ctx.contextText.contains("alpha fact"))
         assertTrue(ctx.contextText.contains("beta fact"))
-        assertTrue(ctx.contextText.contains("[Doc1, p.3]")) // page-aware header
+        assertTrue(ctx.contextText.contains("[Doc1, p.3]"))
         assertEquals(2, ctx.citations.size)
         assertEquals("Doc1", ctx.citations[0].documentTitle)
         assertEquals(3, ctx.citations[0].pageNumber)
@@ -56,7 +57,6 @@ class RagContextFormatterTest {
         val ctx = RagContextFormatter.format(listOf(scored(1, huge))) { "Doc" }
         assertEquals(1, ctx.citations.size)
         assertTrue(ctx.contextText.contains("--- CONTEXT END ---"))
-        // Body truncated to the 4000-char budget (+ small marker/header overhead).
-        assertTrue("context exceeded cap: ${ctx.contextText.length}", ctx.contextText.length < 4200)
+        assertTrue(ctx.contextText.length < 4200, "context exceeded cap: ${ctx.contextText.length}")
     }
 }

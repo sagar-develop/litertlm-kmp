@@ -2,11 +2,8 @@
  * Copyright (C) 2026 Sagar Gupta
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
-package com.nativelm.app.rag
+package com.sagar.aicore.rag
 
-import com.nativelm.app.data.db.DocumentChunkEntity
-import com.nativelm.app.data.db.DocumentRepository
-import com.nativelm.app.data.db.ScoredChunk
 import com.sagar.aicore.EmbeddingEngine
 
 /**
@@ -26,7 +23,7 @@ import com.sagar.aicore.EmbeddingEngine
  */
 class DefaultDocumentRetriever(
     private val embeddingEngine: EmbeddingEngine,
-    private val repository: DocumentRepository,
+    private val store: DocumentStore,
     private val maxDistance: Double = RELEVANCE_MAX_DISTANCE,
 ) : DocumentRetriever {
 
@@ -35,7 +32,7 @@ class DefaultDocumentRetriever(
 
         // ── Vector arm: nearest neighbors, gated to genuine semantic matches. ──
         val queryVector = embeddingEngine.embed(query)
-        val vectorHits = repository.findSimilarChunks(queryVector, VECTOR_POOL, projectId)
+        val vectorHits = store.findSimilarChunks(queryVector, VECTOR_POOL, projectId)
             .filter { it.score <= maxDistance }
         val vectorRanking = vectorHits.map { it.chunk.id }
 
@@ -44,7 +41,7 @@ class DefaultDocumentRetriever(
         val keywordCandidates = if (terms.isEmpty()) {
             emptyList()
         } else {
-            repository.keywordCandidates(projectId, terms, KEYWORD_POOL)
+            store.keywordCandidates(projectId, terms, KEYWORD_POOL)
         }
         val keywordRanking = KeywordSearch.rank(
             query,
@@ -58,12 +55,12 @@ class DefaultDocumentRetriever(
             .reciprocalRankFusion(listOf(vectorRanking, keywordRanking))
             .take(k)
 
-        val byId: Map<Long, DocumentChunkEntity> =
+        val byId: Map<Long, StoredChunk> =
             (vectorHits.map { it.chunk } + keywordCandidates).associateBy { it.id }
         val ordered = fusedIds.mapNotNull { id -> byId[id] }.map { ScoredChunk(it, 0.0) }
         if (ordered.isEmpty()) return RetrievedContext.EMPTY
 
-        val titles = repository.listDocuments(projectId).associate { it.id to it.title }
+        val titles = store.listDocuments(projectId).associate { it.id to it.title }
         return RagContextFormatter.format(ordered) { id -> titles[id] ?: "Source" }
     }
 

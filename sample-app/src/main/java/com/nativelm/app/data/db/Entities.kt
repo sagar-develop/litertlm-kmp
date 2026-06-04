@@ -77,7 +77,7 @@ class MessageEntity {
  * A document imported for retrieval-augmented chat. The extracted text is split
  * into [DocumentChunkEntity] rows; this entity is just the parent metadata shown
  * in the document list. Chunks link back by [DocumentChunkEntity.documentId] (a
- * plain indexed FK, cascade-delete handled explicitly — see DocumentRepository).
+ * plain indexed FK, cascade-delete handled explicitly — see DocumentStore).
  */
 @Entity
 class DocumentEntity {

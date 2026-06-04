@@ -2,12 +2,12 @@
  * Copyright (C) 2026 Sagar Gupta
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
-package com.nativelm.app.rag
+package com.sagar.aicore.rag
 
 import kotlin.math.ln
 
 /**
- * Lexical (keyword) half of hybrid retrieval. Pure Kotlin — no Android, no model —
+ * Lexical (keyword) half of hybrid retrieval. Pure Kotlin — no platform, no model —
  * so it's unit-testable and runs in microseconds.
  *
  * Why it exists: the vector arm (USE-Lite, 100-dim) is semantically fuzzy and can
@@ -61,14 +61,14 @@ object KeywordSearch {
         val avgLen = tokenized.sumOf { it.second.size }.toDouble() / n
         val df = HashMap<String, Int>()
         for ((_, toks) in tokenized) {
-            for (t in toks.toSet()) if (t in terms) df.merge(t, 1, Int::plus)
+            for (t in toks.toSet()) if (t in terms) df[t] = (df[t] ?: 0) + 1
         }
 
         val scored = ArrayList<Pair<Long, Double>>(n)
         for ((id, toks) in tokenized) {
             if (toks.isEmpty()) continue
             val tf = HashMap<String, Int>()
-            for (t in toks) if (t in terms) tf.merge(t, 1, Int::plus)
+            for (t in toks) if (t in terms) tf[t] = (tf[t] ?: 0) + 1
             if (tf.isEmpty()) continue
             var score = 0.0
             val dl = toks.size.toDouble()
@@ -92,7 +92,7 @@ object KeywordSearch {
         val fused = HashMap<Long, Double>()
         for (ranking in rankings) {
             ranking.forEachIndexed { index, id ->
-                fused.merge(id, 1.0 / (k + index + 1), Double::plus)
+                fused[id] = (fused[id] ?: 0.0) + 1.0 / (k + index + 1)
             }
         }
         return fused.entries.sortedByDescending { it.value }.map { it.key }

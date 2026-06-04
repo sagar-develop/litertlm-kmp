@@ -2,11 +2,11 @@
  * Copyright (C) 2026 Sagar Gupta
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
-package com.nativelm.app.rag
+package com.sagar.aicore.rag
 
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class KeywordSearchTest {
 
@@ -15,7 +15,6 @@ class KeywordSearchTest {
     }
 
     @Test fun queryTermsDropStopwordsAndDuplicates() {
-        // "what/is/the" are stop words; "codename" survives; duplicates collapse.
         assertEquals(listOf("codename"), KeywordSearch.queryTerms("What is the codename codename"))
     }
 
@@ -32,7 +31,6 @@ class KeywordSearchTest {
             KeywordSearch.Doc(1, "zephyr report filler text here"),
             KeywordSearch.Doc(2, "zephyr zephyr zephyr dense match"),
         )
-        // Doc 2 mentions the term more often → ranks first.
         assertEquals(listOf(2L, 1L), KeywordSearch.rank("zephyr", docs))
     }
 
@@ -42,9 +40,8 @@ class KeywordSearchTest {
     }
 
     @Test fun reciprocalRankFusionRewardsAgreement() {
-        // id 1 is high in both lists; id 3 high in one; id 2 only mid in one.
         val fused = KeywordSearch.reciprocalRankFusion(listOf(listOf(1, 2, 3), listOf(3, 1)))
-        assertEquals(1L, fused.first()) // appears near top of both → wins
+        assertEquals(1L, fused.first())
         assertEquals(setOf(1L, 2L, 3L), fused.toSet())
     }
 }

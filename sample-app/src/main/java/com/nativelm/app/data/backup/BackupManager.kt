@@ -15,7 +15,7 @@ import com.nativelm.app.data.db.MessageEntity
 import com.nativelm.app.data.db.ObjectBox
 import com.nativelm.app.data.db.ProjectEntity
 import com.nativelm.app.data.db.StudioArtifactEntity
-import com.nativelm.app.rag.CitationJson
+import com.sagar.aicore.rag.CitationJson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext

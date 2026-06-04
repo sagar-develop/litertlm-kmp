@@ -2,7 +2,7 @@
  * Copyright (C) 2026 Sagar Gupta
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
-package com.nativelm.app.llm
+package com.sagar.aicore
 
 private const val THINK_OPEN = "<think>"
 private const val THINK_CLOSE = "</think>"

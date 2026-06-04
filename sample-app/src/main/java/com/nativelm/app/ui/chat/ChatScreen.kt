@@ -101,7 +101,7 @@ import com.nativelm.app.llm.NativeLmViewModel
 import com.nativelm.app.llm.VoiceState
 import com.nativelm.app.ui.settings.LanguagePickerSheet
 import com.nativelm.app.llm.ProjectSummary
-import com.nativelm.app.rag.Citation
+import com.sagar.aicore.rag.Citation
 import com.nativelm.app.ui.theme.JetBrainsMono
 import com.nativelm.app.ui.theme.NativeLmMark
 import kotlinx.coroutines.launch

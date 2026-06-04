@@ -2,12 +2,11 @@
  * Copyright (C) 2026 Sagar Gupta
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
-package com.nativelm.app.rag
+package com.sagar.aicore.rag
 
-import com.nativelm.app.rag.extract.TextChunker
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class TextChunkerTest {
 
@@ -19,15 +18,14 @@ class TextChunkerTest {
         val chunks = TextChunker().chunk("hello world")
         assertEquals(1, chunks.size)
         assertEquals("hello world", chunks[0].text)
-        assertEquals(0, chunks[0].pageNumber) // no page markers → unknown
+        assertEquals(0, chunks[0].pageNumber)
     }
 
     @Test fun longTextSplitsWithOverlapStride() {
-        // size=10, overlap=2 → stride=8. 16 chars → windows at offset 0 and 8.
         val chunks = TextChunker(chunkSize = 10, overlap = 2).chunk("abcdefghijklmnop")
         assertEquals(2, chunks.size)
         assertEquals("abcdefghij", chunks[0].text)
-        assertEquals("ijklmnop", chunks[1].text) // 2-char overlap with the first window
+        assertEquals("ijklmnop", chunks[1].text)
     }
 
     @Test fun pageBreaksProduceAccuratePageNumbersAndDoNotSpan() {

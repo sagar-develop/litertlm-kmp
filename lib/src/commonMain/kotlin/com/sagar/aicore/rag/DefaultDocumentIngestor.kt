@@ -2,13 +2,8 @@
  * Copyright (C) 2026 Sagar Gupta
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
-package com.nativelm.app.rag
+package com.sagar.aicore.rag
 
-import com.nativelm.app.data.db.DocumentChunkEntity
-import com.nativelm.app.data.db.DocumentRepository
-import com.nativelm.app.rag.extract.DocumentFileStore
-import com.nativelm.app.rag.extract.TextChunker
-import com.nativelm.app.rag.extract.TextExtractor
 import com.sagar.aicore.EmbeddingEngine
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -19,15 +14,15 @@ import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * Ingestion pipeline: extract (files only) → chunk → embed each chunk → persist
- * into a project's HNSW vector store. Emits [IngestState] for UI progress;
- * embedding dominates, so progress is per chunk.
+ * into a project's vector store. Emits [IngestState] for UI progress; embedding
+ * dominates, so progress is per chunk.
  */
 class DefaultDocumentIngestor(
     private val extractor: TextExtractor,
     private val chunker: TextChunker,
     private val embeddingEngine: EmbeddingEngine,
-    private val repository: DocumentRepository,
-    private val fileStore: DocumentFileStore,
+    private val store: DocumentStore,
+    private val fileStore: FileStore,
 ) : DocumentIngestor {
 
     override fun ingest(projectId: Long, uri: String, displayName: String?): Flow<IngestState> = flow {
@@ -36,9 +31,8 @@ class DefaultDocumentIngestor(
             val extracted = extractor.extract(uri, displayName)
             val title = displayName?.substringBeforeLast('.')?.trim()?.ifBlank { null } ?: "Document"
             // Keep a durable copy so citations can reopen the source later; the
-            // picked SAF URI dies with this import. Best-effort: a failed copy
-            // leaves localPath empty (source just isn't reopenable) but the
-            // import still succeeds.
+            // picked URI dies with this import. Best-effort: a failed copy leaves
+            // localPath empty (source just isn't reopenable) but the import succeeds.
             val ext = (displayName?.substringAfterLast('.', "") ?: "").ifBlank { uri.substringAfterLast('.', "") }
             val localPath = fileStore.copyToLocal(uri, ext).orEmpty()
             store(projectId, title, uri, localPath, extracted.mimeType, extracted.pageCount, extracted.text)
@@ -68,27 +62,25 @@ class DefaultDocumentIngestor(
         }
         emit(IngestState.Chunking(chunks.size))
 
-        val documentId = repository.createDocument(projectId, title, uri, localPath, mime, pageCount)
-        val entities = ArrayList<DocumentChunkEntity>(chunks.size)
+        val documentId = store.createDocument(projectId, title, uri, localPath, mime, pageCount)
+        val newChunks = ArrayList<NewChunk>(chunks.size)
         chunks.forEachIndexed { i, chunk ->
             emit(IngestState.Embedding(done = i, total = chunks.size))
             val vector = embeddingEngine.embed(chunk.text)
-            entities += DocumentChunkEntity().apply {
-                this.documentId = documentId
-                this.projectId = projectId
-                this.text = chunk.text
-                pageNumber = chunk.pageNumber
-                chunkIndex = chunk.index
-                embedding = vector
-            }
+            newChunks += NewChunk(
+                text = chunk.text,
+                pageNumber = chunk.pageNumber,
+                chunkIndex = chunk.index,
+                embedding = vector,
+            )
         }
-        repository.addChunks(documentId, projectId, entities)
+        store.addChunks(documentId, projectId, newChunks)
         emit(IngestState.Embedding(done = chunks.size, total = chunks.size))
-        emit(IngestState.Done(documentId, entities.size))
+        emit(IngestState.Done(documentId, newChunks.size))
     }
 
     private suspend fun FlowCollector<IngestState>.emitFailure(t: Throwable) {
-        if (t is CancellationException) throw t // never swallow cancellation (Lift 6)
+        if (t is CancellationException) throw t // never swallow cancellation
         emit(IngestState.Failed(t.message ?: "Import failed."))
     }
 }

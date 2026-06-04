@@ -2,16 +2,16 @@
  * Copyright (C) 2026 Sagar Gupta
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
-package com.nativelm.app.rag.extract
+package com.sagar.aicore.rag
 
 /**
  * Splits extracted document text into overlapping chunks for embedding.
  *
- * Character-based sliding window (not token-aware) — the predecessor shipped this
- * and it's a safe fit for USE-Lite's context. Page boundaries are honoured: the
- * extractor separates pages with a form feed (code point 12), and chunks never
- * span a page so the resulting [Chunk.pageNumber] is accurate for citations. When
- * the source has no page markers, [Chunk.pageNumber] is 0 (unknown).
+ * Character-based sliding window (not token-aware) — a safe fit for USE-Lite's
+ * context. Page boundaries are honoured: the extractor separates pages with a form
+ * feed (code point 12), and chunks never span a page so the resulting
+ * [Chunk.pageNumber] is accurate for citations. When the source has no page
+ * markers, [Chunk.pageNumber] is 0 (unknown).
  *
  * @param chunkSize characters per chunk
  * @param overlap characters shared between consecutive chunks (stride = size - overlap)

@@ -2,11 +2,11 @@
  * Copyright (C) 2026 Sagar Gupta
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
-package com.nativelm.app.rag
+package com.sagar.aicore.rag
 
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class CitationJsonTest {
 
@@ -16,7 +16,7 @@ class CitationJsonTest {
     }
 
     @Test fun nullDecodesToEmpty() {
-        // ObjectBox returns null for this column on rows written before the field
+        // A store may return null for this column on rows written before the field
         // existed (Kotlin defaults aren't applied to legacy rows). Must not throw.
         assertTrue(CitationJson.decode(null).isEmpty())
     }
@@ -31,9 +31,8 @@ class CitationJsonTest {
     }
 
     @Test fun malformedJsonDecodesToEmpty() {
-        // Tolerate legacy/garbage data rather than crashing chat restore.
         assertTrue(CitationJson.decode("not json").isEmpty())
-        assertTrue(CitationJson.decode("{\"d\":1}").isEmpty()) // object, not the expected array
+        assertTrue(CitationJson.decode("{\"d\":1}").isEmpty())
     }
 
     @Test fun missingFieldsFallBackToDefaults() {

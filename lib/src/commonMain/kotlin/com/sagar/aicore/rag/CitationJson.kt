@@ -2,7 +2,7 @@
  * Copyright (C) 2026 Sagar Gupta
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
-package com.nativelm.app.rag
+package com.sagar.aicore.rag
 
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -15,15 +15,13 @@ import kotlinx.serialization.json.long
 import kotlinx.serialization.json.put
 
 /**
- * Serializes a message's [Citation]s to/from a single JSON string for persistence
- * on `MessageEntity`, so the source chips under a grounded answer survive
- * reopening a saved chat.
+ * Serializes a message's [Citation]s to/from a single JSON string for persistence,
+ * so the source chips under a grounded answer survive reopening a saved chat.
  *
  * Uses the kotlinx-serialization JSON *runtime* (hand-built [buildJsonObject] /
- * [jsonArray]) rather than `@Serializable` codegen — matching how `:lib` uses the
- * library, so no serialization compiler plugin is needed. Short keys keep the
- * stored string compact; decoding tolerates malformed/legacy data by returning an
- * empty list rather than throwing.
+ * [jsonArray]) rather than `@Serializable` codegen, so no serialization compiler
+ * plugin is needed. Short keys keep the stored string compact; decoding tolerates
+ * malformed/legacy data by returning an empty list rather than throwing.
  */
 object CitationJson {
 
