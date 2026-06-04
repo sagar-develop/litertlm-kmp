@@ -27,7 +27,9 @@ and the project loosely follows [Semantic Versioning](https://semver.org/).
 - **Play Store readiness** — added [`PRIVACY.md`](PRIVACY.md) (hosted-ready,
   zero-telemetry privacy policy) and [`PLAY_STORE.md`](PLAY_STORE.md) (a detailed
   submission checklist: AAB, signing, Data Safety answers, permissions, content
-  rating, listing assets, compliance, and follow-ups).
+  rating, listing assets, compliance, and follow-ups). The policy is also served
+  as a static GitHub Pages site under [`docs/`](docs/), and **Settings → About →
+  Privacy policy** opens the hosted URL in-app.
 
 ### Changed
 - **Cleartext traffic disabled** — `usesCleartextTraffic="false"` plus a
