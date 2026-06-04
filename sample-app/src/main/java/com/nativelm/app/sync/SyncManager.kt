@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 package com.nativelm.app.sync
+import com.sagar.aicore.sync.SocketTransfer
 
 import android.content.Context
 import android.os.Build

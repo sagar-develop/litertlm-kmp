@@ -2,7 +2,7 @@
  * Copyright (C) 2026 Sagar Gupta
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
-package com.nativelm.app.sync
+package com.sagar.aicore.sync
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
