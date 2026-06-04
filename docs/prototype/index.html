@@ -237,6 +237,18 @@ body{
 .prog.indet > i{width:40%;animation:indet 1.3s var(--ease) infinite}
 @keyframes indet{0%{margin-left:-40%}100%{margin-left:100%}}
 
+/* icon sizing — inline SVGs (viewBox only) fill their box unless pinned here */
+.cite svg{width:18px;height:18px;color:var(--on-muted);flex:0 0 auto}
+.sources .head svg{width:15px;height:15px;flex:0 0 auto}
+.section-label svg{width:14px;height:14px;vertical-align:-2px}
+.newchat svg{width:18px;height:18px}
+.lead svg{width:22px;height:22px}
+.create .ci svg{width:22px;height:22px}
+.hero .hi svg{width:24px;height:24px}
+.playbtn svg{width:20px;height:20px}
+.pagebar svg{width:20px;height:20px;cursor:pointer;color:var(--on-bg)}
+.codebtn svg{width:14px;height:14px}
+
 /* list row */
 .row{display:flex;align-items:center;gap:var(--s3);padding:13px 4px}
 .row .lead{width:38px;height:38px;border-radius:var(--r-md);background:var(--surface-2);display:flex;align-items:center;justify-content:center;color:var(--on-muted);flex:0 0 auto}
