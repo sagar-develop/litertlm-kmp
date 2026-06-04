@@ -2,7 +2,7 @@
  * Copyright (C) 2026 Sagar Gupta
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
-package com.nativelm.app.studio
+package com.sagar.aicore.studio
 
 /**
  * Tolerant cleanup of model output for Studio artifacts. Small on-device models
@@ -14,7 +14,7 @@ package com.nativelm.app.studio
  * Unicode so the briefing reads cleanly. It is deliberately lenient: anything it
  * doesn't recognise just loses its backslash rather than hard-failing.
  */
-internal fun sanitizeStudioMarkdown(raw: String): String {
+fun sanitizeStudioMarkdown(raw: String): String {
     if (raw.isBlank()) return raw
     var s = raw
 
@@ -76,7 +76,7 @@ internal fun sanitizeStudioMarkdown(raw: String): String {
  * — headings, emphasis, code ticks, list/quote markers, table pipes, link URLs —
  * so the speech engine reads natural prose instead of pronouncing symbols.
  */
-internal fun stripForSpeech(markdown: String): String {
+fun stripForSpeech(markdown: String): String {
     var s = sanitizeStudioMarkdown(markdown)
     // Links/images: keep the visible text, drop the target.
     s = s.replace("![", "[")

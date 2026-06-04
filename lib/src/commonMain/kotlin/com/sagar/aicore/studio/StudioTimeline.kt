@@ -2,7 +2,7 @@
  * Copyright (C) 2026 Sagar Gupta
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
-package com.nativelm.app.studio
+package com.sagar.aicore.studio
 
 /** One dated event on a timeline: the [date] as the sources gave it + a [description]. */
 data class TimelineEvent(val date: String, val description: String)

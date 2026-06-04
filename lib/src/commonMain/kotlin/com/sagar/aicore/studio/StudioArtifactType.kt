@@ -2,7 +2,7 @@
  * Copyright (C) 2026 Sagar Gupta
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
-package com.nativelm.app.studio
+package com.sagar.aicore.studio
 
 /**
  * The kinds of Studio artifact that can be generated from a project's sources.

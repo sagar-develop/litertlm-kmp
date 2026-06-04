@@ -143,7 +143,7 @@ class DocumentChunkEntity {
  * the output of map-reduce over the source set, not a chat answer. Persisted per
  * project so it can be re-viewed, shared, regenerated, or deleted.
  *
- * [type] is a [com.nativelm.app.studio.StudioArtifactType] name (e.g. "BRIEFING").
+ * [type] is a [com.sagar.aicore.studio.StudioArtifactType] name (e.g. "BRIEFING").
  * [content] is markdown. [sourceId] is 0 for whole-project scope, or the owning
  * [DocumentEntity.id] when the artifact targets a single source; [scopeLabel] is the
  * human-readable scope ("Whole project" or the source title) shown in the UI.

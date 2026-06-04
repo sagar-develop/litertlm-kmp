@@ -2,7 +2,7 @@
  * Copyright (C) 2026 Sagar Gupta
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
-package com.nativelm.app.studio
+package com.sagar.aicore.studio
 
 /** One parsed Key Topic: a short [title] and a one-line [description]. */
 data class TopicItem(val title: String, val description: String)

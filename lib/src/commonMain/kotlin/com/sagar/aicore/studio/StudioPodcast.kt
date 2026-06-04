@@ -2,7 +2,7 @@
  * Copyright (C) 2026 Sagar Gupta
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
-package com.nativelm.app.studio
+package com.sagar.aicore.studio
 
 /** One turn of a two-host podcast: who speaks ([speaker] 0 or 1, [name]) and what they say. */
 data class PodcastTurn(val speaker: Int, val name: String, val text: String)
