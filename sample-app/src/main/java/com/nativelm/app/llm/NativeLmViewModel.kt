@@ -11,6 +11,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.sagar.aicore.AiEngineRequest
+import com.sagar.aicore.chart.ChartInstruction
 import com.sagar.aicore.ChatSession
 import com.sagar.aicore.ChatTurn
 import com.sagar.aicore.DownloadState
@@ -66,8 +67,9 @@ import java.io.File
 
 private const val TAG = "NativeLmVM"
 
-private const val SYSTEM_INSTRUCTION =
-    "You are NativeLM, a helpful on-device assistant. Answer clearly and concisely."
+private val SYSTEM_INSTRUCTION =
+    "You are NativeLM, a helpful on-device assistant. Answer clearly and concisely.\n\n" +
+        ChartInstruction.SYSTEM
 
 const val ROUTE_SPLASH = "splash"
 const val ROUTE_ONBOARDING = "onboarding"
