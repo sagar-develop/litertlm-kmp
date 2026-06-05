@@ -9,11 +9,26 @@ and the project loosely follows [Semantic Versioning](https://semver.org/).
 > `com.sagar:litertlm-kmp`) and the **showcase app** (`sample-app/`, NativeLM)
 > live in one repo and share a single version line. Entries below note which
 > surface a change lands on. The engine library version in
-> `lib/build.gradle.kts` tracks the latest release (`0.8.0`).
+> `lib/build.gradle.kts` tracks the latest release (`0.9.0`).
 
 ## [Unreleased]
 
+## [0.9.0] — 2026-06-05
+
 ### Added
+- **Charts in chat** — the model can answer with a **chart** (bar / line / pie),
+  rendered natively in the chat bubble. The engine ships a compact chart spec
+  plus a **tolerant parser** that recovers chart JSON whether the model fences it
+  as ` ```chart `, a generic ` ```json `, or emits it untagged or without a
+  `type`; the chart instruction is gated to models capable of following it.
+  (engine + app)
+- **Adaptive multi-device UI** — a Compose layout that adapts across phone,
+  foldable, and tablet/large screens using Material 3 window size classes and the
+  adaptive navigation-suite + list-detail panes. (app)
+- **Project-led navigation drawer + composer attach** — the drawer surfaces
+  **Projects** above recent chats, each section capped to stay scannable (with a
+  "Show all projects" expander), and the composer gains a **`+` attach button**
+  to import a source (PDF / image / text) straight into the current project. (app)
 - **No-account first run** — the model catalog now leads with a **Recommended**
   section of ungated (Apache-2.0 / MIT) models that download with no Hugging Face
   token; the app picks the best one that fits the device's RAM
@@ -32,10 +47,19 @@ and the project loosely follows [Semantic Versioning](https://semver.org/).
   Privacy policy** opens the hosted URL in-app.
 
 ### Changed
+- **Engine extraction** — the RAG orchestration (ingestor / retriever / chunker /
+  keyword search / context formatter), the **Studio** generators, the backup
+  crypto, and the P2P **socket transport** moved out of the sample app into the
+  reusable `:lib` engine (`com.sagar.aicore.*`), with domain tunables
+  externalized into config objects. The app is now a thin showcase over the
+  library; the engine is independently consumable. (engine)
+- **Richer chat rendering** — improved Markdown rendering in chat bubbles
+  alongside the new inline charts. (app)
 - **Cleartext traffic disabled** — `usesCleartextTraffic="false"` plus a
   `network_security_config.xml` (`cleartextTrafficPermitted=false`). Model
   downloads are HTTPS; local peer-to-peer sync uses raw sockets carrying
   AES-GCM ciphertext and is unaffected.
+- Engine library version bumped to `0.9.0`.
 
 ## [0.8.0] — 2026-06-03
 
