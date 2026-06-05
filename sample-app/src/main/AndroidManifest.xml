@@ -32,6 +32,8 @@
         android:theme="@style/Theme.NativeLM"
         android:supportsRtl="true"
         android:allowBackup="false"
+        android:usesCleartextTraffic="false"
+        android:networkSecurityConfig="@xml/network_security_config"
         tools:targetApi="33"
         xmlns:tools="http://schemas.android.com/tools">
 

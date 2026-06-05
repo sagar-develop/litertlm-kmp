@@ -4,6 +4,8 @@
  */
 package com.nativelm.app.ui.onboarding
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -37,6 +39,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
@@ -62,9 +65,12 @@ private val SLIDES = listOf(
     Slide(
         Icons.Outlined.CloudDownload,
         "You control the models",
-        "Bring your own models. Download them directly from Hugging Face with your access token and switch whenever you like.",
+        "Start with a free, open model — no account needed. Advanced Gemma models are a tap away with a free Hugging Face token. Switch whenever you like.",
     ),
 )
+
+private const val SOURCE_URL = "https://github.com/sagar-develop/litertlm-kmp"
+private const val GEMMA_TERMS_URL = "https://ai.google.dev/gemma/terms"
 
 @Composable
 fun OnboardingScreen(onFinish: () -> Unit) {
@@ -126,46 +132,82 @@ fun OnboardingScreen(onFinish: () -> Unit) {
             }
         }
 
-        Row(
+        Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .padding(vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
+                .fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            TextButton(onClick = onFinish) {
-                Text(if (isLast) "" else "Skip")
+            // Terms / source gate: shown on the last slide before "Get started".
+            // NativeLM is AGPL-3.0 (source linked); downloaded models carry their
+            // own licenses (e.g. Google's Gemma Terms for the Gemma tier).
+            if (isLast) {
+                TermsFooter()
+                Spacer(Modifier.height(4.dp))
             }
 
             Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                repeat(SLIDES.size) { i ->
-                    val active = i == pagerState.currentPage
-                    val color by animateColorAsState(
-                        if (active) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.outline,
-                        label = "dot",
-                    )
-                    Box(
-                        Modifier
-                            .size(if (active) 9.dp else 7.dp)
-                            .clip(CircleShape)
-                            .background(color),
-                    )
+                TextButton(onClick = onFinish) {
+                    Text(if (isLast) "" else "Skip")
+                }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    repeat(SLIDES.size) { i ->
+                        val active = i == pagerState.currentPage
+                        val color by animateColorAsState(
+                            if (active) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.outline,
+                            label = "dot",
+                        )
+                        Box(
+                            Modifier
+                                .size(if (active) 9.dp else 7.dp)
+                                .clip(CircleShape)
+                                .background(color),
+                        )
+                    }
+                }
+
+                Button(
+                    onClick = {
+                        if (isLast) onFinish()
+                        else scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) }
+                    },
+                ) {
+                    Text(if (isLast) "Get started" else "Next")
                 }
             }
+        }
+    }
+}
 
-            Button(
-                onClick = {
-                    if (isLast) onFinish()
-                    else scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) }
-                },
-            ) {
-                Text(if (isLast) "Get started" else "Next")
-            }
+/** Source + model-license disclosure shown on the final onboarding slide. */
+@Composable
+private fun TermsFooter() {
+    val context = LocalContext.current
+    fun open(url: String) = runCatching {
+        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+    }
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            text = "Open source (AGPL-3.0). Downloaded models are subject to their own licenses.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 16.dp),
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            TextButton(onClick = { open(SOURCE_URL) }) { Text("Source code") }
+            TextButton(onClick = { open(GEMMA_TERMS_URL) }) { Text("Gemma Terms") }
         }
     }
 }

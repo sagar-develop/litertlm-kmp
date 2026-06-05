@@ -58,6 +58,7 @@ fun NativeLmTheme(
     MaterialTheme(
         colorScheme = if (darkTheme) DarkColors else LightColors,
         typography = NativeLmTypography,
+        shapes = NativeLmShapes,
         content = content,
     )
 }

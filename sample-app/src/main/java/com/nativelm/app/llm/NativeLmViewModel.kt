@@ -311,6 +311,27 @@ class NativeLmViewModel(app: Application) : ViewModel() {
         .map { id -> id?.let { catalog.byId(it) }?.let(::displayName) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
+    /**
+     * The best "no account needed" model for this device: the largest **ungated**
+     * (Apache-2.0 / MIT) LLM whose RAM floor the device clears. Surfaced as the
+     * "Recommended" pick in Model Management so a fresh install — including a Play
+     * Store user with no Hugging Face account — can get a working model with a
+     * single tap: no token, no license to accept. Null only on devices below even
+     * the smallest model's RAM floor. Device RAM is fixed for the process, so this
+     * is computed once on first read.
+     */
+    val recommendedModelId: String? by lazy {
+        catalog.byRole(ModelRole.LLM_PRIMARY)
+            .filter { !it.requiresAuth && deviceRamMb >= it.minDeviceRamMb }
+            .maxByOrNull { it.minDeviceRamMb }
+            ?.id
+    }
+
+    /** One-tap convenience: download the device's recommended ungated model. No-op if none fits. */
+    fun downloadRecommended() {
+        recommendedModelId?.let { download(it) }
+    }
+
     private val downloadJobs = mutableMapOf<String, Job>()
     private var generationJob: Job? = null
     private var studioJob: Job? = null

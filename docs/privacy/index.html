@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NativeLM — Privacy Policy</title>
+  <meta name="description" content="Privacy policy for NativeLM, a fully on-device AI app. No account, no telemetry, no data collection.">
+  <style>
+    :root {
+      --bg: #FAF9F6; --fg: #1C1B1A; --muted: #5f5d59; --accent: #7FA980;
+      --border: #e6e3dc; --card: #ffffff;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #1C1B1A; --fg: #ECEAE5; --muted: #a8a59e; --accent: #7FA980;
+              --border: #2e2c2a; --card: #232220; }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--bg); color: var(--fg);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
+      line-height: 1.65; font-size: 17px;
+    }
+    main { max-width: 760px; margin: 0 auto; padding: 48px 22px 96px; }
+    h1 { font-size: 2rem; margin: 0 0 4px; }
+    h2 { font-size: 1.25rem; margin: 2.4em 0 .5em; padding-top: .3em; border-top: 1px solid var(--border); }
+    h2:first-of-type { border-top: none; }
+    .updated { color: var(--muted); font-size: .92rem; margin: 0 0 1.6em; }
+    a { color: var(--accent); }
+    blockquote {
+      margin: 1.4em 0; padding: 14px 18px; background: var(--card);
+      border-left: 3px solid var(--accent); border-radius: 6px; color: var(--fg);
+    }
+    table { width: 100%; border-collapse: collapse; margin: 1.2em 0; font-size: .95rem; }
+    th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    th { color: var(--muted); font-weight: 600; }
+    code { background: var(--card); padding: 1px 6px; border-radius: 4px; font-size: .9em; }
+    footer { margin-top: 3em; padding-top: 1.2em; border-top: 1px solid var(--border); color: var(--muted); font-size: .9rem; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>NativeLM — Privacy Policy</h1>
+  <p class="updated">Last updated: 2026-06-04</p>
+
+  <p>NativeLM is a fully on-device AI app. It is built to do as much as possible
+  <strong>without a network, without an account, and without sending your data
+  anywhere.</strong> This policy explains exactly what that means.</p>
+
+  <blockquote>
+    <strong>Plain-language summary:</strong> We don't collect anything. Your
+    conversations, documents, and settings stay on your device. The app has no
+    analytics, no ads, no account, and no backend server operated by us. The only
+    network the app makes is downloading AI models you explicitly choose, directly
+    from the model host (e.g. Hugging Face / Google).
+  </blockquote>
+
+  <h2>Who this applies to</h2>
+  <p>This policy covers the <strong>NativeLM</strong> Android app
+  (<code>com.nativelm.app</code>), published as the reference application for the
+  open-source
+  <a href="https://github.com/sagar-develop/litertlm-kmp">litertlm-kmp</a> engine.</p>
+
+  <h2>What we collect</h2>
+  <p><strong>Nothing.</strong> NativeLM has no analytics SDK, no crash-reporting
+  SDK, no advertising SDK, and no telemetry. We, the developers, do not receive
+  your prompts, your model responses, your documents, your usage, your device
+  identifiers, or any diagnostics.</p>
+  <p>To make the zero-telemetry stance concrete, the app actively
+  <strong>removes</strong> the Google <code>datatransport</code> upload pipeline
+  that the on-device OCR library (ML Kit) would otherwise bundle, so it cannot
+  initialize or upload anything.</p>
+
+  <h2>Data stored on your device</h2>
+  <p>All of the following is stored <strong>only on your device</strong> and is
+  never uploaded by us:</p>
+  <table>
+    <tr><th>Data</th><th>Where it lives</th><th>Notes</th></tr>
+    <tr><td>Conversations &amp; messages</td><td>On-device database (ObjectBox)</td><td>Deletable per-conversation or via "Clear all data".</td></tr>
+    <tr><td>Projects, documents &amp; vector index</td><td>On-device database + app file storage</td><td>Imported PDFs/text are processed locally for retrieval.</td></tr>
+    <tr><td>Studio artifacts</td><td>On-device database</td><td>Generated locally from your sources.</td></tr>
+    <tr><td>App settings</td><td>On-device preferences (DataStore)</td><td>Theme, language, app-lock, onboarding.</td></tr>
+    <tr><td>Hugging Face token (optional)</td><td>Encrypted on-device</td><td>Only used to authenticate downloads of gated models. Never sent to us.</td></tr>
+    <tr><td>Downloaded model files</td><td>App file storage</td><td>Deletable from the Models screen.</td></tr>
+  </table>
+  <p>You can erase all of the above at any time from <strong>Settings → Clear all
+  data</strong>, or by uninstalling the app.</p>
+
+  <h2>Network access</h2>
+  <p>The app makes network connections in only these cases, all initiated by you:</p>
+  <ol>
+    <li><strong>Model downloads.</strong> When you tap to download a model, the app
+    connects <strong>directly to the model host</strong> (e.g.
+    <code>huggingface.co</code> / Google storage CDNs) over HTTPS. For
+    license-gated models (e.g. Gemma), your Hugging Face token is sent
+    <strong>to Hugging Face only</strong>, as the standard <code>Authorization</code>
+    header, to authorize that download. Downloads are not routed through any server
+    we operate.</li>
+    <li><strong>Local peer-to-peer sync (optional).</strong> Your data is
+    transferred <strong>directly between your own devices over your local Wi-Fi
+    network</strong> (no internet, no server). The transferred bundle is end-to-end
+    encrypted (AES-256-GCM) with a one-time code shown on the sending device.</li>
+  </ol>
+  <p>The app uses no cleartext HTTP for these connections
+  (<code>cleartextTrafficPermitted=false</code>). When third parties (such as
+  Hugging Face or Google) serve a download to you, their own privacy policies
+  govern that interaction.</p>
+
+  <h2>Permissions and why they're used</h2>
+  <ul>
+    <li><strong>Internet / network state</strong> — to download models you choose.</li>
+    <li><strong>Microphone (<code>RECORD_AUDIO</code>)</strong> — only when you tap
+    the mic for voice input. Audio is transcribed <strong>on-device</strong>
+    (Whisper) and is never uploaded; recorded audio is used transiently for
+    transcription and not retained as a file by us.</li>
+    <li><strong>Wi-Fi multicast</strong> — only to discover your other device during
+    local peer-to-peer sync.</li>
+  </ul>
+  <p>The app requests no location, contacts, camera, or storage-wide permissions.</p>
+
+  <h2>Children's privacy</h2>
+  <p>NativeLM is not directed at children and collects no personal information from
+  anyone, including children.</p>
+
+  <h2>Third-party / open-source components</h2>
+  <p>NativeLM is open source under AGPL-3.0; the full source is at
+  <a href="https://github.com/sagar-develop/litertlm-kmp">github.com/sagar-develop/litertlm-kmp</a>.
+  AI models you download are provided by third parties under their own licenses and
+  terms (for example, Google's
+  <a href="https://ai.google.dev/gemma/terms">Gemma Terms of Use</a>). You are
+  responsible for complying with the license of any model you download.</p>
+
+  <h2>Changes to this policy</h2>
+  <p>If this policy changes, the updated version will be published at this URL with a
+  new "Last updated" date.</p>
+
+  <h2>Contact</h2>
+  <p>Questions about this policy:
+  <a href="mailto:sgupta8874@gmail.com">sgupta8874@gmail.com</a></p>
+
+  <footer>
+    NativeLM · on-device AI · <a href="../">Home</a> ·
+    <a href="https://github.com/sagar-develop/litertlm-kmp">Source (AGPL-3.0)</a>
+  </footer>
+</main>
+</body>
+</html>

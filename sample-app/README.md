@@ -59,18 +59,24 @@ product.
   (not just the UI); start a fresh thread; long-press any bubble to copy.
 - **Persistence** — all conversations survive app restart.
 - **Model management** — download models on demand and switch the active model
-  from inside the app. No model is bundled in the APK.
-- **Bring your own token** — gated models download using **your** Hugging Face
-  token, pasted into the app and stored encrypted on-device. Never Firebase,
-  never a backend of ours.
+  from inside the app. No model is bundled in the APK. The model screen leads
+  with a **Recommended** section of free, ungated models (no account needed) and
+  highlights the best one for your device's RAM; license-gated **Gemma** models
+  sit behind an **Advanced** section.
+- **No account needed to start** — the recommended models (Qwen3, DeepSeek, Phi)
+  are Apache-2.0 / MIT and download with **no Hugging Face token**.
+- **Bring your own token (advanced)** — gated Gemma models download using
+  **your** Hugging Face token, pasted into the app and stored encrypted
+  on-device. Never Firebase, never a backend of ours.
 
 Image input (multimodal chat) is on the roadmap; the engine already supports it
 (`descriptor.supportsVision`), it's just not surfaced in the chat UI yet.
 
 ## First run vs. later launches
 
-- **First run:** Splash → Onboarding → Model Management (download an LLM with
-  your HF token, set it active) → Chat.
+- **First run:** Splash → Onboarding → Model Management (download the
+  recommended free model — **no token needed** — or pick a gated Gemma model
+  under *Advanced* with your HF token; set it active) → Chat.
 - **Every later launch:** the previously-selected model **auto-loads from disk
   into memory** — no download, no network. Works fully offline.
 
@@ -114,6 +120,15 @@ $env:JAVA_HOME = "C:\Users\shefa\AppData\Local\Programs\Android Studio\jbr"
 - **Min SDK 24**, target/compile SDK 36.
 - Requires a device with **6 GB+ RAM** for the E2B model (10 GB+ for E4B).
 - Verified on Realme CPH2723 (Android 16, 8 GB).
+
+## Publishing to Google Play
+
+A full release checklist lives in [`PLAY_STORE.md`](../PLAY_STORE.md) and the
+privacy policy (hosted-ready) in [`PRIVACY.md`](../PRIVACY.md). In short: build an
+**AAB** (`./gradlew :sample-app:bundleRelease`), supply `keystore.properties` for
+release signing, host the privacy policy and fill the **Data Safety** form (the
+app collects nothing), and submit. The app's no-account first run means a
+reviewer can reach a working model without a Hugging Face account.
 
 ## Design
 

@@ -110,10 +110,11 @@ import com.sagar.aicore.studio.parseTimeline
 import com.sagar.aicore.studio.parseTopics
 import com.nativelm.app.ui.chat.MarkdownText
 import com.nativelm.app.ui.theme.JetBrainsMono
+import com.nativelm.app.ui.theme.WideContent
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun StudioScreen(vm: NativeLmViewModel, onBack: () -> Unit, onAskInChat: () -> Unit) {
+fun StudioScreen(vm: NativeLmViewModel, onBack: () -> Unit, onAskInChat: () -> Unit, showBack: Boolean = true) {
     val studio by vm.studio.collectAsState()
     val documents by vm.documents.collectAsState()
     val projectName by vm.currentProjectName.collectAsState()
@@ -165,8 +166,10 @@ fun StudioScreen(vm: NativeLmViewModel, onBack: () -> Unit, onAskInChat: () -> U
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    if (showBack) {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -176,10 +179,9 @@ fun StudioScreen(vm: NativeLmViewModel, onBack: () -> Unit, onAskInChat: () -> U
         },
     ) { padding ->
         val canGenerate = documents.isNotEmpty() && !studio.generating
+        WideContent(padding) {
         LazyColumn(
-            modifier = Modifier
-                .padding(padding)
-                .fillMaxSize(),
+            modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 40.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
@@ -259,6 +261,7 @@ fun StudioScreen(vm: NativeLmViewModel, onBack: () -> Unit, onAskInChat: () -> U
                     )
                 }
             }
+        }
         }
     }
 

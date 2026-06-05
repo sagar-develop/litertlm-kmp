@@ -4,6 +4,8 @@
  */
 package com.nativelm.app.ui.settings
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -48,6 +50,10 @@ import com.nativelm.app.llm.NativeLmViewModel
 import com.nativelm.app.ui.lock.canAuthenticate
 import com.nativelm.app.ui.sync.SyncControls
 import com.nativelm.app.ui.theme.JetBrainsMono
+import com.nativelm.app.ui.theme.WideContent
+
+/** Hosted privacy policy (GitHub Pages). Mirrors PRIVACY.md / docs/privacy/. */
+private const val PRIVACY_URL = "https://sagar-develop.github.io/litertlm-kmp/privacy/"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -55,6 +61,7 @@ fun SettingsScreen(
     vm: NativeLmViewModel,
     onBack: () -> Unit,
     onOpenModels: () -> Unit,
+    showBack: Boolean = true,
 ) {
     val themeMode by vm.themeMode.collectAsState()
     val activeModel by vm.activeModelName.collectAsState()
@@ -73,8 +80,10 @@ fun SettingsScreen(
             TopAppBar(
                 title = { Text("Settings") },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    if (showBack) {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -83,9 +92,10 @@ fun SettingsScreen(
             )
         },
     ) { padding ->
+        WideContent(padding) {
         Column(
             Modifier
-                .padding(padding)
+                .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp),
         ) {
@@ -203,6 +213,11 @@ fun SettingsScreen(
             Section("About")
             ValueRow(label = "Version", value = BuildConfig.VERSION_NAME, mono = true)
             ValueRow(label = "License", value = "AGPL-3.0", mono = true)
+            NavRow(label = "Privacy policy") {
+                runCatching {
+                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(PRIVACY_URL)))
+                }
+            }
             Spacer(Modifier.height(8.dp))
             Text(
                 "No telemetry · No account · No upload",
@@ -211,6 +226,7 @@ fun SettingsScreen(
                 modifier = Modifier.padding(vertical = 8.dp),
             )
             Spacer(Modifier.height(24.dp))
+        }
         }
     }
 

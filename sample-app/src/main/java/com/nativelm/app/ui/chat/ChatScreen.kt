@@ -16,6 +16,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -61,7 +64,9 @@ import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Surface
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -115,6 +120,8 @@ fun ChatScreen(
     onOpenDocuments: () -> Unit,
     onOpenPdf: () -> Unit,
     onOpenStudio: () -> Unit,
+    showNavRail: Boolean = false,
+    expanded: Boolean = false,
 ) {
     val chat by vm.chat.collectAsState()
     val activeModel by vm.activeModelName.collectAsState()
@@ -175,33 +182,19 @@ fun ChatScreen(
         }
     }
 
-    ModalNavigationDrawer(
-        drawerState = drawerState,
-        drawerContent = {
-            ChatDrawer(
-                conversations = conversations,
-                projects = projects,
-                currentId = currentId,
-                onNewChat = { scope.launch { drawerState.close() }; vm.newChat() },
-                onOpen = { id -> scope.launch { drawerState.close() }; vm.openConversation(id) },
-                onRename = { renameTarget = it },
-                onDelete = { vm.deleteConversation(it) },
-                onOpenProject = { id -> scope.launch { drawerState.close() }; vm.openProject(id) },
-                onNewProject = { newProjectName = "" },
-                onRenameProject = { projectRenameTarget = it },
-                onDeleteProject = { vm.deleteProject(it) },
-                onOpenModels = { scope.launch { drawerState.close() }; onOpenModels() },
-                onOpenSettings = { scope.launch { drawerState.close() }; onOpenSettings() },
-            )
-        },
-    ) {
+    // The thread + composer. Shared by the Compact/Medium drawer layout and the
+    // Expanded two-pane layout; the hamburger only appears when there's no
+    // persistent conversations pane (i.e. not Expanded).
+    val chatContent: @Composable () -> Unit = {
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background,
             topBar = {
                 TopAppBar(
                     navigationIcon = {
-                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                            Icon(Icons.Filled.Menu, contentDescription = "Menu")
+                        if (!expanded) {
+                            IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                                Icon(Icons.Filled.Menu, contentDescription = "Menu")
+                            }
                         }
                     },
                     title = {
@@ -249,7 +242,12 @@ fun ChatScreen(
             ) {
                 Box(Modifier.weight(1f)) {
                     if (chat.messages.isEmpty()) {
-                        Greeting(hasModel = activeModel != null, projectName = projectName, onOpenModels = onOpenModels)
+                        Greeting(
+                            hasModel = activeModel != null,
+                            projectName = projectName,
+                            onOpenModels = onOpenModels,
+                            onSuggestion = { vm.setInput(it); vm.sendChatMessage() },
+                        )
                     } else {
                         LazyColumn(
                             state = listState,
@@ -283,6 +281,57 @@ fun ChatScreen(
                     onMicToggle = { toggleMic() },
                 )
             }
+        }
+    }
+
+    if (expanded) {
+        // Two-pane: persistent conversations list │ thread + composer.
+        Row(Modifier.fillMaxSize()) {
+            Surface(
+                modifier = Modifier.width(320.dp).fillMaxHeight(),
+                color = MaterialTheme.colorScheme.surface,
+            ) {
+                ConversationsList(
+                    conversations = conversations,
+                    projects = projects,
+                    currentId = currentId,
+                    onNewChat = { vm.newChat() },
+                    onOpen = { vm.openConversation(it) },
+                    onRename = { renameTarget = it },
+                    onDelete = { vm.deleteConversation(it) },
+                    onOpenProject = { vm.openProject(it) },
+                    onNewProject = { newProjectName = "" },
+                    onRenameProject = { projectRenameTarget = it },
+                    onDeleteProject = { vm.deleteProject(it) },
+                    onOpenModels = onOpenModels,
+                    onOpenSettings = onOpenSettings,
+                )
+            }
+            VerticalDivider(color = MaterialTheme.colorScheme.outline)
+            Box(Modifier.weight(1f)) { chatContent() }
+        }
+    } else {
+        ModalNavigationDrawer(
+            drawerState = drawerState,
+            drawerContent = {
+                ChatDrawer(
+                    conversations = conversations,
+                    projects = projects,
+                    currentId = currentId,
+                    onNewChat = { scope.launch { drawerState.close() }; vm.newChat() },
+                    onOpen = { id -> scope.launch { drawerState.close() }; vm.openConversation(id) },
+                    onRename = { renameTarget = it },
+                    onDelete = { vm.deleteConversation(it) },
+                    onOpenProject = { id -> scope.launch { drawerState.close() }; vm.openProject(id) },
+                    onNewProject = { newProjectName = "" },
+                    onRenameProject = { projectRenameTarget = it },
+                    onDeleteProject = { vm.deleteProject(it) },
+                    onOpenModels = { scope.launch { drawerState.close() }; onOpenModels() },
+                    onOpenSettings = { scope.launch { drawerState.close() }; onOpenSettings() },
+                )
+            },
+        ) {
+            chatContent()
         }
     }
 
@@ -371,65 +420,104 @@ private fun ChatDrawer(
     onOpenModels: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
-    var sheet by remember { mutableStateOf<DrawerSheet?>(null) }
     ModalDrawerSheet {
-        Column(Modifier.fillMaxSize().padding(horizontal = 12.dp)) {
-            Row(
-                modifier = Modifier.padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                NativeLmMark(size = 24.dp)
-                Spacer(Modifier.size(10.dp))
-                Text("NativeLM", style = MaterialTheme.typography.titleLarge)
-            }
-            NavigationDrawerItem(
-                label = { Text("New chat") },
-                icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-                selected = false,
-                onClick = onNewChat,
-            )
+        ConversationsList(
+            conversations = conversations,
+            projects = projects,
+            currentId = currentId,
+            onNewChat = onNewChat,
+            onOpen = onOpen,
+            onRename = onRename,
+            onDelete = onDelete,
+            onOpenProject = onOpenProject,
+            onNewProject = onNewProject,
+            onRenameProject = onRenameProject,
+            onDeleteProject = onDeleteProject,
+            onOpenModels = onOpenModels,
+            onOpenSettings = onOpenSettings,
+        )
+    }
+}
 
-            LazyColumn(Modifier.weight(1f)) {
-                items(items = conversations, key = { "c${it.id}" }) { c ->
-                    DrawerRow(
-                        label = c.title,
-                        selected = c.id == currentId,
-                        onClick = { onOpen(c.id) },
-                        onLongClick = { sheet = DrawerSheet.Conv(c) },
-                    )
-                }
-
-                item {
-                    HorizontalDivider(Modifier.padding(vertical = 8.dp))
-                    Text(
-                        "Projects",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 4.dp),
-                    )
-                    NavigationDrawerItem(
-                        label = { Text("New project") },
-                        icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-                        selected = false,
-                        onClick = onNewProject,
-                    )
-                }
-                items(items = projects, key = { "p${it.id}" }) { p ->
-                    DrawerRow(
-                        label = p.name,
-                        selected = false,
-                        onClick = { onOpenProject(p.id) },
-                        onLongClick = { sheet = DrawerSheet.Proj(p) },
-                        icon = { Icon(Icons.Filled.Folder, contentDescription = null) },
-                    )
-                }
-            }
-
-            HorizontalDivider(Modifier.padding(vertical = 8.dp))
-            NavigationDrawerItem(label = { Text("Models") }, selected = false, onClick = onOpenModels)
-            NavigationDrawerItem(label = { Text("Settings") }, selected = false, onClick = onOpenSettings)
-            Spacer(Modifier.height(8.dp))
+/**
+ * The conversations + projects list — shared by the Compact/Medium modal drawer
+ * ([ChatDrawer]) and the Expanded two-pane left pane. Holds its own long-press
+ * action sheet so both presentations get rename/delete.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ConversationsList(
+    conversations: List<ConversationSummary>,
+    projects: List<ProjectSummary>,
+    currentId: Long,
+    onNewChat: () -> Unit,
+    onOpen: (Long) -> Unit,
+    onRename: (ConversationSummary) -> Unit,
+    onDelete: (Long) -> Unit,
+    onOpenProject: (Long) -> Unit,
+    onNewProject: () -> Unit,
+    onRenameProject: (ProjectSummary) -> Unit,
+    onDeleteProject: (Long) -> Unit,
+    onOpenModels: () -> Unit,
+    onOpenSettings: () -> Unit,
+) {
+    var sheet by remember { mutableStateOf<DrawerSheet?>(null) }
+    Column(Modifier.fillMaxSize().padding(horizontal = 12.dp)) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            NativeLmMark(size = 24.dp)
+            Spacer(Modifier.size(10.dp))
+            Text("NativeLM", style = MaterialTheme.typography.titleLarge)
         }
+        NavigationDrawerItem(
+            label = { Text("New chat") },
+            icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+            selected = false,
+            onClick = onNewChat,
+        )
+
+        LazyColumn(Modifier.weight(1f)) {
+            items(items = conversations, key = { "c${it.id}" }) { c ->
+                DrawerRow(
+                    label = c.title,
+                    selected = c.id == currentId,
+                    onClick = { onOpen(c.id) },
+                    onLongClick = { sheet = DrawerSheet.Conv(c) },
+                )
+            }
+
+            item {
+                HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                Text(
+                    "Projects",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 4.dp),
+                )
+                NavigationDrawerItem(
+                    label = { Text("New project") },
+                    icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                    selected = false,
+                    onClick = onNewProject,
+                )
+            }
+            items(items = projects, key = { "p${it.id}" }) { p ->
+                DrawerRow(
+                    label = p.name,
+                    selected = false,
+                    onClick = { onOpenProject(p.id) },
+                    onLongClick = { sheet = DrawerSheet.Proj(p) },
+                    icon = { Icon(Icons.Filled.Folder, contentDescription = null) },
+                )
+            }
+        }
+
+        HorizontalDivider(Modifier.padding(vertical = 8.dp))
+        NavigationDrawerItem(label = { Text("Models") }, selected = false, onClick = onOpenModels)
+        NavigationDrawerItem(label = { Text("Settings") }, selected = false, onClick = onOpenSettings)
+        Spacer(Modifier.height(8.dp))
     }
 
     sheet?.let { target ->
@@ -608,10 +696,33 @@ private fun BuildingUnderstanding() {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun Greeting(hasModel: Boolean, projectName: String?, onOpenModels: () -> Unit) {
+private fun Greeting(
+    hasModel: Boolean,
+    projectName: String?,
+    onOpenModels: () -> Unit,
+    onSuggestion: (String) -> Unit,
+) {
+    // Tappable starters on an empty chat — project-aware, sent on tap.
+    val suggestions = when {
+        !hasModel -> emptyList()
+        projectName != null -> listOf(
+            "Summarize the key points",
+            "What are the main risks?",
+            "List the action items",
+        )
+        else -> listOf(
+            "Explain a concept simply",
+            "Help me draft an email",
+            "Brainstorm ideas with me",
+        )
+    }
     Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.widthIn(max = 480.dp),
+        ) {
             NativeLmMark(size = 48.dp)
             Spacer(Modifier.height(20.dp))
             Text(
@@ -636,6 +747,21 @@ private fun Greeting(hasModel: Boolean, projectName: String?, onOpenModels: () -
             if (!hasModel) {
                 Spacer(Modifier.height(8.dp))
                 TextButton(onClick = onOpenModels) { Text("Open Models") }
+            }
+            if (suggestions.isNotEmpty()) {
+                Spacer(Modifier.height(24.dp))
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    suggestions.forEach { s ->
+                        SuggestionChip(
+                            onClick = { onSuggestion(s) },
+                            label = { Text(s) },
+                        )
+                    }
+                }
             }
         }
     }

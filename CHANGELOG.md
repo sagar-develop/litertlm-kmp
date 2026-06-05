@@ -13,6 +13,30 @@ and the project loosely follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **No-account first run** — the model catalog now leads with a **Recommended**
+  section of ungated (Apache-2.0 / MIT) models that download with no Hugging Face
+  token; the app picks the best one that fits the device's RAM
+  (`recommendedModelId`). The license-gated **Gemma** tier moves behind a
+  collapsible **Advanced — Hugging Face account** section together with the token
+  field. This makes a fresh install (including a Play Store user with no HF
+  account) reach a working model in one tap.
+- **First-run terms/source gate** — the final onboarding slide links the AGPL
+  source and Google's Gemma Terms, and clarifies that downloaded models carry
+  their own licenses.
+- **Play Store readiness** — added [`PRIVACY.md`](PRIVACY.md) (hosted-ready,
+  zero-telemetry privacy policy) and [`PLAY_STORE.md`](PLAY_STORE.md) (a detailed
+  submission checklist: AAB, signing, Data Safety answers, permissions, content
+  rating, listing assets, compliance, and follow-ups). The policy is also served
+  as a static GitHub Pages site under [`docs/`](docs/), and **Settings → About →
+  Privacy policy** opens the hosted URL in-app.
+
+### Changed
+- **Cleartext traffic disabled** — `usesCleartextTraffic="false"` plus a
+  `network_security_config.xml` (`cleartextTrafficPermitted=false`). Model
+  downloads are HTTPS; local peer-to-peer sync uses raw sockets carrying
+  AES-GCM ciphertext and is unaffected.
+
 ## [0.8.0] — 2026-06-03
 
 ### Added
