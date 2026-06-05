@@ -293,14 +293,18 @@ private fun parseMarkdownBlocks(markdown: String): List<MdBlock> {
                 }
                 i++ // skip closing fence
                 val text = body.toString().trimEnd('\n')
-                if (lang == "chart") {
-                    val spec = ChartParser.parse(text)
-                    // Graceful fallback: a malformed chart shows its data as a code block,
-                    // never an error and never lost content.
-                    out += if (spec != null) MdBlock.Chart(spec) else MdBlock.Code(text)
+                // Prefer an explicit ```chart fence, but small on-device models routinely
+                // emit the chart JSON in a ```json (or untagged) block instead — so for those
+                // we also try to parse it. ChartParser only succeeds on JSON with a recognized
+                // chart "type" + valid data, so ordinary JSON code samples stay code blocks.
+                val spec = if (lang == "chart" || lang == "json" || lang.isEmpty()) {
+                    ChartParser.parse(text)
                 } else {
-                    out += MdBlock.Code(text)
+                    null
                 }
+                // Graceful fallback: anything that isn't a valid chart shows as a code block,
+                // never an error and never lost content.
+                out += if (spec != null) MdBlock.Chart(spec) else MdBlock.Code(text)
                 continue
             }
             line.isBlank() -> flushParagraph()
