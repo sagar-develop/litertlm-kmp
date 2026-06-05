@@ -5,25 +5,31 @@
 package com.nativelm.app.llm
 
 import android.app.Application
-import com.nativelm.app.data.db.DocumentEntity
 import com.nativelm.app.data.db.ObjectBoxDocumentRepository
-import com.nativelm.app.rag.DefaultDocumentIngestor
-import com.nativelm.app.rag.DefaultDocumentRetriever
-import com.nativelm.app.rag.DocumentIngestor
-import com.nativelm.app.rag.DocumentRetriever
-import com.nativelm.app.rag.IngestState
-import com.nativelm.app.rag.RetrievedContext
 import com.nativelm.app.rag.extract.AndroidDocumentFileStore
 import com.nativelm.app.rag.extract.AndroidTextExtractor
 import com.nativelm.app.rag.extract.MlKitOcrEngine
-import com.nativelm.app.rag.extract.TextChunker
 import com.sagar.aicore.MediaPipeEmbeddingEngine
+import com.sagar.aicore.rag.DefaultDocumentIngestor
+import com.sagar.aicore.rag.DefaultDocumentRetriever
+import com.sagar.aicore.rag.DocumentIngestor
+import com.sagar.aicore.rag.DocumentRetriever
+import com.sagar.aicore.rag.IngestState
+import com.sagar.aicore.rag.RetrievedContext
+import com.sagar.aicore.rag.StoredChunk
+import com.sagar.aicore.rag.StoredDocument
+import com.sagar.aicore.rag.TextChunker
 import kotlinx.coroutines.flow.Flow
 
 /**
  * Wires the document-RAG stack — embedding engine, vector store, ingestion and
- * retrieval — in the same manual-DI style as [EngineHolder]. All sources are
- * project-scoped. Reuses EngineHolder's ModelManager to locate the USE-Lite model.
+ * retrieval — in the same manual-DI style as [EngineHolder]. The ingestion and
+ * retrieval *logic* lives in the engine (`com.sagar.aicore.rag`); this holder
+ * supplies the Android-backed implementations of its interfaces (the ObjectBox
+ * [com.sagar.aicore.rag.DocumentStore], the [com.sagar.aicore.rag.TextExtractor],
+ * and the [com.sagar.aicore.rag.FileStore]) and exposes a small app-facing API.
+ * All sources are project-scoped. Reuses EngineHolder's ModelManager to locate the
+ * USE-Lite model.
  */
 class RagHolder(app: Application, private val engineHolder: EngineHolder) {
 
@@ -61,18 +67,18 @@ class RagHolder(app: Application, private val engineHolder: EngineHolder) {
     suspend fun retrieve(projectId: Long, query: String): RetrievedContext =
         retriever.retrieve(projectId, query)
 
-    suspend fun documents(projectId: Long): List<DocumentEntity> = repository.listDocuments(projectId)
+    suspend fun documents(projectId: Long): List<StoredDocument> = repository.listDocuments(projectId)
 
     /**
      * Every chunk of a project (or one source when [documentId] > 0), in reading
      * order, for Studio's whole-source-set map-reduce. See
-     * [com.nativelm.app.data.db.DocumentRepository.chunksForProject].
+     * [com.sagar.aicore.rag.DocumentStore.chunksForProject].
      */
-    suspend fun chunksForProject(projectId: Long, documentId: Long = 0): List<com.nativelm.app.data.db.DocumentChunkEntity> =
+    suspend fun chunksForProject(projectId: Long, documentId: Long = 0): List<StoredChunk> =
         repository.chunksForProject(projectId, documentId)
 
-    /** A single source's metadata (incl. [DocumentEntity.localPath]) for the viewer. */
-    suspend fun document(id: Long): DocumentEntity? = repository.getDocument(id)
+    /** A single source's metadata (incl. [StoredDocument.localPath]) for the viewer. */
+    suspend fun document(id: Long): StoredDocument? = repository.getDocument(id)
 
     suspend fun deleteDocument(id: Long) {
         repository.getDocument(id)?.localPath?.let { fileStore.delete(it) }

@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 package com.nativelm.app.data.backup
+import com.sagar.aicore.backup.BackupCrypto
 
 import android.content.Context
 import android.util.Base64
@@ -15,7 +16,7 @@ import com.nativelm.app.data.db.MessageEntity
 import com.nativelm.app.data.db.ObjectBox
 import com.nativelm.app.data.db.ProjectEntity
 import com.nativelm.app.data.db.StudioArtifactEntity
-import com.nativelm.app.rag.CitationJson
+import com.sagar.aicore.rag.CitationJson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext

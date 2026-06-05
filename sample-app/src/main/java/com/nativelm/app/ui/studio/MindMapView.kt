@@ -37,7 +37,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import com.nativelm.app.studio.MindNode
+import com.sagar.aicore.studio.MindNode
 import kotlin.math.min
 import kotlin.math.roundToInt
 

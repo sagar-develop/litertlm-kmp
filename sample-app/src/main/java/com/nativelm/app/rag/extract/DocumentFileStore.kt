@@ -6,6 +6,7 @@ package com.nativelm.app.rag.extract
 
 import android.content.Context
 import android.net.Uri
+import com.sagar.aicore.rag.FileStore
 import io.github.aakira.napier.Napier
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -13,6 +14,8 @@ import java.io.File
 import java.util.UUID
 
 /**
+ * [FileStore] backed by the app's private files dir + ContentResolver.
+ *
  * Keeps a durable, app-private copy of each imported source file so a citation
  * can reopen the original later. The SAF `content://` URI handed back by the
  * picker is only valid for the current import (we never take a persistable
@@ -20,23 +23,7 @@ import java.util.UUID
  * moment the process ends. Copies live in `filesDir/docs/` and never leave the
  * app sandbox — consistent with NativeLM's no-upload promise.
  */
-interface DocumentFileStore {
-    /**
-     * Copy the bytes behind [uri] into app-private storage, returning the
-     * absolute path of the copy, or null if it couldn't be copied (in which
-     * case ingestion still succeeds — the source just won't be reopenable).
-     */
-    suspend fun copyToLocal(uri: String, extension: String): String?
-
-    /** Delete one stored copy by its absolute [localPath]. No-op if blank/missing. */
-    suspend fun delete(localPath: String)
-
-    /** Remove every stored copy (used when clearing all app data). */
-    suspend fun deleteAll()
-}
-
-/** [DocumentFileStore] backed by the app's private files dir + ContentResolver. */
-class AndroidDocumentFileStore(private val context: Context) : DocumentFileStore {
+class AndroidDocumentFileStore(private val context: Context) : FileStore {
 
     private val dir: File by lazy { File(context.filesDir, DIR_NAME).apply { mkdirs() } }
 

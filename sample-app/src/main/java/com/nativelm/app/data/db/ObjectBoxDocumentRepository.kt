@@ -4,17 +4,27 @@
  */
 package com.nativelm.app.data.db
 
+import com.sagar.aicore.rag.DocumentStore
+import com.sagar.aicore.rag.NewChunk
+import com.sagar.aicore.rag.ScoredChunk
+import com.sagar.aicore.rag.StoredChunk
+import com.sagar.aicore.rag.StoredDocument
 import io.objectbox.query.QueryCondition
 import io.objectbox.query.QueryBuilder.StringOrder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * ObjectBox-backed [DocumentRepository]. Vector retrieval uses the HNSW index on
+ * ObjectBox-backed [DocumentStore]: the app's concrete persistence behind the
+ * engine's RAG orchestration. Vector retrieval uses the HNSW index on
  * [DocumentChunkEntity.embedding], post-filtered to a project. All ops run on
  * [Dispatchers.IO]; the generated `*_` query metadata lives in this package.
+ *
+ * This class owns the only mapping between ObjectBox entities and the engine's
+ * neutral DTOs ([StoredDocument] / [StoredChunk] / [NewChunk]) — the engine never
+ * sees an ObjectBox type.
  */
-class ObjectBoxDocumentRepository : DocumentRepository {
+class ObjectBoxDocumentRepository : DocumentStore {
 
     private val documents = ObjectBox.store.boxFor(DocumentEntity::class.java)
     private val chunks = ObjectBox.store.boxFor(DocumentChunkEntity::class.java)
@@ -41,20 +51,26 @@ class ObjectBoxDocumentRepository : DocumentRepository {
         )
     }
 
-    override suspend fun getDocument(documentId: Long): DocumentEntity? =
-        withContext(Dispatchers.IO) { documents.get(documentId) }
+    override suspend fun getDocument(documentId: Long): StoredDocument? =
+        withContext(Dispatchers.IO) { documents.get(documentId)?.toStored() }
 
     override suspend fun addChunks(
         documentId: Long,
         projectId: Long,
-        chunks: List<DocumentChunkEntity>,
+        chunks: List<NewChunk>,
     ): Unit = withContext(Dispatchers.IO) {
-        chunks.forEach {
-            it.id = 0
-            it.documentId = documentId
-            it.projectId = projectId
+        val entities = chunks.map { nc ->
+            DocumentChunkEntity().apply {
+                id = 0
+                this.documentId = documentId
+                this.projectId = projectId
+                text = nc.text
+                pageNumber = nc.pageNumber
+                chunkIndex = nc.chunkIndex
+                embedding = nc.embedding
+            }
         }
-        this@ObjectBoxDocumentRepository.chunks.put(chunks)
+        this@ObjectBoxDocumentRepository.chunks.put(entities)
         documents.get(documentId)?.let { doc ->
             doc.chunkCount = this@ObjectBoxDocumentRepository.chunks
                 .query().equal(DocumentChunkEntity_.documentId, documentId).build()
@@ -84,7 +100,7 @@ class ObjectBoxDocumentRepository : DocumentRepository {
             .build()
             .use { query ->
                 query.findWithScores().asSequence()
-                    .map { ScoredChunk(it.get(), it.score) }
+                    .map { ScoredChunk(it.get().toStored(), it.score) }
                     .take(k)
                     .toList()
             }
@@ -94,7 +110,7 @@ class ObjectBoxDocumentRepository : DocumentRepository {
         projectId: Long,
         terms: List<String>,
         limit: Int,
-    ): List<DocumentChunkEntity> = withContext(Dispatchers.IO) {
+    ): List<StoredChunk> = withContext(Dispatchers.IO) {
         if (terms.isEmpty()) return@withContext emptyList()
         // OR of case-insensitive "text contains term" across the query terms.
         // Seed the fold as QueryCondition so .or() (which widens from
@@ -108,21 +124,23 @@ class ObjectBoxDocumentRepository : DocumentRepository {
         chunks.query(DocumentChunkEntity_.projectId.equal(projectId).and(anyTerm))
             .build()
             .use { it.find(0L, limit.toLong()) }
+            .map { it.toStored() }
     }
 
-    override suspend fun listDocuments(projectId: Long): List<DocumentEntity> =
+    override suspend fun listDocuments(projectId: Long): List<StoredDocument> =
         withContext(Dispatchers.IO) {
             documents.query()
                 .equal(DocumentEntity_.projectId, projectId)
                 .orderDesc(DocumentEntity_.createdAt)
                 .build()
                 .use { it.find() }
+                .map { it.toStored() }
         }
 
     override suspend fun chunksForProject(
         projectId: Long,
         documentId: Long,
-    ): List<DocumentChunkEntity> = withContext(Dispatchers.IO) {
+    ): List<StoredChunk> = withContext(Dispatchers.IO) {
         val condition = if (documentId > 0L) {
             DocumentChunkEntity_.documentId.equal(documentId)
         } else {
@@ -133,6 +151,7 @@ class ObjectBoxDocumentRepository : DocumentRepository {
             .order(DocumentChunkEntity_.chunkIndex)
             .build()
             .use { it.find() }
+            .map { it.toStored() }
     }
 
     override suspend fun deleteDocument(documentId: Long): Unit = withContext(Dispatchers.IO) {
@@ -145,4 +164,28 @@ class ObjectBoxDocumentRepository : DocumentRepository {
         chunks.query().equal(DocumentChunkEntity_.projectId, projectId).build().use { it.remove() }
         documents.query().equal(DocumentEntity_.projectId, projectId).build().use { it.remove() }
     }
+
+    // ── entity ↔ engine DTO mapping (the only place ObjectBox types meet the engine) ──
+
+    private fun DocumentEntity.toStored() = StoredDocument(
+        id = id,
+        projectId = projectId,
+        title = title,
+        sourceUri = sourceUri,
+        localPath = localPath,
+        mimeType = mimeType,
+        pageCount = pageCount,
+        chunkCount = chunkCount,
+        createdAt = createdAt,
+    )
+
+    private fun DocumentChunkEntity.toStored() = StoredChunk(
+        id = id,
+        documentId = documentId,
+        projectId = projectId,
+        text = text,
+        pageNumber = pageNumber,
+        chunkIndex = chunkIndex,
+        embedding = embedding ?: FloatArray(0),
+    )
 }
