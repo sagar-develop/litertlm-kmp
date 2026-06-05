@@ -37,6 +37,14 @@ data class ModelDescriptor(
      * skipping it on text-only models also frees memory. Defaults to false.
      */
     val supportsVision: Boolean = false,
+    /**
+     * Whether this model reliably follows the optional chart-emitting instruction
+     * (see `chart.ChartInstruction`). Tiny models (≲1B) tend to parrot the in-prompt
+     * chart examples into unrelated answers instead of honoring the "only when it
+     * genuinely helps" guardrail, so consumers should append the chart instruction
+     * to the system prompt ONLY when this is true. Defaults to false (off).
+     */
+    val supportsCharts: Boolean = false,
 )
 
 enum class ModelFormat {

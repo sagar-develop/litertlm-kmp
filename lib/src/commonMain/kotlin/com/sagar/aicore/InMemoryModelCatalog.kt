@@ -36,6 +36,7 @@ class InMemoryModelCatalog : ModelCatalog {
             // 6-9 GB RAM tier. Devices under 6 GB should be surfaced to the
             // user as "not supported" rather than attempting a failing init.
             minDeviceRamMb = 6000,
+            supportsCharts = true,
         ),
         ModelDescriptor(
             id = "gemma-4-e4b-it-litertlm",
@@ -46,6 +47,7 @@ class InMemoryModelCatalog : ModelCatalog {
             role = ModelRole.LLM_PRIMARY,
             // 10+ GB RAM tier â€” flagship devices get the larger E4B variant.
             minDeviceRamMb = 10000,
+            supportsCharts = true,
         ),
         ModelDescriptor(
             id = "universal-sentence-encoder",

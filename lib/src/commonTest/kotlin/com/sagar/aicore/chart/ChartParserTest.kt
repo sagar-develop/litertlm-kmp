@@ -76,6 +76,31 @@ class ChartParserTest {
         assertTrue(bar.bars.map { it.label } == listOf("A", "B"))
     }
 
+    @Test fun unwrapsChartWrapperWithoutType() {
+        // DeepSeek-R1 1.5B shape: nested under "chart", no "type", proportional data → donut.
+        val spec = ChartParser.parse(
+            """{"chart":{"name":"Budget Breakdown","title":"Monthly Budget","data":[{"label":"Rent","value":40},{"label":"Food","value":25}]}}""",
+        )
+        val donut = assertIs<ChartSpec.Donut>(spec)
+        assertEquals("Monthly Budget", donut.title)
+        assertEquals(2, donut.slices.size)
+    }
+
+    @Test fun typeFromWrapperKey() {
+        assertIs<ChartSpec.Bar>(ChartParser.parse("""{"bar":{"data":[{"label":"A","value":1},{"label":"B","value":2}]}}"""))
+        assertIs<ChartSpec.Donut>(ChartParser.parse("""{"pie":{"data":[{"label":"A","value":1},{"label":"B","value":2}]}}"""))
+    }
+
+    @Test fun acceptsChartTypeSynonymKey() {
+        assertIs<ChartSpec.Bar>(ChartParser.parse("""{"chartType":"bar","data":[{"label":"A","value":1}]}"""))
+    }
+
+    @Test fun bareUntypedJsonStaysNull() {
+        // No type and no wrapper → ordinary JSON, must remain a code block.
+        assertNull(ChartParser.parse("""{"data":[{"label":"A","value":1},{"label":"B","value":2}]}"""))
+        assertNull(ChartParser.parse("""{"foo":1,"bar":[1,2,3]}"""))
+    }
+
     // kotlin.test has no assertIs in older versions on all targets; provide a tiny helper.
     private inline fun <reified T> assertIs(value: Any?): T {
         assertTrue(value is T, "expected ${T::class.simpleName} but was ${value?.let { it::class.simpleName }}")

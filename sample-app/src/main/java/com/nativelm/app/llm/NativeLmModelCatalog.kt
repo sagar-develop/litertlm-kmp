@@ -62,6 +62,7 @@ class NativeLmModelCatalog : ModelCatalog {
             minDeviceRamMb = 6000,
             requiresAuth = false,
             supportsVision = false,
+            supportsCharts = true,
         ),
         // ── Mid+ (~7 GB) — Gemma 4 E2B, multimodal (~2.6 GB). 7000 excludes 6 GB
         // phones (which report ~5.9 GB) while keeping it on genuine 8 GB+ hardware. ──
@@ -75,6 +76,7 @@ class NativeLmModelCatalog : ModelCatalog {
             minDeviceRamMb = 7000,
             requiresAuth = true,
             supportsVision = true,
+            supportsCharts = true,
         ),
         // ── High (~10 GB) — Gemma 4 E4B, multimodal (~3.7 GB). ──
         ModelDescriptor(
@@ -87,6 +89,7 @@ class NativeLmModelCatalog : ModelCatalog {
             minDeviceRamMb = 10000,
             requiresAuth = true,
             supportsVision = true,
+            supportsCharts = true,
         ),
         // ── High (~10 GB) — Phi-4-mini, q8, text reasoning (~3.9 GB), ungated
         // (MIT). A non-Gemma high-tier option alongside E4B. ──
@@ -100,6 +103,7 @@ class NativeLmModelCatalog : ModelCatalog {
             minDeviceRamMb = 10000,
             requiresAuth = false,
             supportsVision = false,
+            supportsCharts = true,
         ),
         // ── Flagship (~12 GB+) — Qwen3 4B, channelwise int8, text (~5.3 GB),
         // ungated (Apache-2.0). NOTE: reachable only on devices whose effective
@@ -116,6 +120,7 @@ class NativeLmModelCatalog : ModelCatalog {
             minDeviceRamMb = 12000,
             requiresAuth = false,
             supportsVision = false,
+            supportsCharts = true,
         ),
         ModelDescriptor(
             id = "universal-sentence-encoder",
