@@ -48,6 +48,7 @@ import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -95,7 +96,10 @@ import androidx.compose.ui.unit.dp
 import com.nativelm.app.llm.ChatMessage
 import com.nativelm.app.llm.ConversationSummary
 import android.Manifest
+import android.content.Context
 import android.content.pm.PackageManager
+import android.net.Uri
+import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.filled.Mic
@@ -144,6 +148,10 @@ fun ChatScreen(
     val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) vm.startVoiceRecording()
         else Toast.makeText(context, "Microphone permission is needed for voice input.", Toast.LENGTH_SHORT).show()
+    }
+    // Composer "+" → attach a source to the current project (imported on-device).
+    val sourcePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) vm.importDocument(uri.toString(), chatQueryDisplayName(context, uri))
     }
 
     LaunchedEffect(chat.messages.size) {
@@ -275,6 +283,14 @@ fun ChatScreen(
                     generating = chat.isGenerating,
                     canSend = activeModel != null && !chat.isWarming,
                     voiceState = voiceState,
+                    attachEnabled = projectName != null,
+                    onAttach = {
+                        if (projectName != null) {
+                            sourcePicker.launch(arrayOf("application/pdf", "text/plain", "image/*"))
+                        } else {
+                            Toast.makeText(context, "Open a project to add sources.", Toast.LENGTH_SHORT).show()
+                        }
+                    },
                     onValueChange = vm::setInput,
                     onSend = vm::sendChatMessage,
                     onStop = vm::stopGeneration,
@@ -403,6 +419,22 @@ fun ChatScreen(
     }
 }
 
+/** How many projects / recent chats the drawer shows before capping (the rest
+ *  are reachable via "Show all projects"). Keeps the drawer scannable. */
+private const val DRAWER_PROJECT_CAP = 5
+private const val DRAWER_CHAT_CAP = 12
+
+/** Uppercase-muted section label in the drawer (Projects / Recent). */
+@Composable
+private fun DrawerSectionLabel(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 4.dp),
+    )
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ChatDrawer(
@@ -462,6 +494,7 @@ private fun ConversationsList(
     onOpenSettings: () -> Unit,
 ) {
     var sheet by remember { mutableStateOf<DrawerSheet?>(null) }
+    var showAllProjects by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().padding(horizontal = 12.dp)) {
         Row(
             modifier = Modifier.padding(16.dp),
@@ -479,23 +512,9 @@ private fun ConversationsList(
         )
 
         LazyColumn(Modifier.weight(1f)) {
-            items(items = conversations, key = { "c${it.id}" }) { c ->
-                DrawerRow(
-                    label = c.title,
-                    selected = c.id == currentId,
-                    onClick = { onOpen(c.id) },
-                    onLongClick = { sheet = DrawerSheet.Conv(c) },
-                )
-            }
-
+            // ── Projects (sources-grounded notebooks) lead the list ──
             item {
-                HorizontalDivider(Modifier.padding(vertical = 8.dp))
-                Text(
-                    "Projects",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 4.dp),
-                )
+                DrawerSectionLabel("Projects")
                 NavigationDrawerItem(
                     label = { Text("New project") },
                     icon = { Icon(Icons.Filled.Add, contentDescription = null) },
@@ -503,13 +522,38 @@ private fun ConversationsList(
                     onClick = onNewProject,
                 )
             }
-            items(items = projects, key = { "p${it.id}" }) { p ->
+            val shownProjects = if (showAllProjects) projects else projects.take(DRAWER_PROJECT_CAP)
+            items(shownProjects, key = { "p${it.id}" }) { p ->
                 DrawerRow(
                     label = p.name,
                     selected = false,
                     onClick = { onOpenProject(p.id) },
                     onLongClick = { sheet = DrawerSheet.Proj(p) },
                     icon = { Icon(Icons.Filled.Folder, contentDescription = null) },
+                )
+            }
+            if (!showAllProjects && projects.size > DRAWER_PROJECT_CAP) {
+                item {
+                    NavigationDrawerItem(
+                        label = { Text("Show all projects (${projects.size})") },
+                        icon = { Icon(Icons.Filled.MoreHoriz, contentDescription = null) },
+                        selected = false,
+                        onClick = { showAllProjects = true },
+                    )
+                }
+            }
+
+            // ── Recent chats sit below projects (capped) ──
+            item {
+                HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                DrawerSectionLabel("Recent")
+            }
+            items(conversations.take(DRAWER_CHAT_CAP), key = { "c${it.id}" }) { c ->
+                DrawerRow(
+                    label = c.title,
+                    selected = c.id == currentId,
+                    onClick = { onOpen(c.id) },
+                    onLongClick = { sheet = DrawerSheet.Conv(c) },
                 )
             }
         }
@@ -947,6 +991,8 @@ private fun InputBar(
     generating: Boolean,
     canSend: Boolean,
     voiceState: VoiceState,
+    attachEnabled: Boolean,
+    onAttach: () -> Unit,
     onValueChange: (String) -> Unit,
     onSend: () -> Unit,
     onStop: () -> Unit,
@@ -958,6 +1004,11 @@ private fun InputBar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            // Attach a source to the current project (PDF / image / text). Enabled
+            // only inside a project — sources are project-scoped in NativeLM.
+            IconButton(onClick = onAttach, enabled = attachEnabled && !generating) {
+                Icon(Icons.Filled.Add, contentDescription = "Attach source")
+            }
             OutlinedTextField(
                 value = value,
                 onValueChange = onValueChange,
@@ -996,3 +1047,9 @@ private fun InputBar(
         }
     }
 }
+
+/** Best-effort human-readable name for a picked source URI (for the imported doc title). */
+private fun chatQueryDisplayName(context: Context, uri: Uri): String? =
+    context.contentResolver
+        .query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+        ?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
