@@ -49,6 +49,18 @@ class NativeLmModelCatalogTest {
         assertTrue("entry is the smallest LLM tier", m.minDeviceRamMb <= 4000L)
     }
 
+    @Test fun chartsGatedToCapableModelsOnly() {
+        // Tiny models parrot the chart examples into unrelated answers, so the
+        // chart instruction is opt-in: the entry Qwen3 0.6B and Gemma 3 1B are OFF;
+        // the 1.5B-class and larger are ON.
+        assertFalse("Qwen3 0.6B too small for charts", catalog.byId("qwen3-0_6b-litertlm")!!.supportsCharts)
+        assertFalse("Gemma 3 1B too small for charts", catalog.byId("gemma3-1b-it-int4-litertlm")!!.supportsCharts)
+        assertTrue("DeepSeek 1.5B charts", catalog.byId("deepseek-r1-distill-qwen-1_5b-litertlm")!!.supportsCharts)
+        assertTrue("Gemma 4 E2B charts", catalog.byId("gemma-4-e2b-it-litertlm")!!.supportsCharts)
+        assertTrue("Phi-4 mini charts", catalog.byId("phi-4-mini-instruct-litertlm")!!.supportsCharts)
+        assertTrue("Qwen3 4B charts", catalog.byId("qwen3-4b-litertlm")!!.supportsCharts)
+    }
+
     @Test fun catalogueSpansEntryToFlagship() {
         val llms = catalog.byRole(ModelRole.LLM_PRIMARY)
         // A real cross-device range: many tiers, all .litertlm, a mix of gated +

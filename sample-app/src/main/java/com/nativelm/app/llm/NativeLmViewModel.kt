@@ -68,9 +68,8 @@ import java.io.File
 
 private const val TAG = "NativeLmVM"
 
-private val SYSTEM_INSTRUCTION =
-    "You are NativeLM, a helpful on-device assistant. Answer clearly and concisely.\n\n" +
-        ChartInstruction.SYSTEM
+private const val BASE_SYSTEM_INSTRUCTION =
+    "You are NativeLM, a helpful on-device assistant. Answer clearly and concisely."
 
 const val ROUTE_SPLASH = "splash"
 const val ROUTE_ONBOARDING = "onboarding"
@@ -794,6 +793,18 @@ class NativeLmViewModel(app: Application) : ViewModel() {
     }
 
     /**
+     * The system instruction for the active model. The chart-emitting fragment is
+     * appended ONLY for models flagged [ModelDescriptor.supportsCharts]; tiny models
+     * (e.g. Qwen3 0.6B) parrot the chart examples into unrelated answers, so they
+     * chat with the plain instruction instead.
+     */
+    private fun systemInstruction(): String {
+        val supportsCharts = _activeModelId.value?.let { catalog.byId(it) }?.supportsCharts == true
+        return if (supportsCharts) "$BASE_SYSTEM_INSTRUCTION\n\n${ChartInstruction.SYSTEM}"
+        else BASE_SYSTEM_INSTRUCTION
+    }
+
+    /**
      * Open a stateful chat session, seeding it with [history] (re-prefilled once,
      * surfaced as [ChatState.isWarming]). Closes any prior session. The KV cache
      * is then reused across turns, so we no longer re-send history each message.
@@ -806,7 +817,7 @@ class NativeLmViewModel(app: Application) : ViewModel() {
                 text = it.text,
             )
         }
-        val session = engineHolder.openChatSession(turns, SYSTEM_INSTRUCTION)
+        val session = engineHolder.openChatSession(turns, systemInstruction())
         chatSession = session
         if (!showWarming) {
             _chat.update { it.copy(isWarming = false) }
