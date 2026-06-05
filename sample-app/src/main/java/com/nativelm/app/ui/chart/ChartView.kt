@@ -201,8 +201,12 @@ private fun ProgressChart(spec: ChartSpec.Progress) {
     val pct = (spec.value / spec.max).coerceIn(0.0, 1.0).toFloat()
     val sage = MaterialTheme.colorScheme.primary
     val track = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(96.dp), contentAlignment = Alignment.Center) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(112.dp), contentAlignment = Alignment.Center) {
             Canvas(Modifier.fillMaxSize()) {
                 val stroke = size.minDimension * 0.12f
                 val arc = Size(size.minDimension - stroke, size.minDimension - stroke)
