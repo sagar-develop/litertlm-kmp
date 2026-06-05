@@ -25,8 +25,11 @@ import kotlinx.serialization.json.doubleOrNull
 object ChartParser {
 
     fun parse(json: String): ChartSpec? = runCatching {
-        val obj = Json.parseToJsonElement(json.trim()) as? JsonObject ?: return@runCatching null
-        val type = str(obj["type"])?.lowercase()?.trim()
+        val root = Json.parseToJsonElement(json.trim()) as? JsonObject ?: return@runCatching null
+        // Resolve the chart object + its type. The strict top-level "type" path is
+        // tried FIRST (so well-formed `{"type":"donut",…}` is unchanged), then the
+        // tolerant fallbacks for models that wrap the chart or omit the type.
+        val (obj, type) = resolve(root) ?: return@runCatching null
         val title = str(obj["title"])?.ifBlank { null }
         when (type) {
             "donut", "doughnut", "pie" -> {
@@ -50,6 +53,54 @@ object ChartParser {
             else -> null
         }
     }.getOrNull()
+
+    // ── chart resolution (tolerant of how different models shape the JSON) ──
+
+    /** Wrapper keys some models nest the chart under, mapped to a type hint
+     *  (empty = generic wrapper, infer the type from the inner object). */
+    private val WRAPPERS = mapOf(
+        "donut" to "donut", "doughnut" to "donut", "pie" to "donut",
+        "bar" to "bar", "barchart" to "bar", "column" to "bar", "columns" to "bar", "histogram" to "bar",
+        "line" to "line", "linechart" to "line", "area" to "line", "trend" to "line", "growth" to "line", "spline" to "line",
+        "progress" to "progress", "gauge" to "progress", "ring" to "progress",
+        "chart" to "", "graph" to "", "plot" to "", "visualization" to "", "visualisation" to "",
+    )
+
+    /** Reads an explicit type, tolerating `chartType` / `kind` synonyms. */
+    private fun typeOf(obj: JsonObject): String? =
+        (str(obj["type"]) ?: str(obj["chartType"]) ?: str(obj["kind"]))?.lowercase()?.trim()?.ifBlank { null }
+
+    /** Whether an object carries chart-shaped payload (so a bare key isn't mistaken for a chart). */
+    private fun hasData(obj: JsonObject): Boolean =
+        obj["data"] is JsonArray || obj["slices"] is JsonArray || obj["values"] is JsonArray ||
+            obj["series"] is JsonArray || obj["value"] != null
+
+    /** When the type is absent, infer it from the payload shape (proportions → donut). */
+    private fun inferType(obj: JsonObject): String? = when {
+        obj["series"] is JsonArray -> "line"
+        obj["data"] is JsonArray || obj["slices"] is JsonArray || obj["values"] is JsonArray -> "donut"
+        obj["value"] != null -> "progress"
+        else -> null
+    }
+
+    /**
+     * Resolves the (object, type) to read the chart from:
+     *  1) explicit type on the root (the strict, common case — unchanged);
+     *  2) the chart nested under a single wrapper key (`{"chart":{…}}`, `{"donut":{…}}`),
+     *     taking the type from the wrapper name, else the inner type, else inferred;
+     * otherwise null (ordinary JSON stays a code block).
+     */
+    private fun resolve(root: JsonObject): Pair<JsonObject, String>? {
+        typeOf(root)?.let { return root to it }
+        for ((key, value) in root) {
+            val inner = value as? JsonObject ?: continue
+            val hint = WRAPPERS[key.lowercase().trim()] ?: continue
+            if (!hasData(inner)) continue
+            val type = hint.ifBlank { null } ?: typeOf(inner) ?: inferType(inner) ?: continue
+            return inner to type
+        }
+        return null
+    }
 
     // ── helpers ──
 
