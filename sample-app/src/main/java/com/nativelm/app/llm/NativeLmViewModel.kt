@@ -1188,7 +1188,7 @@ class NativeLmViewModel(app: Application) : ViewModel() {
                 val sources = buildStudioSources(projectId, sourceId)
                 check(sources.isNotEmpty()) { "This project has no readable sources yet." }
                 val scopeLabel = studioScopeLabel(sourceId)
-                val generator = StudioGenerator { prompt, maxTokens -> studioOneShot(prompt, maxTokens) }
+                val generator = StudioGenerator(llm = { prompt, maxTokens -> studioOneShot(prompt, maxTokens) })
                 val onProgress: (StudioGenerator.Progress) -> Unit = { p ->
                     _studio.update { it.copy(progress = StudioProgress(p.phase, p.current, p.total)) }
                 }
