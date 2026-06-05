@@ -50,6 +50,7 @@ import com.nativelm.app.llm.NativeLmViewModel
 import com.nativelm.app.ui.lock.canAuthenticate
 import com.nativelm.app.ui.sync.SyncControls
 import com.nativelm.app.ui.theme.JetBrainsMono
+import com.nativelm.app.ui.theme.WideContent
 
 /** Hosted privacy policy (GitHub Pages). Mirrors PRIVACY.md / docs/privacy/. */
 private const val PRIVACY_URL = "https://sagar-develop.github.io/litertlm-kmp/privacy/"
@@ -60,6 +61,7 @@ fun SettingsScreen(
     vm: NativeLmViewModel,
     onBack: () -> Unit,
     onOpenModels: () -> Unit,
+    showBack: Boolean = true,
 ) {
     val themeMode by vm.themeMode.collectAsState()
     val activeModel by vm.activeModelName.collectAsState()
@@ -78,8 +80,10 @@ fun SettingsScreen(
             TopAppBar(
                 title = { Text("Settings") },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    if (showBack) {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -88,9 +92,10 @@ fun SettingsScreen(
             )
         },
     ) { padding ->
+        WideContent(padding) {
         Column(
             Modifier
-                .padding(padding)
+                .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp),
         ) {
@@ -221,6 +226,7 @@ fun SettingsScreen(
                 modifier = Modifier.padding(vertical = 8.dp),
             )
             Spacer(Modifier.height(24.dp))
+        }
         }
     }
 

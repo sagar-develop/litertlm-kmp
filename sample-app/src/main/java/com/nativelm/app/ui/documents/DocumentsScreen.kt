@@ -53,10 +53,11 @@ import com.nativelm.app.llm.DocumentSummary
 import com.nativelm.app.llm.NativeLmViewModel
 import com.sagar.aicore.rag.IngestState
 import com.nativelm.app.ui.theme.JetBrainsMono
+import com.nativelm.app.ui.theme.WideContent
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DocumentsScreen(vm: NativeLmViewModel, onBack: () -> Unit) {
+fun DocumentsScreen(vm: NativeLmViewModel, onBack: () -> Unit, showBack: Boolean = true) {
     val documents by vm.documents.collectAsState()
     val importState by vm.importState.collectAsState()
     val context = LocalContext.current
@@ -79,8 +80,10 @@ fun DocumentsScreen(vm: NativeLmViewModel, onBack: () -> Unit) {
             TopAppBar(
                 title = { Text("Sources") },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    if (showBack) {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -89,9 +92,9 @@ fun DocumentsScreen(vm: NativeLmViewModel, onBack: () -> Unit) {
             )
         },
     ) { padding ->
+        WideContent(padding) {
         Column(
             Modifier
-                .padding(padding)
                 .fillMaxSize()
                 .padding(horizontal = 16.dp),
         ) {
@@ -132,6 +135,7 @@ fun DocumentsScreen(vm: NativeLmViewModel, onBack: () -> Unit) {
                     }
                 }
             }
+        }
         }
     }
 }

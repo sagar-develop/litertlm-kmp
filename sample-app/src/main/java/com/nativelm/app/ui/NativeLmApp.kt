@@ -5,44 +5,55 @@
 package com.nativelm.app.ui
 
 import androidx.compose.runtime.Composable
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.nativelm.app.llm.NativeLmViewModel
-import com.nativelm.app.llm.ROUTE_CHAT
-import com.nativelm.app.llm.ROUTE_DOCUMENTS
-import com.nativelm.app.llm.ROUTE_MODELS
 import com.nativelm.app.llm.ROUTE_ONBOARDING
 import com.nativelm.app.llm.ROUTE_PDF_VIEWER
-import com.nativelm.app.llm.ROUTE_SETTINGS
 import com.nativelm.app.llm.ROUTE_SPLASH
-import com.nativelm.app.llm.ROUTE_STUDIO
-import com.nativelm.app.ui.chat.ChatScreen
-import com.nativelm.app.ui.documents.DocumentsScreen
-import com.nativelm.app.ui.models.ModelManagementScreen
 import com.nativelm.app.ui.onboarding.OnboardingScreen
 import com.nativelm.app.ui.pdf.PdfViewerScreen
-import com.nativelm.app.ui.settings.SettingsScreen
 import com.nativelm.app.ui.splash.SplashScreen
-import com.nativelm.app.ui.studio.StudioScreen
+
+/** Shell route, carrying the initial destination as a path arg (`shell/chat`). */
+private const val ROUTE_SHELL = "shell"
+private fun shellRoute(dest: Destination) =
+    "$ROUTE_SHELL/${if (dest == Destination.Models) "models" else "chat"}"
 
 /**
- * NativeLM navigation graph. The start destination is decided by the ViewModel's
- * boot logic (onboarding done? a model on disk?) and passed in as [startRoute].
+ * NativeLM navigation graph. The full-bleed *flows* (splash / onboarding / PDF
+ * viewer) are NavHost routes; the five primary destinations live inside the
+ * adaptive shell (see [AdaptiveShell]), which the rail/drawer switches between
+ * without leaving the route. The ViewModel's boot logic picks [startRoute].
  */
 @Composable
 fun NativeLmApp(vm: NativeLmViewModel, startRoute: String) {
     val nav = rememberNavController()
 
-    NavHost(navController = nav, startDestination = startRoute) {
+    // Map the boot decision onto a real start destination. "models" (no model on
+    // disk) enters the shell directly on the Models tab; everything else flows.
+    val firstRoute = when (startRoute) {
+        ROUTE_ONBOARDING -> ROUTE_ONBOARDING
+        ROUTE_SPLASH -> ROUTE_SPLASH
+        else -> shellRoute(Destination.Models)
+    }
+
+    NavHost(navController = nav, startDestination = firstRoute) {
         composable(ROUTE_SPLASH) {
             SplashScreen(
                 vm = vm,
                 onReady = {
-                    nav.navigate(ROUTE_CHAT) { popUpTo(ROUTE_SPLASH) { inclusive = true } }
+                    nav.navigate(shellRoute(Destination.Chat)) {
+                        popUpTo(ROUTE_SPLASH) { inclusive = true }
+                    }
                 },
                 onFailed = {
-                    nav.navigate(ROUTE_MODELS) { popUpTo(ROUTE_SPLASH) { inclusive = true } }
+                    nav.navigate(shellRoute(Destination.Models)) {
+                        popUpTo(ROUTE_SPLASH) { inclusive = true }
+                    }
                 },
             )
         }
@@ -50,35 +61,21 @@ fun NativeLmApp(vm: NativeLmViewModel, startRoute: String) {
             OnboardingScreen(
                 onFinish = {
                     vm.completeOnboarding()
-                    nav.navigate(ROUTE_MODELS) { popUpTo(ROUTE_ONBOARDING) { inclusive = true } }
+                    nav.navigate(shellRoute(Destination.Models)) {
+                        popUpTo(ROUTE_ONBOARDING) { inclusive = true }
+                    }
                 },
             )
         }
-        composable(ROUTE_MODELS) {
-            ModelManagementScreen(
+        composable(
+            route = "$ROUTE_SHELL/{start}",
+            arguments = listOf(navArgument("start") { type = NavType.StringType; defaultValue = "chat" }),
+        ) { entry ->
+            val start = entry.arguments?.getString("start")
+            AdaptiveShell(
                 vm = vm,
-                canGoBack = nav.previousBackStackEntry != null,
-                onBack = { nav.popBackStack() },
-                onContinue = {
-                    nav.navigate(ROUTE_CHAT) { popUpTo(ROUTE_MODELS) { inclusive = true } }
-                },
-            )
-        }
-        composable(ROUTE_CHAT) {
-            ChatScreen(
-                vm = vm,
-                onOpenModels = { nav.navigate(ROUTE_MODELS) },
-                onOpenSettings = { nav.navigate(ROUTE_SETTINGS) },
-                onOpenDocuments = { nav.navigate(ROUTE_DOCUMENTS) },
+                initial = if (start == "models") Destination.Models else Destination.Chat,
                 onOpenPdf = { nav.navigate(ROUTE_PDF_VIEWER) },
-                onOpenStudio = { nav.navigate(ROUTE_STUDIO) },
-            )
-        }
-        composable(ROUTE_STUDIO) {
-            StudioScreen(
-                vm = vm,
-                onBack = { nav.popBackStack() },
-                onAskInChat = { nav.popBackStack(ROUTE_CHAT, inclusive = false) },
             )
         }
         composable(ROUTE_PDF_VIEWER) {
@@ -88,19 +85,6 @@ fun NativeLmApp(vm: NativeLmViewModel, startRoute: String) {
                     vm.clearPdfViewTarget()
                     nav.popBackStack()
                 },
-            )
-        }
-        composable(ROUTE_DOCUMENTS) {
-            DocumentsScreen(
-                vm = vm,
-                onBack = { nav.popBackStack() },
-            )
-        }
-        composable(ROUTE_SETTINGS) {
-            SettingsScreen(
-                vm = vm,
-                onBack = { nav.popBackStack() },
-                onOpenModels = { nav.navigate(ROUTE_MODELS) },
             )
         }
     }

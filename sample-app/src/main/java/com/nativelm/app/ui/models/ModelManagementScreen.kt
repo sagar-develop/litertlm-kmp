@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -60,6 +61,7 @@ import com.nativelm.app.llm.ModelStatus
 import com.nativelm.app.llm.ModelUi
 import com.nativelm.app.llm.NativeLmViewModel
 import com.nativelm.app.ui.theme.JetBrainsMono
+import com.nativelm.app.ui.theme.WideContent
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -130,10 +132,9 @@ fun ModelManagementScreen(
         },
         containerColor = MaterialTheme.colorScheme.background,
     ) { padding ->
+        WideContent(padding) {
         LazyColumn(
-            modifier = Modifier
-                .padding(padding)
-                .fillMaxWidth(),
+            modifier = Modifier.fillMaxSize(),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
@@ -192,6 +193,7 @@ fun ModelManagementScreen(
                     }
                 }
             }
+        }
         }
     }
 
