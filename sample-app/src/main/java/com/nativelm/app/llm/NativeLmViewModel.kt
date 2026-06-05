@@ -11,6 +11,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.sagar.aicore.AiEngineRequest
+import com.sagar.aicore.chart.ChartInstruction
 import com.sagar.aicore.ChatSession
 import com.sagar.aicore.ChatTurn
 import com.sagar.aicore.DownloadState
@@ -30,26 +31,27 @@ import com.nativelm.app.sync.SyncManager
 import com.nativelm.app.sync.SyncPeer
 import com.nativelm.app.sync.SyncState
 import com.nativelm.app.data.db.ConversationRepository
-import com.nativelm.app.data.db.DocumentEntity
 import com.nativelm.app.data.db.MessageEntity
 import com.nativelm.app.data.db.ProjectRepository
 import com.nativelm.app.data.db.StudioArtifactEntity
 import com.nativelm.app.data.db.StudioRepository
 import com.nativelm.app.metrics.MetricsRepository
-import com.nativelm.app.rag.Citation
-import com.nativelm.app.rag.CitationJson
-import com.nativelm.app.rag.IngestState
+import com.sagar.aicore.renderAssistantText
+import com.sagar.aicore.rag.Citation
+import com.sagar.aicore.rag.CitationJson
+import com.sagar.aicore.rag.IngestState
+import com.sagar.aicore.rag.StoredDocument
 import com.nativelm.app.studio.PodcastController
 import com.nativelm.app.studio.PodcastPlayState
 import com.nativelm.app.studio.ReadAloudState
-import com.nativelm.app.studio.StudioArtifactType
-import com.nativelm.app.studio.StudioGenerator
+import com.sagar.aicore.studio.StudioArtifactType
+import com.sagar.aicore.studio.StudioGenerator
 import com.nativelm.app.studio.TtsController
-import com.nativelm.app.studio.parsePodcast
+import com.sagar.aicore.studio.parsePodcast
 import com.nativelm.app.voice.AudioRecorder
 import com.nativelm.app.voice.WhisperSpeechToText
-import com.nativelm.app.studio.sanitizeStudioMarkdown
-import com.nativelm.app.studio.stripForSpeech
+import com.sagar.aicore.studio.sanitizeStudioMarkdown
+import com.sagar.aicore.studio.stripForSpeech
 import io.github.aakira.napier.Napier
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -66,8 +68,9 @@ import java.io.File
 
 private const val TAG = "NativeLmVM"
 
-private const val SYSTEM_INSTRUCTION =
-    "You are NativeLM, a helpful on-device assistant. Answer clearly and concisely."
+private val SYSTEM_INSTRUCTION =
+    "You are NativeLM, a helpful on-device assistant. Answer clearly and concisely.\n\n" +
+        ChartInstruction.SYSTEM
 
 const val ROUTE_SPLASH = "splash"
 const val ROUTE_ONBOARDING = "onboarding"
@@ -1208,7 +1211,7 @@ class NativeLmViewModel(app: Application) : ViewModel() {
                 val sources = buildStudioSources(projectId, sourceId)
                 check(sources.isNotEmpty()) { "This project has no readable sources yet." }
                 val scopeLabel = studioScopeLabel(sourceId)
-                val generator = StudioGenerator { prompt, maxTokens -> studioOneShot(prompt, maxTokens) }
+                val generator = StudioGenerator(llm = { prompt, maxTokens -> studioOneShot(prompt, maxTokens) })
                 val onProgress: (StudioGenerator.Progress) -> Unit = { p ->
                     _studio.update { it.copy(progress = StudioProgress(p.phase, p.current, p.total)) }
                 }

@@ -51,7 +51,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.nativelm.app.llm.DocumentSummary
 import com.nativelm.app.llm.NativeLmViewModel
-import com.nativelm.app.rag.IngestState
+import com.sagar.aicore.rag.IngestState
 import com.nativelm.app.ui.theme.JetBrainsMono
 
 @OptIn(ExperimentalMaterial3Api::class)

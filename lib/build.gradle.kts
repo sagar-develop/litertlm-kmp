@@ -51,6 +51,8 @@ kotlin {
             implementation(libs.litertlm.android)
             implementation(libs.androidx.core.ktx)
             implementation(libs.ktor.client.okhttp)
+            // Argon2id (native, JNI) for passphrase-derived backup encryption keys.
+            implementation(libs.signal.argon2)
         }
         iosMain.dependencies {
             implementation(libs.ktor.client.darwin)

@@ -11,6 +11,8 @@ import android.graphics.Color
 import android.graphics.pdf.PdfRenderer
 import android.net.Uri
 import android.os.ParcelFileDescriptor
+import com.sagar.aicore.rag.ExtractedDoc
+import com.sagar.aicore.rag.TextExtractor
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 import com.tom_roush.pdfbox.pdmodel.PDDocument
 import com.tom_roush.pdfbox.text.PDFTextStripper
