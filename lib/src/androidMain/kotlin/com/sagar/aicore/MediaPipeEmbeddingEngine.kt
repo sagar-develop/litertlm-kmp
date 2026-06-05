@@ -31,6 +31,9 @@ class MediaPipeEmbeddingEngine(
     private var textEmbedder: TextEmbedder? = null
     private val mutex = Mutex()
 
+    /** USE-Lite is a fixed 100-dim embedder; [task]/title are ignored (it is symmetric). */
+    override val dimensions: Int = 100
+
     /**
      * Initializes the embedder with a model path.
      */
@@ -56,7 +59,11 @@ class MediaPipeEmbeddingEngine(
         }
     }
 
-    override suspend fun embed(text: String): FloatArray = withContext(Dispatchers.IO) {
+    override suspend fun embed(
+        text: String,
+        task: EmbeddingTask,
+        title: String?,
+    ): FloatArray = withContext(Dispatchers.IO) {
         Napier.d(tag = "EmbeddingEngine") { "embed START hash=${System.identityHashCode(this@MediaPipeEmbeddingEngine)} text_len=${text.length} first50=${text.take(50)}" }
         val embedder = mutex.withLock { textEmbedder } ?: run {
             Napier.e(tag = "EmbeddingEngine") { "Embedding model not loaded! hash=${System.identityHashCode(this@MediaPipeEmbeddingEngine)}" }

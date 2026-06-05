@@ -13,6 +13,9 @@ and the project loosely follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **EmbeddingGemma RAG embedder** _(app + engine)_ — higher-quality on-device retrieval via EmbeddingGemma 300M (ONNX Runtime, Matryoshka-256, query/document task prompts), default on capable devices with the 6 MB USE-Lite embedder as the friction-free fallback. Existing sources are re-indexed from their stored text on upgrade; backups round-trip both embedders. Engine adds a task-aware `EmbeddingEngine` and `ModelFormat.ONNX_EMBEDDER` + companion-file (tokenizer) downloads. See `docs/EMBEDDING_GEMMA_PLAN.md`.
+
 ## [0.8.0] — 2026-06-03
 
 ### Added

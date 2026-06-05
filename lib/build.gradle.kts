@@ -51,6 +51,9 @@ kotlin {
             implementation(libs.litertlm.android)
             implementation(libs.androidx.core.ktx)
             implementation(libs.ktor.client.okhttp)
+            // EmbeddingGemma on-device: ONNX Runtime + HuggingFace tokenizer.
+            implementation(libs.onnxruntime.android)
+            implementation(libs.djl.tokenizers)
         }
         iosMain.dependencies {
             implementation(libs.ktor.client.darwin)

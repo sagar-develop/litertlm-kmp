@@ -139,6 +139,41 @@ class DocumentChunkEntity {
 }
 
 /**
+ * One embedded chunk stored with its **EmbeddingGemma** vector (256-dim, Matryoshka).
+ * Parallel to [DocumentChunkEntity] (the 100-dim USE-Lite store): a chunk lives in
+ * exactly one of the two, selected by the install's active embedder. Keeping them as
+ * separate entities lets the old index stay readable during migration (re-embed from
+ * [text] into here, then drop the old rows) and sidesteps an in-place HNSW dimension
+ * change. See `docs/EMBEDDING_GEMMA_PLAN.md`.
+ */
+@Entity
+class GemmaChunkEntity {
+    @Id var id: Long = 0
+
+    @Index
+    var documentId: Long = 0
+
+    @Index
+    var projectId: Long = 0
+    var text: String = ""
+    var pageNumber: Int = 0
+    var chunkIndex: Int = 0
+
+    // dimensions must be a literal (annotation constant); keep in lockstep with EMBEDDING_DIM.
+    @HnswIndex(
+        dimensions = 256L,
+        distanceType = VectorDistanceType.COSINE,
+        neighborsPerNode = 48,
+        indexingSearchCount = 200,
+    )
+    var embedding: FloatArray? = null
+
+    companion object {
+        const val EMBEDDING_DIM: Int = 256
+    }
+}
+
+/**
  * A Studio artifact generated *from* a project's sources (a Briefing, FAQ, etc.) —
  * the output of map-reduce over the source set, not a chat answer. Persisted per
  * project so it can be re-viewed, shared, regenerated, or deleted.

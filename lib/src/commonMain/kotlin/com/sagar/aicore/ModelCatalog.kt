@@ -37,6 +37,21 @@ data class ModelDescriptor(
      * skipping it on text-only models also frees memory. Defaults to false.
      */
     val supportsVision: Boolean = false,
+    /**
+     * Extra files that must be downloaded **alongside** the main model for it to
+     * run — e.g. an ONNX embedder's `tokenizer.json`. Consumers download each
+     * companion to the same model directory before initializing the engine.
+     * Empty for self-contained models.
+     */
+    val companions: List<CompanionFile> = emptyList(),
+)
+
+/** A sidecar file downloaded next to a [ModelDescriptor]'s main model (e.g. a tokenizer). */
+data class CompanionFile(
+    val url: String,
+    val fileName: String,
+    val sizeBytes: Long,
+    val sha256: String? = null,
 )
 
 enum class ModelFormat {
@@ -46,6 +61,13 @@ enum class ModelFormat {
     MEDIAPIPE_TEXT_EMBEDDER,
     /** Whisper GGML/GGUF weights for on-device speech-to-text (whisper.cpp). */
     WHISPER_GGML,
+
+    /**
+     * ONNX transformer embedder run via ONNX Runtime (e.g. EmbeddingGemma 300M).
+     * Ships a `tokenizer.json` companion; the engine handles tokenization,
+     * mean-pooling, Matryoshka truncation, and L2 normalization itself.
+     */
+    ONNX_EMBEDDER,
 }
 
 enum class ModelRole {

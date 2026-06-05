@@ -4,7 +4,7 @@
  */
 package com.nativelm.app.rag
 
-import com.nativelm.app.data.db.DocumentChunkEntity
+import com.nativelm.app.data.db.Chunk
 import com.nativelm.app.data.db.ScoredChunk
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -15,11 +15,7 @@ class RagContextFormatterTest {
 
     private fun scored(docId: Long, text: String, page: Int = 0, score: Double = 0.1) =
         ScoredChunk(
-            DocumentChunkEntity().apply {
-                documentId = docId
-                this.text = text
-                pageNumber = page
-            },
+            Chunk(id = 0, documentId = docId, projectId = 1, text = text, pageNumber = page, chunkIndex = 0),
             score,
         )
 

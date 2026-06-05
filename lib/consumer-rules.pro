@@ -33,6 +33,17 @@
 -keep class com.google.common.flogger.** { *; }
 -dontwarn com.google.common.flogger.**
 
+# ---- ONNX Runtime (com.microsoft.onnxruntime) — EmbeddingGemma ----
+# JNI bridge; the native <methods> keep above covers the bindings. Keep the API
+# surface and silence optional references.
+-keep class ai.onnxruntime.** { *; }
+-dontwarn ai.onnxruntime.**
+
+# ---- HuggingFace tokenizers (ai.djl.huggingface) — EmbeddingGemma tokenizer ----
+# Loads a native lib + reflects over JNI types when reading tokenizer.json.
+-keep class ai.djl.** { *; }
+-dontwarn ai.djl.**
+
 # ---- kotlinx.serialization ----
 # Keep generated serializers + the synthetic serializer() accessor.
 -keepclassmembers class **$$serializer { *; }

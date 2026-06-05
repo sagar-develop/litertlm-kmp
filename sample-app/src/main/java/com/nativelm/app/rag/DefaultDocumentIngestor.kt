@@ -4,12 +4,13 @@
  */
 package com.nativelm.app.rag
 
-import com.nativelm.app.data.db.DocumentChunkEntity
+import com.nativelm.app.data.db.ChunkInput
 import com.nativelm.app.data.db.DocumentRepository
 import com.nativelm.app.rag.extract.DocumentFileStore
 import com.nativelm.app.rag.extract.TextChunker
 import com.nativelm.app.rag.extract.TextExtractor
 import com.sagar.aicore.EmbeddingEngine
+import com.sagar.aicore.EmbeddingTask
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.FlowCollector
@@ -69,22 +70,23 @@ class DefaultDocumentIngestor(
         emit(IngestState.Chunking(chunks.size))
 
         val documentId = repository.createDocument(projectId, title, uri, localPath, mime, pageCount)
-        val entities = ArrayList<DocumentChunkEntity>(chunks.size)
+        val dim = embeddingEngine.dimensions
+        val inputs = ArrayList<ChunkInput>(chunks.size)
         chunks.forEachIndexed { i, chunk ->
             emit(IngestState.Embedding(done = i, total = chunks.size))
-            val vector = embeddingEngine.embed(chunk.text)
-            entities += DocumentChunkEntity().apply {
-                this.documentId = documentId
-                this.projectId = projectId
-                this.text = chunk.text
-                pageNumber = chunk.pageNumber
-                chunkIndex = chunk.index
-                embedding = vector
-            }
+            // DOCUMENT task: prompt-instructed embedders (EmbeddingGemma) need the
+            // document role + title; symmetric embedders (USE-Lite) ignore both.
+            val vector = embeddingEngine.embed(chunk.text, EmbeddingTask.DOCUMENT, title)
+            inputs += ChunkInput(
+                text = chunk.text,
+                pageNumber = chunk.pageNumber,
+                chunkIndex = chunk.index,
+                embedding = vector,
+            )
         }
-        repository.addChunks(documentId, projectId, entities)
+        repository.addChunks(documentId, projectId, dim, inputs)
         emit(IngestState.Embedding(done = chunks.size, total = chunks.size))
-        emit(IngestState.Done(documentId, entities.size))
+        emit(IngestState.Done(documentId, inputs.size))
     }
 
     private suspend fun FlowCollector<IngestState>.emitFailure(t: Throwable) {

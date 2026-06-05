@@ -4,6 +4,7 @@
  */
 package com.nativelm.app.llm
 
+import com.sagar.aicore.CompanionFile
 import com.sagar.aicore.ModelCatalog
 import com.sagar.aicore.ModelDescriptor
 import com.sagar.aicore.ModelFormat
@@ -116,6 +117,33 @@ class NativeLmModelCatalog : ModelCatalog {
             minDeviceRamMb = 12000,
             requiresAuth = false,
             supportsVision = false,
+        ),
+        // ── Embedding (preferred) — EmbeddingGemma 300M, ONNX, quantized. The
+        // higher-quality RAG embedder; default on devices that clear the RAM/storage
+        // floor, with USE-Lite as the friction-free fallback below. Ships a
+        // tokenizer.json companion. Output is Matryoshka-truncated to 256-dim.
+        //
+        // NOTE: url/sizeBytes/sha256 are pinned to a specific EmbeddingGemma ONNX
+        // export — VERIFY against the chosen Hugging Face revision before release
+        // (and prefer a QAT/INT8 build for size + quality). Gemma-derived weights:
+        // surface the Gemma terms in the onboarding terms gate even though the
+        // onnx-community mirror downloads token-free.
+        ModelDescriptor(
+            id = "embeddinggemma-300m-onnx",
+            url = "https://huggingface.co/onnx-community/embeddinggemma-300m-ONNX/resolve/main/onnx/model_quantized.onnx?download=true",
+            fileName = "embeddinggemma-300m-q.onnx",
+            sizeBytes = 200_000_000L, // approx — verify against the pinned revision
+            format = ModelFormat.ONNX_EMBEDDER,
+            role = ModelRole.EMBEDDING,
+            minDeviceRamMb = 4000,
+            requiresAuth = false,
+            companions = listOf(
+                CompanionFile(
+                    url = "https://huggingface.co/onnx-community/embeddinggemma-300m-ONNX/resolve/main/tokenizer.json?download=true",
+                    fileName = "embeddinggemma-tokenizer.json",
+                    sizeBytes = 17_000_000L, // approx — verify
+                ),
+            ),
         ),
         ModelDescriptor(
             id = "universal-sentence-encoder",

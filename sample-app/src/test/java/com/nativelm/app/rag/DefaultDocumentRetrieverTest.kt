@@ -4,11 +4,13 @@
  */
 package com.nativelm.app.rag
 
-import com.nativelm.app.data.db.DocumentChunkEntity
+import com.nativelm.app.data.db.Chunk
+import com.nativelm.app.data.db.ChunkInput
 import com.nativelm.app.data.db.DocumentEntity
 import com.nativelm.app.data.db.DocumentRepository
 import com.nativelm.app.data.db.ScoredChunk
 import com.sagar.aicore.EmbeddingEngine
+import com.sagar.aicore.EmbeddingTask
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -19,8 +21,9 @@ class DefaultDocumentRetrieverTest {
 
     private val embedder = object : EmbeddingEngine {
         var calls = 0
+        override val dimensions: Int = 100
         override suspend fun initialize(modelPath: String) {}
-        override suspend fun embed(text: String): FloatArray {
+        override suspend fun embed(text: String, task: EmbeddingTask, title: String?): FloatArray {
             calls++
             return FloatArray(100)
         }
@@ -28,23 +31,27 @@ class DefaultDocumentRetrieverTest {
 
     private class FakeRepo(
         private val hits: List<ScoredChunk>,
-        private val keyword: List<DocumentChunkEntity> = emptyList(),
+        private val keyword: List<Chunk> = emptyList(),
     ) : DocumentRepository {
         override suspend fun createDocument(projectId: Long, title: String, uri: String, localPath: String, mime: String, pageCount: Int): Long = 0
         override suspend fun getDocument(documentId: Long): DocumentEntity? = null
-        override suspend fun addChunks(documentId: Long, projectId: Long, chunks: List<DocumentChunkEntity>) {}
+        override suspend fun addChunks(documentId: Long, projectId: Long, dim: Int, chunks: List<ChunkInput>) {}
         override suspend fun findSimilarChunks(queryEmbedding: FloatArray, k: Int, projectId: Long): List<ScoredChunk> = hits
-        override suspend fun keywordCandidates(projectId: Long, terms: List<String>, limit: Int): List<DocumentChunkEntity> = keyword
+        override suspend fun keywordCandidates(projectId: Long, terms: List<String>, limit: Int, dim: Int): List<Chunk> = keyword
         override suspend fun listDocuments(projectId: Long): List<DocumentEntity> = emptyList()
+        override suspend fun chunksForProject(projectId: Long, documentId: Long, dim: Int): List<Chunk> = emptyList()
+        override suspend fun chunkCount(projectId: Long, dim: Int): Long = 0
+        override suspend fun documentIdsWithChunks(dim: Int): List<Long> = emptyList()
+        override suspend fun clearChunksOfDocument(documentId: Long, dim: Int) {}
         override suspend fun deleteDocument(documentId: Long) {}
         override suspend fun deleteDocumentsOfProject(projectId: Long) {}
     }
 
     private fun scored(score: Double, id: Long = 0, text: String = "fact") =
-        ScoredChunk(DocumentChunkEntity().apply { this.id = id; documentId = 1; this.text = text }, score)
+        ScoredChunk(Chunk(id = id, documentId = 1, projectId = 1, text = text, pageNumber = 0, chunkIndex = 0), score)
 
     private fun chunk(id: Long, text: String) =
-        DocumentChunkEntity().apply { this.id = id; documentId = 1; this.text = text }
+        Chunk(id = id, documentId = 1, projectId = 1, text = text, pageNumber = 0, chunkIndex = 0)
 
     @Test fun blankQueryReturnsEmptyWithoutEmbedding() = runTest {
         val r = DefaultDocumentRetriever(embedder, FakeRepo(listOf(scored(0.1))))

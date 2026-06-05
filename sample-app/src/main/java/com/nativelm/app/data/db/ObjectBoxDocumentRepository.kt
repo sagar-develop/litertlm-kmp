@@ -10,14 +10,17 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * ObjectBox-backed [DocumentRepository]. Vector retrieval uses the HNSW index on
- * [DocumentChunkEntity.embedding], post-filtered to a project. All ops run on
- * [Dispatchers.IO]; the generated `*_` query metadata lives in this package.
+ * ObjectBox-backed [DocumentRepository]. Holds two parallel HNSW chunk stores —
+ * 100-dim ([DocumentChunkEntity], USE-Lite) and 256-dim ([GemmaChunkEntity],
+ * EmbeddingGemma) — and routes vector ops to the one matching the active embedder's
+ * `dim`. Document metadata ([DocumentEntity]) is shared. All ops run on
+ * [Dispatchers.IO]; generated `*_` query metadata lives in this package.
  */
 class ObjectBoxDocumentRepository : DocumentRepository {
 
     private val documents = ObjectBox.store.boxFor(DocumentEntity::class.java)
-    private val chunks = ObjectBox.store.boxFor(DocumentChunkEntity::class.java)
+    private val useChunks = ObjectBox.store.boxFor(DocumentChunkEntity::class.java)
+    private val gemmaChunks = ObjectBox.store.boxFor(GemmaChunkEntity::class.java)
 
     override suspend fun createDocument(
         projectId: Long,
@@ -47,67 +50,106 @@ class ObjectBoxDocumentRepository : DocumentRepository {
     override suspend fun addChunks(
         documentId: Long,
         projectId: Long,
-        chunks: List<DocumentChunkEntity>,
+        dim: Int,
+        chunks: List<ChunkInput>,
     ): Unit = withContext(Dispatchers.IO) {
-        chunks.forEach {
-            it.id = 0
-            it.documentId = documentId
-            it.projectId = projectId
+        if (dim == GemmaChunkEntity.EMBEDDING_DIM) {
+            gemmaChunks.put(
+                chunks.map { c ->
+                    GemmaChunkEntity().apply {
+                        this.documentId = documentId
+                        this.projectId = projectId
+                        text = c.text
+                        pageNumber = c.pageNumber
+                        chunkIndex = c.chunkIndex
+                        embedding = c.embedding
+                    }
+                },
+            )
+        } else {
+            useChunks.put(
+                chunks.map { c ->
+                    DocumentChunkEntity().apply {
+                        this.documentId = documentId
+                        this.projectId = projectId
+                        text = c.text
+                        pageNumber = c.pageNumber
+                        chunkIndex = c.chunkIndex
+                        embedding = c.embedding
+                    }
+                },
+            )
         }
-        this@ObjectBoxDocumentRepository.chunks.put(chunks)
         documents.get(documentId)?.let { doc ->
-            doc.chunkCount = this@ObjectBoxDocumentRepository.chunks
-                .query().equal(DocumentChunkEntity_.documentId, documentId).build()
-                .use { it.count().toInt() }
+            doc.chunkCount = countForDocument(documentId, dim).toInt()
             documents.put(doc)
         }
     }
+
+    private fun countForDocument(documentId: Long, dim: Int): Long =
+        if (dim == GemmaChunkEntity.EMBEDDING_DIM) {
+            gemmaChunks.query().equal(GemmaChunkEntity_.documentId, documentId).build()
+                .use { it.count() }
+        } else {
+            useChunks.query().equal(DocumentChunkEntity_.documentId, documentId).build()
+                .use { it.count() }
+        }
 
     override suspend fun findSimilarChunks(
         queryEmbedding: FloatArray,
         k: Int,
         projectId: Long,
     ): List<ScoredChunk> = withContext(Dispatchers.IO) {
-        require(queryEmbedding.size == DocumentChunkEntity.EMBEDDING_DIM) {
-            "Query embedding dim ${queryEmbedding.size} != ${DocumentChunkEntity.EMBEDDING_DIM}"
-        }
         // ObjectBox applies the projectId condition AFTER the HNSW k-NN, not during
-        // it. So asking for just `k` neighbors globally can return zero rows for
-        // this project when closer chunks from OTHER projects fill the k slots —
-        // silently breaking project-scoped grounding. Over-fetch a wide candidate
-        // set, then filter to the project and keep the k closest. searchK is bounded
-        // by the index search ef (indexingSearchCount = 200) for recall.
+        // it. Over-fetch a wide candidate set, then filter to the project and keep the
+        // k closest (searchK bounded by indexingSearchCount = 200 for recall).
         val searchK = maxOf(k * 30, 150)
-        chunks.query()
-            .nearestNeighbors(DocumentChunkEntity_.embedding, queryEmbedding, searchK)
-            .equal(DocumentChunkEntity_.projectId, projectId)
-            .build()
-            .use { query ->
-                query.findWithScores().asSequence()
-                    .map { ScoredChunk(it.get(), it.score) }
-                    .take(k)
-                    .toList()
+        if (queryEmbedding.size == GemmaChunkEntity.EMBEDDING_DIM) {
+            gemmaChunks.query()
+                .nearestNeighbors(GemmaChunkEntity_.embedding, queryEmbedding, searchK)
+                .equal(GemmaChunkEntity_.projectId, projectId)
+                .build()
+                .use { q ->
+                    q.findWithScores().asSequence()
+                        .map { ScoredChunk(it.get().toChunk(), it.score) }
+                        .take(k).toList()
+                }
+        } else {
+            require(queryEmbedding.size == DocumentChunkEntity.EMBEDDING_DIM) {
+                "Query embedding dim ${queryEmbedding.size} matches neither store"
             }
+            useChunks.query()
+                .nearestNeighbors(DocumentChunkEntity_.embedding, queryEmbedding, searchK)
+                .equal(DocumentChunkEntity_.projectId, projectId)
+                .build()
+                .use { q ->
+                    q.findWithScores().asSequence()
+                        .map { ScoredChunk(it.get().toChunk(), it.score) }
+                        .take(k).toList()
+                }
+        }
     }
 
     override suspend fun keywordCandidates(
         projectId: Long,
         terms: List<String>,
         limit: Int,
-    ): List<DocumentChunkEntity> = withContext(Dispatchers.IO) {
+        dim: Int,
+    ): List<Chunk> = withContext(Dispatchers.IO) {
         if (terms.isEmpty()) return@withContext emptyList()
-        // OR of case-insensitive "text contains term" across the query terms.
-        // Seed the fold as QueryCondition so .or() (which widens from
-        // PropertyQueryCondition) type-checks.
-        fun contains(term: String) =
-            DocumentChunkEntity_.text.contains(term, StringOrder.CASE_INSENSITIVE)
-        val anyTerm: QueryCondition<DocumentChunkEntity> =
-            terms.drop(1).fold<String, QueryCondition<DocumentChunkEntity>>(contains(terms.first())) { acc, t ->
-                acc.or(contains(t))
-            }
-        chunks.query(DocumentChunkEntity_.projectId.equal(projectId).and(anyTerm))
-            .build()
-            .use { it.find(0L, limit.toLong()) }
+        if (dim == GemmaChunkEntity.EMBEDDING_DIM) {
+            fun contains(t: String) = GemmaChunkEntity_.text.contains(t, StringOrder.CASE_INSENSITIVE)
+            val any: QueryCondition<GemmaChunkEntity> =
+                terms.drop(1).fold<String, QueryCondition<GemmaChunkEntity>>(contains(terms.first())) { acc, t -> acc.or(contains(t)) }
+            gemmaChunks.query(GemmaChunkEntity_.projectId.equal(projectId).and(any))
+                .build().use { it.find(0L, limit.toLong()) }.map { it.toChunk() }
+        } else {
+            fun contains(t: String) = DocumentChunkEntity_.text.contains(t, StringOrder.CASE_INSENSITIVE)
+            val any: QueryCondition<DocumentChunkEntity> =
+                terms.drop(1).fold<String, QueryCondition<DocumentChunkEntity>>(contains(terms.first())) { acc, t -> acc.or(contains(t)) }
+            useChunks.query(DocumentChunkEntity_.projectId.equal(projectId).and(any))
+                .build().use { it.find(0L, limit.toLong()) }.map { it.toChunk() }
+        }
     }
 
     override suspend fun listDocuments(projectId: Long): List<DocumentEntity> =
@@ -122,27 +164,65 @@ class ObjectBoxDocumentRepository : DocumentRepository {
     override suspend fun chunksForProject(
         projectId: Long,
         documentId: Long,
-    ): List<DocumentChunkEntity> = withContext(Dispatchers.IO) {
-        val condition = if (documentId > 0L) {
-            DocumentChunkEntity_.documentId.equal(documentId)
+        dim: Int,
+    ): List<Chunk> = withContext(Dispatchers.IO) {
+        if (dim == GemmaChunkEntity.EMBEDDING_DIM) {
+            val cond = if (documentId > 0L) GemmaChunkEntity_.documentId.equal(documentId)
+            else GemmaChunkEntity_.projectId.equal(projectId)
+            gemmaChunks.query(cond)
+                .order(GemmaChunkEntity_.documentId).order(GemmaChunkEntity_.chunkIndex)
+                .build().use { it.find() }.map { it.toChunk() }
         } else {
-            DocumentChunkEntity_.projectId.equal(projectId)
+            val cond = if (documentId > 0L) DocumentChunkEntity_.documentId.equal(documentId)
+            else DocumentChunkEntity_.projectId.equal(projectId)
+            useChunks.query(cond)
+                .order(DocumentChunkEntity_.documentId).order(DocumentChunkEntity_.chunkIndex)
+                .build().use { it.find() }.map { it.toChunk() }
         }
-        chunks.query(condition)
-            .order(DocumentChunkEntity_.documentId)
-            .order(DocumentChunkEntity_.chunkIndex)
-            .build()
-            .use { it.find() }
+    }
+
+    override suspend fun chunkCount(projectId: Long, dim: Int): Long = withContext(Dispatchers.IO) {
+        if (dim == GemmaChunkEntity.EMBEDDING_DIM) {
+            gemmaChunks.query().equal(GemmaChunkEntity_.projectId, projectId).build().use { it.count() }
+        } else {
+            useChunks.query().equal(DocumentChunkEntity_.projectId, projectId).build().use { it.count() }
+        }
+    }
+
+    override suspend fun documentIdsWithChunks(dim: Int): List<Long> = withContext(Dispatchers.IO) {
+        if (dim == GemmaChunkEntity.EMBEDDING_DIM) {
+            gemmaChunks.query().build()
+                .use { it.property(GemmaChunkEntity_.documentId).distinct().findLongs() }.toList()
+        } else {
+            useChunks.query().build()
+                .use { it.property(DocumentChunkEntity_.documentId).distinct().findLongs() }.toList()
+        }
+    }
+
+    override suspend fun clearChunksOfDocument(documentId: Long, dim: Int): Unit = withContext(Dispatchers.IO) {
+        if (dim == GemmaChunkEntity.EMBEDDING_DIM) {
+            gemmaChunks.query().equal(GemmaChunkEntity_.documentId, documentId).build().use { it.remove() }
+        } else {
+            useChunks.query().equal(DocumentChunkEntity_.documentId, documentId).build().use { it.remove() }
+        }
     }
 
     override suspend fun deleteDocument(documentId: Long): Unit = withContext(Dispatchers.IO) {
-        // tx-split (landmine #3): remove HNSW-indexed chunks first, then the parent.
-        chunks.query().equal(DocumentChunkEntity_.documentId, documentId).build().use { it.remove() }
+        // tx-split (landmine #3): remove HNSW-indexed chunks (both stores) first, then the parent.
+        useChunks.query().equal(DocumentChunkEntity_.documentId, documentId).build().use { it.remove() }
+        gemmaChunks.query().equal(GemmaChunkEntity_.documentId, documentId).build().use { it.remove() }
         documents.remove(documentId)
     }
 
     override suspend fun deleteDocumentsOfProject(projectId: Long): Unit = withContext(Dispatchers.IO) {
-        chunks.query().equal(DocumentChunkEntity_.projectId, projectId).build().use { it.remove() }
+        useChunks.query().equal(DocumentChunkEntity_.projectId, projectId).build().use { it.remove() }
+        gemmaChunks.query().equal(GemmaChunkEntity_.projectId, projectId).build().use { it.remove() }
         documents.query().equal(DocumentEntity_.projectId, projectId).build().use { it.remove() }
     }
+
+    private fun DocumentChunkEntity.toChunk() =
+        Chunk(id, documentId, projectId, text, pageNumber, chunkIndex)
+
+    private fun GemmaChunkEntity.toChunk() =
+        Chunk(id, documentId, projectId, text, pageNumber, chunkIndex)
 }

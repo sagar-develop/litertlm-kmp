@@ -210,6 +210,9 @@ class NativeLmViewModel(app: Application) : ViewModel() {
     private val appContext: Application = app
     private val engineHolder = EngineHolder(app)
     private val ragHolder = RagHolder(app, engineHolder)
+
+    /** Guards the one-time legacy→active embedder re-index per ViewModel lifetime. */
+    @Volatile private var embeddingMigrationKicked = false
     private val prefs = AppPreferences(app)
     private val secureStore = SecureStore(app)
 
@@ -991,30 +994,60 @@ class NativeLmViewModel(app: Application) : ViewModel() {
         }
     }
 
-    /** Make the embedder usable: download the small USE model if needed, then init. */
+    /**
+     * Make the embedder usable: download the preferred embedder (EmbeddingGemma on
+     * capable devices, else USE-Lite) if needed, init it, and kick a one-time
+     * re-index of any legacy chunks into the active store.
+     */
     private suspend fun prepareEmbedding(): Boolean {
-        if (ragHolder.ensureEmbeddingReady()) return true
+        if (ragHolder.ensureEmbeddingReady()) {
+            maybeMigrateEmbeddings()
+            return true
+        }
         if (!downloadEmbeddingModel()) return false
-        return ragHolder.ensureEmbeddingReady()
+        val ready = ragHolder.ensureEmbeddingReady()
+        if (ready) maybeMigrateEmbeddings()
+        return ready
     }
 
+    /** Download the preferred embedder's model file + any companions (e.g. tokenizer.json). */
     private suspend fun downloadEmbeddingModel(): Boolean {
-        val descriptor = catalog.byId(RagHolder.USE_MODEL_ID) ?: return false
-        if (engineHolder.isModelDownloaded(descriptor.fileName)) return true
-        var success = false
-        engineHolder.downloadModel(descriptor.url, descriptor.fileName, descriptor.sha256)
-            .collect { state ->
+        val d = catalog.byId(ragHolder.preferredModelId) ?: return false
+        val files = buildList {
+            add(Triple(d.url, d.fileName, d.sha256))
+            d.companions.forEach { add(Triple(it.url, it.fileName, it.sha256)) }
+        }
+        for ((url, name, sha) in files) {
+            if (engineHolder.isModelDownloaded(name)) continue
+            var ok = false
+            engineHolder.downloadModel(url, name, sha).collect { state ->
                 when (state) {
-                    is DownloadState.Success -> success = true
+                    is DownloadState.Success -> ok = true
                     is DownloadState.Error -> {
-                        Napier.e(tag = TAG) { "USE model download failed: ${state.message}" }
-                        success = false
+                        Napier.e(tag = TAG) { "Embedding download failed: ${state.message}" }
+                        ok = false
                     }
                     else -> Unit
                 }
             }
-        if (success) refreshModels()
-        return success
+            if (!ok) return false
+        }
+        refreshModels()
+        return true
+    }
+
+    /** Re-index legacy USE-Lite chunks into the EmbeddingGemma store once, in the background. */
+    private fun maybeMigrateEmbeddings() {
+        if (embeddingMigrationKicked) return
+        embeddingMigrationKicked = true
+        viewModelScope.launch {
+            runCatching {
+                if (ragHolder.needsMigration()) {
+                    ragHolder.migrateToGemma()
+                    refreshDocuments()
+                }
+            }.onFailure { Napier.e(tag = TAG, throwable = it) { "Embedding migration failed" } }
+        }
     }
 
     // ---- Settings ----

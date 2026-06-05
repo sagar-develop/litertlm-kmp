@@ -4,10 +4,11 @@
  */
 package com.nativelm.app.rag
 
-import com.nativelm.app.data.db.DocumentChunkEntity
+import com.nativelm.app.data.db.Chunk
 import com.nativelm.app.data.db.DocumentRepository
 import com.nativelm.app.data.db.ScoredChunk
 import com.sagar.aicore.EmbeddingEngine
+import com.sagar.aicore.EmbeddingTask
 
 /**
  * Hybrid retriever: blends semantic (vector) and lexical (keyword/BM25) search.
@@ -27,16 +28,21 @@ import com.sagar.aicore.EmbeddingEngine
 class DefaultDocumentRetriever(
     private val embeddingEngine: EmbeddingEngine,
     private val repository: DocumentRepository,
-    private val maxDistance: Double = RELEVANCE_MAX_DISTANCE,
+    /** Override the cosine-distance gate; when null it's chosen per active embedder. */
+    private val maxDistance: Double? = null,
 ) : DocumentRetriever {
 
     override suspend fun retrieve(projectId: Long, query: String, k: Int): RetrievedContext {
         if (query.isBlank() || projectId <= 0L) return RetrievedContext.EMPTY
 
+        val dim = embeddingEngine.dimensions
+        val gate = maxDistance ?: gateFor(dim)
+
         // ── Vector arm: nearest neighbors, gated to genuine semantic matches. ──
-        val queryVector = embeddingEngine.embed(query)
+        // QUERY task: prompt-instructed embedders (EmbeddingGemma) need the query role.
+        val queryVector = embeddingEngine.embed(query, EmbeddingTask.QUERY)
         val vectorHits = repository.findSimilarChunks(queryVector, VECTOR_POOL, projectId)
-            .filter { it.score <= maxDistance }
+            .filter { it.score <= gate }
         val vectorRanking = vectorHits.map { it.chunk.id }
 
         // ── Keyword arm: BM25 over chunks that contain a query term. ──
@@ -44,7 +50,7 @@ class DefaultDocumentRetriever(
         val keywordCandidates = if (terms.isEmpty()) {
             emptyList()
         } else {
-            repository.keywordCandidates(projectId, terms, KEYWORD_POOL)
+            repository.keywordCandidates(projectId, terms, KEYWORD_POOL, dim)
         }
         val keywordRanking = KeywordSearch.rank(
             query,
@@ -58,7 +64,7 @@ class DefaultDocumentRetriever(
             .reciprocalRankFusion(listOf(vectorRanking, keywordRanking))
             .take(k)
 
-        val byId: Map<Long, DocumentChunkEntity> =
+        val byId: Map<Long, Chunk> =
             (vectorHits.map { it.chunk } + keywordCandidates).associateBy { it.id }
         val ordered = fusedIds.mapNotNull { id -> byId[id] }.map { ScoredChunk(it, 0.0) }
         if (ordered.isEmpty()) return RetrievedContext.EMPTY
@@ -67,14 +73,20 @@ class DefaultDocumentRetriever(
         return RagContextFormatter.format(ordered) { id -> titles[id] ?: "Source" }
     }
 
+    /**
+     * Cosine-distance gate per embedder (0 = identical direction … up to 2 = opposite).
+     * USE-Lite (100-dim) and EmbeddingGemma (256-dim) have different distance
+     * distributions, so the cutoff differs. Both are deliberately loose — they only
+     * drop clearly-unrelated hits. **Tune against real corpora on-device.**
+     */
+    private fun gateFor(dim: Int): Double =
+        if (dim == 256) RELEVANCE_MAX_DISTANCE_GEMMA else RELEVANCE_MAX_DISTANCE_USE
+
     companion object {
-        /**
-         * Cosine-distance cutoff (0 = identical direction … up to 2 = opposite).
-         * Vector hits farther than this are dropped. A real USE-Lite match sits well
-         * below this; the value is deliberately loose so it only filters clearly
-         * unrelated hits — tune against real corpora.
-         */
-        const val RELEVANCE_MAX_DISTANCE: Double = 0.75
+        const val RELEVANCE_MAX_DISTANCE_USE: Double = 0.75
+
+        /** Provisional — EmbeddingGemma vectors are L2-normalized; retune on-device. */
+        const val RELEVANCE_MAX_DISTANCE_GEMMA: Double = 0.55
 
         /** Candidate-pool sizes per arm before fusion (final result is top-k). */
         private const val VECTOR_POOL = 30

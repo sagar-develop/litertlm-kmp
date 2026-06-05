@@ -11,6 +11,7 @@ import com.nativelm.app.data.ThemeMode
 import com.nativelm.app.data.db.ConversationEntity
 import com.nativelm.app.data.db.DocumentChunkEntity
 import com.nativelm.app.data.db.DocumentEntity
+import com.nativelm.app.data.db.GemmaChunkEntity
 import com.nativelm.app.data.db.MessageEntity
 import com.nativelm.app.data.db.ObjectBox
 import com.nativelm.app.data.db.ProjectEntity
@@ -62,7 +63,8 @@ class BackupManager(private val context: Context) {
         val conversations = store.boxFor(ConversationEntity::class.java).all
         val messages = store.boxFor(MessageEntity::class.java).all
         val documents = store.boxFor(DocumentEntity::class.java).all
-        val chunks = store.boxFor(DocumentChunkEntity::class.java).all
+        val useChunks = store.boxFor(DocumentChunkEntity::class.java).all
+        val gemmaChunks = store.boxFor(GemmaChunkEntity::class.java).all
         val artifacts = store.boxFor(StudioArtifactEntity::class.java).all
 
         val prefsStore = AppPreferences(context)
@@ -93,10 +95,15 @@ class BackupManager(private val context: Context) {
                     createdAt = doc.createdAt,
                 )
             },
-            chunks = chunks.map {
+            chunks = useChunks.map {
                 ChunkDto(
                     it.id, it.documentId, it.projectId, s(it.text), it.pageNumber, it.chunkIndex,
-                    encodeEmbedding(it.embedding),
+                    encodeEmbedding(it.embedding), dim = DocumentChunkEntity.EMBEDDING_DIM,
+                )
+            } + gemmaChunks.map {
+                ChunkDto(
+                    it.id, it.documentId, it.projectId, s(it.text), it.pageNumber, it.chunkIndex,
+                    encodeEmbedding(it.embedding), dim = GemmaChunkEntity.EMBEDDING_DIM,
                 )
             },
             artifacts = artifacts.map {
@@ -224,9 +231,9 @@ class BackupManager(private val context: Context) {
         if (m.schemaVersion > BACKUP_SCHEMA_VERSION) {
             throw BackupException("This backup was made by a newer version of NativeLM. Update the app and try again.")
         }
-        if (m.embeddingDim != BACKUP_EMBEDDING_DIM) {
-            throw BackupException("This backup uses an incompatible embedding format and can't be restored by this version.")
-        }
+        // No embedding-dim gate: each chunk carries its own dim and is routed to the
+        // matching store on import. Chunks from a non-active embedder are re-indexed
+        // from their text on first use (see RagHolder.migrateToGemma).
     }
 
     /** A document awaiting its source-file bytes from a `files/` zip entry. */
@@ -238,7 +245,8 @@ class BackupManager(private val context: Context) {
         val convBox = store.boxFor(ConversationEntity::class.java)
         val msgBox = store.boxFor(MessageEntity::class.java)
         val docBox = store.boxFor(DocumentEntity::class.java)
-        val chunkBox = store.boxFor(DocumentChunkEntity::class.java)
+        val useChunkBox = store.boxFor(DocumentChunkEntity::class.java)
+        val gemmaChunkBox = store.boxFor(GemmaChunkEntity::class.java)
         val artBox = store.boxFor(StudioArtifactEntity::class.java)
 
         val projMap = HashMap<Long, Long>()
@@ -290,17 +298,32 @@ class BackupManager(private val context: Context) {
         }
         msgBox.put(newMessages)
 
-        val newChunks = payload.chunks.map { dto ->
-            DocumentChunkEntity().apply {
-                documentId = docMap[dto.documentId] ?: 0L
-                projectId = projMap[dto.projectId] ?: 0L
-                text = dto.text
-                pageNumber = dto.pageNumber
-                chunkIndex = dto.chunkIndex
-                embedding = dto.embeddingB64?.let { decodeEmbedding(it) }
-            }
-        }
-        chunkBox.put(newChunks)
+        // Route each chunk to the store matching its embedding dimension.
+        val (gemmaDtos, useDtos) = payload.chunks.partition { it.dim == GemmaChunkEntity.EMBEDDING_DIM }
+        useChunkBox.put(
+            useDtos.map { dto ->
+                DocumentChunkEntity().apply {
+                    documentId = docMap[dto.documentId] ?: 0L
+                    projectId = projMap[dto.projectId] ?: 0L
+                    text = dto.text
+                    pageNumber = dto.pageNumber
+                    chunkIndex = dto.chunkIndex
+                    embedding = dto.embeddingB64?.let { decodeEmbedding(it) }
+                }
+            },
+        )
+        gemmaChunkBox.put(
+            gemmaDtos.map { dto ->
+                GemmaChunkEntity().apply {
+                    documentId = docMap[dto.documentId] ?: 0L
+                    projectId = projMap[dto.projectId] ?: 0L
+                    text = dto.text
+                    pageNumber = dto.pageNumber
+                    chunkIndex = dto.chunkIndex
+                    embedding = dto.embeddingB64?.let { decodeEmbedding(it) }
+                }
+            },
+        )
 
         val newArtifacts = payload.artifacts.map { dto ->
             StudioArtifactEntity().apply {
