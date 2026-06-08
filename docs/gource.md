@@ -2,7 +2,7 @@
 
 [Gource](https://gource.io/) renders an animated, file-by-file visualisation of a git
 repository's history — a "watch the codebase grow" clip. It's a nice companion to
-[`ARCHITECTURE.md`](ARCHITECTURE.md): that file is the *intentional* structure, this is
+[`ARCHITECTURE.md`](../ARCHITECTURE.md): that file is the *intentional* structure, this is
 the *organic* growth over time. Handy for launch posts and talks.
 
 ## Install (Windows)
