@@ -348,26 +348,24 @@ The download URLs + per-model metadata live in
 
 ## Architecture at a glance
 
-```
-            ┌─────────────────────────────────────────┐
-            │     Your app (Compose / SwiftUI / …)    │
-            └─────────────────────────────────────────┘
-                              │
-            ┌─────────────────▼─────────────────────────┐
-            │  EngineRegistry  ←  HardwareProvider      │
-            │  (picks LiteRT vs MediaPipe vs fallback  │
-            │   based on device RAM tier)              │
-            └─────────────────┬─────────────────────────┘
-                              │
-       ┌──────────────────────┼────────────────────────┐
-       ▼                      ▼                        ▼
- LocalAiEngine          EmbeddingEngine          ModelManager
- (LiteRT-LM /           (MediaPipe Tasks         (Ktor download
-  Gemma 4)              Text Embedder)            + SHA-256 +
-                                                  atomic move)
+```mermaid
+flowchart TB
+    app["Your app (Compose / SwiftUI / …)"]
+    sel["RAM-tier selection · HardwareProvider<br/>picks LLM + embedder + reranker for the device"]
+    lae["LocalAiEngine<br/>LiteRT-LM / Gemma 4"]
+    ee["EmbeddingEngine<br/>EmbeddingGemma / USE-Lite (ONNX, telemetry-free)"]
+    ret["DocumentRetriever<br/>vector + BM25 + rerank (RAG)"]
+    mm["ModelManager<br/>resumable download + SHA-256"]
+    app --> sel
+    sel --> lae
+    sel --> ee --> ret
+    sel --> mm
+
+    classDef n fill:#f5f3ef,stroke:#7FA980,color:#1C1B1A;
+    class app,sel,lae,ee,ret,mm n;
 ```
 
-See [`ARCHITECTURE.md`](ARCHITECTURE.md) for the full design rationale, including how the RAM-tier policy works and why the OEM RAM-expansion detection is necessary.
+See [`ARCHITECTURE.md`](ARCHITECTURE.md) for the full design — Mermaid diagrams of the engine/product split and the RAG pipeline, the device-tier policy, and why OEM RAM-expansion detection is necessary.
 
 ## Enterprise support, custom implementations & architectural advising
 
