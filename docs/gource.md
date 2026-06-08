@@ -8,11 +8,12 @@ the *organic* growth over time. Handy for launch posts and talks.
 ## Install (Windows)
 
 ```powershell
-winget install Acaceia.Gource
+winget install acaudwell.Gource
 ```
 
-(ffmpeg is also required for video output — already present in this environment. On a
-clean machine: `winget install Gyan.FFmpeg`.)
+This installer needs administrator rights — accept the UAC prompt (an unattended/CI
+shell will fail with `0x800704c7`). ffmpeg is also required for video output: on a clean
+machine, `winget install Gyan.FFmpeg`.
 
 Gource needs an OpenGL context, so run it on a desktop session (not a headless shell).
 
