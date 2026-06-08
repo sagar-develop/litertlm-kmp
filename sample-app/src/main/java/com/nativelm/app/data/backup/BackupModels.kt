@@ -7,9 +7,13 @@ package com.nativelm.app.data.backup
 import kotlinx.serialization.Serializable
 
 /** Bump when the on-disk backup format changes incompatibly. Import rejects newer. */
-const val BACKUP_SCHEMA_VERSION = 1
+const val BACKUP_SCHEMA_VERSION = 2
 
-/** Embedding dimensionality this build can restore (USE-Lite, 100-dim). */
+/**
+ * Manifest embedding-dim field, kept for back-compat of the format. Since v2 each
+ * [ChunkDto] carries its own [ChunkDto.dim], a manifest-level dim mismatch is no
+ * longer fatal — cross-embedder backups re-index from the included chunk text.
+ */
 const val BACKUP_EMBEDDING_DIM = 100
 
 /** Suggested file extension / container name for a backup. */
@@ -112,6 +116,13 @@ data class ChunkDto(
     val chunkIndex: Int,
     /** Base64 of little-endian float32 embedding bytes; null for un-embedded chunks. */
     val embeddingB64: String? = null,
+    /**
+     * Embedding dimension / HNSW index this chunk belongs to: 100 (USE-Lite),
+     * 128/256/512 (EmbeddingGemma tiers). Defaults to 100 for v1 backups. On import,
+     * chunks restore into the matching index; if the device's active embedder differs,
+     * the project re-indexes from this chunk's [text] on next open.
+     */
+    val dim: Int = 100,
 )
 
 @Serializable

@@ -57,6 +57,13 @@
 }
 -keep,includedescriptorclasses class com.nativelm.app.data.backup.**$$serializer { *; }
 
+# ---- ONNX Runtime (EmbeddingGemma RAG embedder + cross-encoder reranker) ----
+# ORT's native layer calls back into ai.onnxruntime.* via JNI (e.g. OrtEnvironment,
+# OnnxTensor, OrtSession). The AAR ships consumer rules, but keep the package
+# explicitly so a minified release can't strip the JNI-resolved surface.
+-keep class ai.onnxruntime.** { *; }
+-dontwarn ai.onnxruntime.**
+
 # ---- Whisper JNI (on-device speech-to-text) ----
 # libwhisper.so resolves the native methods by their mangled Kotlin names
 # (Java_com_nativelm_app_voice_WhisperNative_00024Companion_*), so the class +

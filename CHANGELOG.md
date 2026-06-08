@@ -9,9 +9,61 @@ and the project loosely follows [Semantic Versioning](https://semver.org/).
 > `com.sagar:litertlm-kmp`) and the **showcase app** (`sample-app/`, NativeLM)
 > live in one repo and share a single version line. Entries below note which
 > surface a change lands on. The engine library version in
-> `lib/build.gradle.kts` tracks the latest release (`0.9.0`).
+> `lib/build.gradle.kts` tracks the latest release (`0.10.0`).
 
-## [Unreleased]
+## [0.10.0] — 2026-06-09
+
+### Added
+- **EmbeddingGemma RAG embedder (device-tiered, telemetry-free)** — optional upgrade
+  from USE-Lite (100-dim) to **EmbeddingGemma-300M** for document retrieval, run on
+  **ONNX Runtime** (no Google/Play telemetry deps). One downloaded model serves every
+  tier via **Matryoshka** truncation; a **recommendation engine** picks the embedder +
+  dim by device RAM (USE-Lite <6 GB · Gemma@256 6–9 GB · Gemma@512 + reranker ≥10 GB),
+  surfaced as a "Recommended" badge in the in-app model catalogue. The model and its
+  companion files (weights blob + tokenizer) download on-device through the catalogue;
+  nothing is bundled in the APK. (engine + app)
+- **Cross-encoder reranker (flagship)** — optional second-stage `ms-marco-MiniLM-L6`
+  rerank over the top fused candidates, gated to high-RAM devices. (engine + app)
+- **Pure-Kotlin tokenizers** — BPE (EmbeddingGemma) and BERT WordPiece (reranker),
+  reading the HuggingFace `tokenizer.json`, validated bit-for-bit against the reference
+  `transformers` tokenizer. No native tokenizer lib, KMP-portable. (engine)
+- **Task-aware embeddings** — `EmbeddingEngine` now distinguishes query vs document
+  (instruction prefixes), required for EmbeddingGemma's asymmetric retrieval. (engine)
+
+### Changed
+- **Hybrid retrieval** — document retrieval now fuses dense vector search with **BM25**
+  lexical scoring via **Reciprocal Rank Fusion (RRF)**, plus a **per-document cap** so one
+  large source can't fill every top-k slot, wider candidate pools, and a larger grounding
+  budget. Ships independent of the embedder upgrade. (engine)
+- **Backup/sync** — backups now carry chunk embeddings from every embedder dim and tag
+  each chunk with its dim; cross-embedder restores re-index from the included text
+  instead of being rejected (backup schema v2). (app)
+
+### Fixed
+- **Wrong-document grounding** — a **document-level dominance gate** stops BM25 lexical
+  pollution from grounding an answer on the wrong source. A real failure: a "car
+  insurance premium" question answered with the **life policy's** figure (₹41,799) instead
+  of the actual car premium (₹8,504) because the life PDF's wording out-scored the car PDF
+  on shared tokens. The gate keeps grounding on the document that genuinely dominates the
+  candidate set. (engine)
+- **Title-match override** — when a distinctive query term names a document by its title,
+  retrieval grounds on that document. "Who is the insurer of my car policy" was answering
+  from a health policy (whose formal "…insurer" phrasing out-scored the car doc); it now
+  correctly resolves to the car policy (TATA AIG). (engine)
+- **Truncated grounded answers** — grounded replies collapsed to 1–2 tokens after a few
+  turns because the stateful LiteRT-LM KV cache accumulated each turn's grounding block. A
+  **per-grounded-turn session reset** re-prefills only bounded visible history
+  (`MAX_PREFILL_TURNS=16`), keeping answers full-length. (app)
+- **Stale embeddings** — a **document-level self-healing migration** re-indexes a source
+  into the active embedder's index on next open when the embedder/dim changes, with no
+  re-import or OCR. (app)
+- **Health-insurer recall miss** — enabling the cross-encoder reranker (ungated) on the
+  8 GB device tier recovers a relevant chunk the first-stage fusion ranked too low. (app)
+
+### Migration
+- Existing projects re-index from stored chunk text into the active embedder's index on
+  next open when the embedder changes — no re-import/OCR needed; the USE-Lite index is
+  kept as a fallback.
 
 ## [0.9.0] — 2026-06-05
 

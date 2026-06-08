@@ -80,7 +80,18 @@ interface DocumentIngestor {
  * is nothing relevant (caller should then fall back to ordinary chat).
  */
 interface DocumentRetriever {
-    suspend fun retrieve(projectId: Long, query: String, k: Int = 5): RetrievedContext
+    suspend fun retrieve(projectId: Long, query: String, k: Int = 8): RetrievedContext
+}
+
+/**
+ * Optional second-stage cross-encoder reranker. Given a query and candidate passages,
+ * returns a relevance score per passage (higher = more relevant). Used by
+ * [DefaultDocumentRetriever] to re-order the top fused candidates before the final
+ * top-k. Recommended only on flagship-tier devices; absence simply skips reranking.
+ */
+interface Reranker {
+    suspend fun initialize(modelPath: String)
+    suspend fun scores(query: String, passages: List<String>): FloatArray
 }
 
 /**

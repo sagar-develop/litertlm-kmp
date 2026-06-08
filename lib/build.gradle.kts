@@ -8,7 +8,7 @@ plugins {
 }
 
 group = "com.sagar"
-version = "0.9.0"
+version = "0.10.0"
 
 // Keep the published artifact id stable as "litertlm-kmp" even though the
 // Gradle module is now ":lib" (sample-app is a sibling subproject). Without
@@ -53,6 +53,10 @@ kotlin {
             implementation(libs.ktor.client.okhttp)
             // Argon2id (native, JNI) for passphrase-derived backup encryption keys.
             implementation(libs.signal.argon2)
+            // EmbeddingGemma RAG embedder: ONNX Runtime for inference (Microsoft,
+            // telemetry-free — no Google/Play deps). Tokenization is pure-Kotlin
+            // (GemmaBpeTokenizer), so no onnxruntime-extensions native lib is needed.
+            implementation(libs.onnxruntime.android)
         }
         iosMain.dependencies {
             implementation(libs.ktor.client.darwin)

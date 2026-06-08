@@ -82,9 +82,14 @@ fun ModelManagementScreen(
     // collapsed "Advanced" section together with the token field.
     val recommendedLlms = llms.filter { !it.descriptor.requiresAuth }
     val advancedLlms = llms.filter { it.descriptor.requiresAuth }
-    val embedders = models.filter { it.descriptor.role == ModelRole.EMBEDDING }
+    // RAG models = embedders + the optional cross-encoder reranker.
+    val ragModels = models.filter {
+        it.descriptor.role == ModelRole.EMBEDDING || it.descriptor.role == ModelRole.RERANKER
+    }
     val audio = models.filter { it.descriptor.role == ModelRole.SPEECH_TO_TEXT }
     val recommendedId = vm.recommendedModelId
+    val recommendedEmbedderId = vm.recommendedEmbedderId
+    val recommendedRerankerId = vm.recommendedRerankerId
 
     val context = LocalContext.current
     var advancedExpanded by remember { mutableStateOf(hasToken) }
@@ -154,14 +159,21 @@ fun ModelManagementScreen(
             item {
                 SectionHeader("Document / RAG models")
                 Text(
-                    "for document chat (Projects)",
+                    "for document chat (Projects). The Recommended embedder matches your device; " +
+                        "EmbeddingGemma needs a Hugging Face token (see Advanced).",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(start = 4.dp, bottom = 4.dp),
                 )
             }
-            items(embedders, key = { it.descriptor.id }) { model ->
-                ModelCard(model, vm, onDownloadRequest)
+            items(ragModels, key = { it.descriptor.id }) { model ->
+                ModelCard(
+                    model,
+                    vm,
+                    onDownloadRequest,
+                    recommended = model.descriptor.id == recommendedEmbedderId ||
+                        model.descriptor.id == recommendedRerankerId,
+                )
             }
 
             if (audio.isNotEmpty()) {

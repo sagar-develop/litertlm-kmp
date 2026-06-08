@@ -9,6 +9,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.sagar.aicore.Language
@@ -50,6 +51,29 @@ class AppPreferences(private val context: Context) {
     val outputLanguage: Flow<Language> =
         context.dataStore.data.map { Language.fromCode(it[KEY_OUTPUT_LANGUAGE]) }
 
+    /**
+     * The RAG embedder the user activated (catalogue id), or null to follow the
+     * device recommendation. USE-Lite ("universal-sentence-encoder") or
+     * EmbeddingGemma ("embeddinggemma-300m-onnx").
+     */
+    val selectedEmbedderId: Flow<String?> =
+        context.dataStore.data.map { it[KEY_EMBEDDER_ID] }
+
+    /**
+     * Active embedding dimension (HNSW index selector): 100 USE-Lite, or the
+     * Matryoshka tier for EmbeddingGemma (128/256/512). 0 means unset → derive
+     * from the recommendation.
+     */
+    val embeddingDim: Flow<Int> =
+        context.dataStore.data.map { it[KEY_EMBEDDING_DIM] ?: 0 }
+
+    suspend fun setActiveEmbedder(id: String, dim: Int) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_EMBEDDER_ID] = id
+            prefs[KEY_EMBEDDING_DIM] = dim
+        }
+    }
+
     suspend fun setOnboardingCompleted(done: Boolean) {
         context.dataStore.edit { it[KEY_ONBOARDING] = done }
     }
@@ -82,5 +106,7 @@ class AppPreferences(private val context: Context) {
         val KEY_THEME = stringPreferencesKey("theme_mode")
         val KEY_APP_LOCK = booleanPreferencesKey("app_lock_enabled")
         val KEY_OUTPUT_LANGUAGE = stringPreferencesKey("output_language")
+        val KEY_EMBEDDER_ID = stringPreferencesKey("embedder_id")
+        val KEY_EMBEDDING_DIM = intPreferencesKey("embedding_dim")
     }
 }

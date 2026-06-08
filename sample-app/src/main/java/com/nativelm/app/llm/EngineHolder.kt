@@ -14,6 +14,7 @@ import com.sagar.aicore.DownloadState
 import com.sagar.aicore.EngineState
 import com.sagar.aicore.KtorModelManager
 import com.sagar.aicore.LiteRtLmLocalAiEngine
+import com.sagar.aicore.ModelDescriptor
 import io.ktor.client.HttpClient
 import kotlinx.coroutines.flow.Flow
 
@@ -41,6 +42,10 @@ class EngineHolder(context: Context) {
     fun isModelDownloaded(fileName: String): Boolean =
         modelManager.isModelDownloaded(fileName)
 
+    /** True only when a (possibly multi-file) descriptor's every file is on disk. */
+    fun isModelFullyDownloaded(descriptor: ModelDescriptor): Boolean =
+        modelManager.isModelFullyDownloaded(descriptor)
+
     fun modelPath(fileName: String): String =
         modelManager.getModelPath(fileName)
 
@@ -52,6 +57,12 @@ class EngineHolder(context: Context) {
         sha256: String? = null,
         headers: Map<String, String> = emptyMap(),
     ): Flow<DownloadState> = modelManager.downloadModel(url, fileName, sha256, headers)
+
+    /** Downloads a descriptor's primary file plus all its companions (aggregate progress). */
+    fun downloadModel(
+        descriptor: ModelDescriptor,
+        headers: Map<String, String> = emptyMap(),
+    ): Flow<DownloadState> = modelManager.downloadModel(descriptor, headers)
 
     suspend fun initializeEngine(modelPath: String, supportsVision: Boolean): EngineState<Unit> =
         engine.initializeEngine(modelPath, supportsVision)

@@ -4,6 +4,7 @@
  */
 package com.nativelm.app.llm
 
+import com.sagar.aicore.CompanionFile
 import com.sagar.aicore.ModelCatalog
 import com.sagar.aicore.ModelDescriptor
 import com.sagar.aicore.ModelFormat
@@ -124,7 +125,8 @@ class NativeLmModelCatalog : ModelCatalog {
         ),
         ModelDescriptor(
             id = "universal-sentence-encoder",
-            // Public MediaPipe model — no auth required.
+            // Public MediaPipe model — no auth required. The ungated entry-tier RAG
+            // embedder and the universal fallback when EmbeddingGemma isn't downloaded.
             url = "https://storage.googleapis.com/mediapipe-models/text_embedder/universal_sentence_encoder/float32/latest/universal_sentence_encoder.tflite",
             fileName = "universal_sentence_encoder.tflite",
             sizeBytes = 6_120_274L,
@@ -132,6 +134,65 @@ class NativeLmModelCatalog : ModelCatalog {
             role = ModelRole.EMBEDDING,
             minDeviceRamMb = 0,
             requiresAuth = false,
+            embeddingDim = 100,
+        ),
+        // ── RAG embedder upgrade — EmbeddingGemma 300M (ONNX, int8). Gemma-licensed
+        // → gated (requiresAuth). One downloaded artifact serves every capable tier:
+        // Matryoshka truncation picks the active dim (256 mid / 512 flagship) at
+        // runtime, so this single descriptor backs the whole tier matrix; entry
+        // phones stay on USE-Lite. Multi-file ONNX: the graph references its weights
+        // blob (`model_quantized.onnx_data`) by name, and the tokenizer ships as a
+        // companion — both land next to the graph in the model dir.
+        // sizeBytes are HF-reported estimates; Content-Length drives real progress.
+        ModelDescriptor(
+            id = "embeddinggemma-300m-onnx",
+            url = "https://huggingface.co/onnx-community/embeddinggemma-300m-ONNX/resolve/main/onnx/model_quantized.onnx?download=true",
+            // Keep the original graph name: the .onnx references its weights blob by
+            // the exact name "model_quantized.onnx_data" — renaming would break the
+            // external-data load. Unique in the shared model dir, so no collision.
+            fileName = "model_quantized.onnx",
+            sizeBytes = 581_632L,
+            format = ModelFormat.ONNX_EMBEDDER,
+            role = ModelRole.EMBEDDING,
+            minDeviceRamMb = 6000,
+            requiresAuth = true,
+            embeddingDim = 256,
+            companions = listOf(
+                CompanionFile(
+                    url = "https://huggingface.co/onnx-community/embeddinggemma-300m-ONNX/resolve/main/onnx/model_quantized.onnx_data?download=true",
+                    // MUST match the in-graph external-data reference exactly.
+                    fileName = "model_quantized.onnx_data",
+                    sizeBytes = 324_009_984L,
+                ),
+                CompanionFile(
+                    url = "https://huggingface.co/onnx-community/embeddinggemma-300m-ONNX/resolve/main/tokenizer.json?download=true",
+                    // Prefixed to avoid colliding with the reranker's tokenizer.json.
+                    fileName = "embeddinggemma-tokenizer.json",
+                    sizeBytes = 17_500_000L,
+                ),
+            ),
+        ),
+        // ── Reranker — ms-marco MiniLM-L6 cross-encoder (ONNX). Apache-2.0, ungated.
+        // Second-stage precision rerank over first-stage candidates. Small (90 MB, runs
+        // only on the ~24-candidate fused pool at query time), so it's offered on mid-high
+        // and flagship tiers — matches EmbedderRecommendation's ≥8 GB reranker tier.
+        // Single-file graph + WordPiece tokenizer.
+        ModelDescriptor(
+            id = "ms-marco-minilm-l6-onnx",
+            url = "https://huggingface.co/Xenova/ms-marco-MiniLM-L-6-v2/resolve/main/onnx/model.onnx?download=true",
+            fileName = "ms-marco-minilm-l6.onnx",
+            sizeBytes = 90_400_000L,
+            format = ModelFormat.ONNX_RERANKER,
+            role = ModelRole.RERANKER,
+            minDeviceRamMb = 8000,
+            requiresAuth = false,
+            companions = listOf(
+                CompanionFile(
+                    url = "https://huggingface.co/Xenova/ms-marco-MiniLM-L-6-v2/resolve/main/tokenizer.json?download=true",
+                    fileName = "ms-marco-minilm-l6_tokenizer.json",
+                    sizeBytes = 711_396L,
+                ),
+            ),
         ),
         // ── Audio (voice input) — Whisper tiny, multilingual, q5_1 quantized (~31 MB).
         // On-device speech-to-text via whisper.cpp; auto-detects the spoken language. ──

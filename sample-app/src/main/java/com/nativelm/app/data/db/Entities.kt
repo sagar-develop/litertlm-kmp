@@ -138,6 +138,80 @@ class DocumentChunkEntity {
     }
 }
 
+/*
+ * EmbeddingGemma chunk entities (Matryoshka tiers). EmbeddingGemma emits a
+ * 768-dim vector that is truncated (then re-normalized) to a device-tier dim:
+ * 128 (entry), 256 (mid), 512 (flagship). HNSW dimensions must be an annotation
+ * literal, so each tier needs its own entity — a device only ever writes to the
+ * one matching its active embedder; the others stay empty. The repository routes
+ * ingest/query to the active entity by [GemmaChunkDim]. These are parallel in
+ * shape to [DocumentChunkEntity]; [text] is duplicated so re-indexing across
+ * tiers never needs the original file.
+ */
+
+/** EmbeddingGemma @128-dim (entry tier). See note above [GemmaChunk256Entity]. */
+@Entity
+class GemmaChunk128Entity {
+    @Id var id: Long = 0
+    @Index var documentId: Long = 0
+    @Index var projectId: Long = 0
+    var text: String = ""
+    var pageNumber: Int = 0
+    var chunkIndex: Int = 0
+
+    @HnswIndex(
+        dimensions = 128L,
+        distanceType = VectorDistanceType.COSINE,
+        neighborsPerNode = 48,
+        indexingSearchCount = 200,
+    )
+    var embedding: FloatArray? = null
+
+    companion object { const val EMBEDDING_DIM: Int = 128 }
+}
+
+/** EmbeddingGemma @256-dim (mid tier — the default capable-device embedder). */
+@Entity
+class GemmaChunk256Entity {
+    @Id var id: Long = 0
+    @Index var documentId: Long = 0
+    @Index var projectId: Long = 0
+    var text: String = ""
+    var pageNumber: Int = 0
+    var chunkIndex: Int = 0
+
+    @HnswIndex(
+        dimensions = 256L,
+        distanceType = VectorDistanceType.COSINE,
+        neighborsPerNode = 48,
+        indexingSearchCount = 200,
+    )
+    var embedding: FloatArray? = null
+
+    companion object { const val EMBEDDING_DIM: Int = 256 }
+}
+
+/** EmbeddingGemma @512-dim (flagship tier; paired with the cross-encoder reranker). */
+@Entity
+class GemmaChunk512Entity {
+    @Id var id: Long = 0
+    @Index var documentId: Long = 0
+    @Index var projectId: Long = 0
+    var text: String = ""
+    var pageNumber: Int = 0
+    var chunkIndex: Int = 0
+
+    @HnswIndex(
+        dimensions = 512L,
+        distanceType = VectorDistanceType.COSINE,
+        neighborsPerNode = 48,
+        indexingSearchCount = 200,
+    )
+    var embedding: FloatArray? = null
+
+    companion object { const val EMBEDDING_DIM: Int = 512 }
+}
+
 /**
  * A Studio artifact generated *from* a project's sources (a Briefing, FAQ, etc.) —
  * the output of map-reduce over the source set, not a chat answer. Persisted per
