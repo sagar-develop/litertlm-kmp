@@ -5,6 +5,7 @@
 package com.sagar.aicore
 
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 
 sealed class DownloadState {
     data object Idle : DownloadState()
@@ -52,4 +53,69 @@ interface ModelManager {
      * Deletes the local model file.
      */
     fun deleteModel(modelName: String)
+
+    /**
+     * True only when [descriptor]'s primary file AND every
+     * [ModelDescriptor.companions] file are present on disk. Single-file models
+     * reduce to the primary-only check. Use this (not [isModelDownloaded] on the
+     * primary alone) for multi-file models like ONNX (graph + weights blob +
+     * tokenizer) — the primary `.onnx` graph is useless without its companions.
+     */
+    fun isModelFullyDownloaded(descriptor: ModelDescriptor): Boolean =
+        isModelDownloaded(descriptor.fileName) &&
+            descriptor.companions.all { isModelDownloaded(it.fileName) }
+
+    /**
+     * Downloads [descriptor]'s primary file and all its [ModelDescriptor.companions],
+     * each into the model dir under its declared file name. Emits a single aggregate
+     * [DownloadState.Downloading] stream across all files and only [DownloadState.Success]
+     * once every file is present (and SHA-verified where pinned). Already-present files
+     * are skipped, so this is resume-friendly. Any file's error ends the stream.
+     *
+     * [headers] (e.g. an HF `Authorization` bearer for a gated repo) are applied to
+     * every file's request.
+     */
+    fun downloadModel(
+        descriptor: ModelDescriptor,
+        headers: Map<String, String> = emptyMap(),
+    ): Flow<DownloadState> = flow {
+        data class Item(val url: String, val name: String, val size: Long, val sha: String?)
+        val items = buildList {
+            add(Item(descriptor.url, descriptor.fileName, descriptor.sizeBytes, descriptor.sha256))
+            descriptor.companions.forEach { add(Item(it.url, it.fileName, it.sizeBytes, it.sha256)) }
+        }
+        val grandTotal = items.sumOf { it.size }.coerceAtLeast(1L)
+        var completedBytes = 0L
+        for (item in items) {
+            var itemBytes = 0L
+            var failed = false
+            downloadModel(item.url, item.name, item.sha, headers).collect { state ->
+                when (state) {
+                    is DownloadState.Downloading -> {
+                        itemBytes = state.downloadedBytes
+                        val done = completedBytes + itemBytes
+                        emit(
+                            DownloadState.Downloading(
+                                progress = (done.toFloat() / grandTotal).coerceIn(0f, 1f),
+                                downloadedBytes = done,
+                                totalBytes = grandTotal,
+                            )
+                        )
+                    }
+                    is DownloadState.Error -> {
+                        emit(state)
+                        failed = true
+                    }
+                    // Per-file Success/Idle are internal; aggregate Success is emitted
+                    // once below after all items complete.
+                    is DownloadState.Success, DownloadState.Idle -> Unit
+                }
+            }
+            if (failed) return@flow
+            // Advance by the larger of the declared size and bytes actually seen
+            // (already-present files emit no Downloading, so itemBytes stays 0).
+            completedBytes += maxOf(item.size, itemBytes)
+        }
+        emit(DownloadState.Success(getModelPath(descriptor.fileName)))
+    }
 }

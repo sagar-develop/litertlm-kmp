@@ -270,10 +270,160 @@
         }
       ],
       "relations": []
+    },
+    {
+      "id": "7:6513794967505901683",
+      "lastPropertyId": "7:2644006286157813232",
+      "name": "GemmaChunk128Entity",
+      "properties": [
+        {
+          "id": "1:1668059897555137402",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:1909901729650485004",
+          "name": "documentId",
+          "indexId": "8:8688938284574788743",
+          "type": 6,
+          "flags": 8
+        },
+        {
+          "id": "3:6582075855076202347",
+          "name": "projectId",
+          "indexId": "9:8873536853224093580",
+          "type": 6,
+          "flags": 8
+        },
+        {
+          "id": "4:350044952182012339",
+          "name": "text",
+          "type": 9
+        },
+        {
+          "id": "5:1728912024133528271",
+          "name": "pageNumber",
+          "type": 5
+        },
+        {
+          "id": "6:1642892245862077605",
+          "name": "chunkIndex",
+          "type": 5
+        },
+        {
+          "id": "7:2644006286157813232",
+          "name": "embedding",
+          "indexId": "10:2085247383924908604",
+          "type": 28,
+          "flags": 8
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "8:884982244693871326",
+      "lastPropertyId": "7:8731352717632462032",
+      "name": "GemmaChunk256Entity",
+      "properties": [
+        {
+          "id": "1:6718775122226790977",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:8032475305381383372",
+          "name": "documentId",
+          "indexId": "11:2624973275701369183",
+          "type": 6,
+          "flags": 8
+        },
+        {
+          "id": "3:8508825098408142005",
+          "name": "projectId",
+          "indexId": "12:7278732432547779148",
+          "type": 6,
+          "flags": 8
+        },
+        {
+          "id": "4:1649387924056951307",
+          "name": "text",
+          "type": 9
+        },
+        {
+          "id": "5:8118510501724231321",
+          "name": "pageNumber",
+          "type": 5
+        },
+        {
+          "id": "6:5404686761442458109",
+          "name": "chunkIndex",
+          "type": 5
+        },
+        {
+          "id": "7:8731352717632462032",
+          "name": "embedding",
+          "indexId": "13:6784791939551195217",
+          "type": 28,
+          "flags": 8
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "9:268745177608385462",
+      "lastPropertyId": "7:2567454574240507625",
+      "name": "GemmaChunk512Entity",
+      "properties": [
+        {
+          "id": "1:7259325948615468043",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:5837021340232540780",
+          "name": "documentId",
+          "indexId": "14:5159839263475956778",
+          "type": 6,
+          "flags": 8
+        },
+        {
+          "id": "3:4289516807818109413",
+          "name": "projectId",
+          "indexId": "15:8096671694635366704",
+          "type": 6,
+          "flags": 8
+        },
+        {
+          "id": "4:7064231015369901802",
+          "name": "text",
+          "type": 9
+        },
+        {
+          "id": "5:2688440133667191198",
+          "name": "pageNumber",
+          "type": 5
+        },
+        {
+          "id": "6:5229437333578186755",
+          "name": "chunkIndex",
+          "type": 5
+        },
+        {
+          "id": "7:2567454574240507625",
+          "name": "embedding",
+          "indexId": "16:7864343492357061689",
+          "type": 28,
+          "flags": 8
+        }
+      ],
+      "relations": []
     }
   ],
-  "lastEntityId": "6:1299178295424942462",
-  "lastIndexId": "7:537233441547839549",
+  "lastEntityId": "9:268745177608385462",
+  "lastIndexId": "16:7864343492357061689",
   "lastRelationId": "0:0",
   "lastSequenceId": "0:0",
   "modelVersion": 5,

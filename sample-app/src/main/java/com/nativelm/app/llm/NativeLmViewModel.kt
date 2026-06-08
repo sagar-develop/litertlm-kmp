@@ -17,6 +17,7 @@ import com.sagar.aicore.ChatTurn
 import com.sagar.aicore.DownloadState
 import com.sagar.aicore.EngineState
 import com.sagar.aicore.ModelDescriptor
+import com.sagar.aicore.ModelFormat
 import com.sagar.aicore.Language
 import com.sagar.aicore.ModelRole
 import com.sagar.aicore.SessionState
@@ -67,6 +68,14 @@ import kotlinx.coroutines.launch
 import java.io.File
 
 private const val TAG = "NativeLmVM"
+
+/**
+ * How many recent conversation turns to re-prefill into the engine's KV cache when a
+ * session opens. Bounds the working context so grounded turns (which inject a retrieval
+ * block each) have headroom; older turns stay in the transcript but leave the model's
+ * window. ~16 turns ≈ 8 exchanges.
+ */
+private const val MAX_PREFILL_TURNS = 16
 
 private const val BASE_SYSTEM_INSTRUCTION =
     "You are NativeLM, a helpful on-device assistant. Answer clearly and concisely."
@@ -288,6 +297,10 @@ class NativeLmViewModel(app: Application) : ViewModel() {
     private val _backupBusy = MutableStateFlow<String?>(null)
     val backupBusy: StateFlow<String?> = _backupBusy.asStateFlow()
 
+    /** Non-null progress label while embeddings are re-indexed for a new embedder; null when idle. */
+    private val _embeddingMigration = MutableStateFlow<String?>(null)
+    val embeddingMigration: StateFlow<String?> = _embeddingMigration.asStateFlow()
+
     val themeMode: StateFlow<ThemeMode> =
         prefs.themeMode.stateIn(viewModelScope, SharingStarted.Eagerly, ThemeMode.SYSTEM)
 
@@ -330,6 +343,92 @@ class NativeLmViewModel(app: Application) : ViewModel() {
     /** One-tap convenience: download the device's recommended ungated model. No-op if none fits. */
     fun downloadRecommended() {
         recommendedModelId?.let { download(it) }
+    }
+
+    /** Device-tiered RAG embedder recommendation (USE-Lite / EmbeddingGemma @dim + reranker). */
+    val recommendedEmbedderTier: EmbedderTier by lazy { EmbedderRecommendation.forDevice(deviceRamMb) }
+
+    /** Catalogue id of the recommended embedder, for the "Recommended" badge in Models. */
+    val recommendedEmbedderId: String get() = recommendedEmbedderTier.embedderId
+
+    /** Catalogue id of the recommended reranker (flagship only), or null. */
+    val recommendedRerankerId: String?
+        get() = if (recommendedEmbedderTier.reranker) EmbedderRecommendation.RERANKER_ID else null
+
+    /**
+     * Resolve which embedder to actually use right now and (re)configure the RAG
+     * pipeline for it. Preference order: the user's explicit selection, else the
+     * device recommendation — but only if its model is fully downloaded; otherwise
+     * fall back to USE-Lite so document chat always works. Returns the chosen
+     * descriptor. Cheap + idempotent (configureEmbedder no-ops when unchanged).
+     */
+    private suspend fun resolveAndConfigureEmbedder(): ModelDescriptor {
+        val rec = recommendedEmbedderTier
+        val selId = prefs.selectedEmbedderId.first()
+        val selDim = prefs.embeddingDim.first()
+        val candidateId = selId ?: rec.embedderId
+        val candidateDim = if (selId != null && selDim > 0) selDim else rec.dim
+
+        val candidate = catalog.byId(candidateId)
+        val use = catalog.byId(RagHolder.USE_MODEL_ID)!!
+        val (chosen, dim) = if (candidate != null && engineHolder.isModelFullyDownloaded(candidate)) {
+            candidate to candidateDim
+        } else {
+            use to EmbedderRecommendation.DIM_USE
+        }
+
+        // Attach the reranker on reranker-eligible tiers, and only when its model is present.
+        val rerankerDesc = if (rec.reranker && chosen.id == EmbedderRecommendation.GEMMA_ID) {
+            catalog.byId(EmbedderRecommendation.RERANKER_ID)?.takeIf { engineHolder.isModelFullyDownloaded(it) }
+        } else {
+            null
+        }
+
+        ragHolder.configureEmbedder(chosen, dim, rerankerDesc)
+        _activeEmbedderId.value = chosen.id
+        return chosen
+    }
+
+    private val _activeEmbedderId = MutableStateFlow<String?>(null)
+    /** The embedder actually in use for RAG (after download/recommendation resolution). */
+    val activeEmbedderId: StateFlow<String?> = _activeEmbedderId.asStateFlow()
+
+    /** Explicitly choose the RAG embedder (USE-Lite or EmbeddingGemma). Persists + reconfigures. */
+    fun setActiveEmbedder(modelId: String) {
+        val desc = catalog.byId(modelId) ?: return
+        val dim = when (desc.format) {
+            ModelFormat.ONNX_EMBEDDER -> if (recommendedEmbedderTier.dim >= EmbedderRecommendation.DIM_MID) {
+                recommendedEmbedderTier.dim
+            } else {
+                EmbedderRecommendation.DIM_MID
+            }
+            else -> EmbedderRecommendation.DIM_USE
+        }
+        viewModelScope.launch {
+            prefs.setActiveEmbedder(modelId, dim)
+            resolveAndConfigureEmbedder()
+            ragHolder.ensureEmbeddingReady()
+            refreshModels()
+        }
+    }
+
+    /** Resolve + configure + initialize the active embedder. */
+    private suspend fun embedderReady(): Boolean {
+        resolveAndConfigureEmbedder()
+        return ragHolder.ensureEmbeddingReady()
+    }
+
+    /** Re-index a project into the active embedder's dim if it has only legacy-dim chunks. */
+    private suspend fun maybeMigrateProject(projectId: Long) {
+        if (projectId <= 0L || !ragHolder.needsMigration(projectId)) return
+        _embeddingMigration.value = "Upgrading search index…"
+        runCatching {
+            ragHolder.migrateProject(projectId) { done, total ->
+                _embeddingMigration.value = "Upgrading search index… $done/$total"
+            }
+        }.onFailure { Napier.e(tag = TAG, throwable = it) { "Embedding migration failed" } }
+        _embeddingMigration.value = null
+        refreshDocuments()
     }
 
     private val downloadJobs = mutableMapOf<String, Job>()
@@ -472,7 +571,7 @@ class NativeLmViewModel(app: Application) : ViewModel() {
 
         downloadJobs[modelId] = viewModelScope.launch {
             var lastMb = -1
-            engineHolder.downloadModel(descriptor.url, descriptor.fileName, descriptor.sha256, headers)
+            engineHolder.downloadModel(descriptor, headers)
                 .collect { state ->
                     when (state) {
                         is DownloadState.Downloading -> {
@@ -535,6 +634,7 @@ class NativeLmViewModel(app: Application) : ViewModel() {
         val descriptor = catalog.byId(modelId) ?: return
         downloadJobs.remove(modelId)?.cancel()
         engineHolder.deleteModel(descriptor.fileName)
+        descriptor.companions.forEach { engineHolder.deleteModel(it.fileName) }
         transientStatus.remove(modelId)
         if (_activeModelId.value == modelId) {
             _activeModelId.value = null
@@ -632,12 +732,25 @@ class NativeLmViewModel(app: Application) : ViewModel() {
             // RAG: when grounding is on, retrieve context, fold it into this turn's
             // prompt, and surface citations under the answer. Otherwise send only the
             // new message so the KV cache keeps TTFT flat.
+            //
+            // Grounded turns inject a fresh retrieval block every turn; left in the
+            // stateful KV cache these accumulate and eventually overflow the on-device
+            // model's context window, truncating the reply to a token or two. So for a
+            // grounded turn we re-open the session first (re-prefilling only the bounded
+            // visible transcript), which flushes prior turns' stale grounding. Ordinary
+            // chat keeps the warm session for flat TTFT.
+            val active = if (_currentProjectId.value > 0L) {
+                reopenSessionAndAwait(_chat.value.messages.dropLast(2))
+                chatSession ?: return@launch
+            } else {
+                session
+            }
             val turnPrompt = withLanguage(ragTurnPrompt(input))
             val request = AiEngineRequest(formattedPrompt = turnPrompt, temperature = 0.7f, maxTokens = 1024)
             // Accumulate the raw stream separately so we can hide reasoning models'
             // <think>…</think> span; the message text shows only the rendered answer.
             val rawAnswer = StringBuilder()
-            session.sendTurn(request).collect { state ->
+            active.sendTurn(request).collect { state ->
                 when (state) {
                     is EngineState.TokenGenerated<String> -> {
                         metrics.tokens.tokenReceived()
@@ -811,12 +924,20 @@ class NativeLmViewModel(app: Application) : ViewModel() {
      */
     private fun openSession(history: List<ChatMessage>, showWarming: Boolean = true) {
         sessionWarmJob?.cancel()
-        val turns = history.filter { it.text.isNotEmpty() }.map {
-            ChatTurn(
-                role = if (it.role == ChatMessage.Role.User) TurnRole.USER else TurnRole.ASSISTANT,
-                text = it.text,
-            )
-        }
+        // Re-prefill only the most recent turns. The KV cache is bounded, and in a
+        // grounded project each live turn also injects a retrieval block; re-seeding an
+        // unbounded history would leave too little room and the model would truncate its
+        // reply to a token or two. Keeping a sliding window preserves recent continuity
+        // while leaving headroom for grounding. Older turns drop out of the model's
+        // working memory but remain visible in the transcript.
+        val turns = history.filter { it.text.isNotEmpty() }
+            .takeLast(MAX_PREFILL_TURNS)
+            .map {
+                ChatTurn(
+                    role = if (it.role == ChatMessage.Role.User) TurnRole.USER else TurnRole.ASSISTANT,
+                    text = it.text,
+                )
+            }
         val session = engineHolder.openChatSession(turns, systemInstruction())
         chatSession = session
         if (!showWarming) {
@@ -830,10 +951,24 @@ class NativeLmViewModel(app: Application) : ViewModel() {
         }
     }
 
+    /**
+     * Re-open the chat session seeded with [history] and suspend until it is Ready (or
+     * Failed). Used before a grounded turn to FLUSH the grounding blocks that prior turns
+     * left in the KV cache: re-prefilling only the visible transcript (capped by
+     * [MAX_PREFILL_TURNS]) keeps the working context bounded, so a long grounded chat
+     * doesn't overflow the on-device model's window and truncate its reply. Visible
+     * history is preserved; only the now-stale retrieval blocks drop out.
+     */
+    private suspend fun reopenSessionAndAwait(history: List<ChatMessage>) {
+        openSession(history, showWarming = false)
+        val session = chatSession ?: return
+        session.state.first { it is SessionState.Ready || it is SessionState.Failed }
+    }
+
     /** Build one turn's prompt, grounding in the open project's sources (if any). */
     private suspend fun ragTurnPrompt(input: String): String {
         val projectId = _currentProjectId.value
-        if (projectId <= 0L || !ragHolder.ensureEmbeddingReady()) return input
+        if (projectId <= 0L || !embedderReady()) return input
         val ctx = ragHolder.retrieve(projectId, input)
         if (ctx.isEmpty) return input
         attachCitations(ctx.citations)
@@ -962,7 +1097,10 @@ class NativeLmViewModel(app: Application) : ViewModel() {
         nextChatMessageId = msgs.size.toLong()
         _chat.value = ChatState(messages = msgs)
         refreshDocuments()
-        viewModelScope.launch { ragHolder.ensureEmbeddingReady() } // warm embedder
+        viewModelScope.launch {
+            embedderReady() // warm embedder
+            maybeMigrateProject(id) // re-index into the active embedder's dim if needed
+        }
         if (_engineLoad.value is EngineLoad.Ready) openSession(msgs)
     }
 
@@ -1028,9 +1166,16 @@ class NativeLmViewModel(app: Application) : ViewModel() {
 
     /** Make the embedder usable: download the small USE model if needed, then init. */
     private suspend fun prepareEmbedding(): Boolean {
+        val desc = resolveAndConfigureEmbedder()
         if (ragHolder.ensureEmbeddingReady()) return true
-        if (!downloadEmbeddingModel()) return false
-        return ragHolder.ensureEmbeddingReady()
+        // Only USE-Lite auto-downloads (tiny, ungated). Gated EmbeddingGemma is
+        // user-downloaded from Models; resolve already fell back to USE-Lite here
+        // if the recommended Gemma wasn't present.
+        if (desc.id == RagHolder.USE_MODEL_ID) {
+            if (!downloadEmbeddingModel()) return false
+            return ragHolder.ensureEmbeddingReady()
+        }
+        return false
     }
 
     private suspend fun downloadEmbeddingModel(): Boolean {
@@ -1400,7 +1545,10 @@ class NativeLmViewModel(app: Application) : ViewModel() {
             chatSession = null
             importJob?.cancel()
             engineHolder.release()
-            catalog.all().forEach { engineHolder.deleteModel(it.fileName) }
+            catalog.all().forEach { d ->
+                engineHolder.deleteModel(d.fileName)
+                d.companions.forEach { engineHolder.deleteModel(it.fileName) }
+            }
             secureStore.clearHfToken()
             _conversations.value.forEach { repo.delete(it.id) }
             studioJob?.cancel()
@@ -1447,7 +1595,9 @@ class NativeLmViewModel(app: Application) : ViewModel() {
     private fun refreshModels() {
         val ram = deviceRamMb
         _models.value = catalog.all().map { d ->
-            val onDisk = engineHolder.isModelDownloaded(d.fileName)
+            // Multi-file models (ONNX: graph + weights + tokenizer) only count as
+            // present once every companion is on disk, not just the primary file.
+            val onDisk = engineHolder.isModelFullyDownloaded(d)
             val transient = transientStatus[d.id]
             val status: ModelStatus = when {
                 transient is ModelStatus.Downloading -> transient
@@ -1475,6 +1625,8 @@ class NativeLmViewModel(app: Application) : ViewModel() {
         "qwen3-4b-litertlm" -> "Qwen3 4B"
         "universal-sentence-encoder" -> "Universal Sentence Encoder"
         "whisper-tiny-q5_1" -> "Whisper Tiny (voice input)"
+        "embeddinggemma-300m-onnx" -> "EmbeddingGemma 300M"
+        "ms-marco-minilm-l6-onnx" -> "MiniLM Reranker"
         else -> d.fileName
     }
 

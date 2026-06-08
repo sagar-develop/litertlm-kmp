@@ -5,6 +5,7 @@
 package com.sagar.aicore.rag
 
 import com.sagar.aicore.EmbeddingEngine
+import com.sagar.aicore.EmbeddingTask
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.FlowCollector
@@ -66,7 +67,7 @@ class DefaultDocumentIngestor(
         val newChunks = ArrayList<NewChunk>(chunks.size)
         chunks.forEachIndexed { i, chunk ->
             emit(IngestState.Embedding(done = i, total = chunks.size))
-            val vector = embeddingEngine.embed(chunk.text)
+            val vector = embeddingEngine.embed(chunk.text, EmbeddingTask.DOCUMENT, title)
             newChunks += NewChunk(
                 text = chunk.text,
                 pageNumber = chunk.pageNumber,

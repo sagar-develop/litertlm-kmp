@@ -13,6 +13,36 @@ and the project loosely follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **EmbeddingGemma RAG embedder (device-tiered, telemetry-free)** — optional upgrade
+  from USE-Lite (100-dim) to **EmbeddingGemma-300M** for document retrieval, run on
+  **ONNX Runtime** (no Google/Play telemetry deps). One downloaded model serves every
+  tier via **Matryoshka** truncation; a **recommendation engine** picks the embedder +
+  dim by device RAM (USE-Lite <6 GB · Gemma@256 6–9 GB · Gemma@512 + reranker ≥10 GB),
+  surfaced as a "Recommended" badge in the in-app model catalogue. The model and its
+  companion files (weights blob + tokenizer) download on-device through the catalogue;
+  nothing is bundled in the APK. (engine + app)
+- **Cross-encoder reranker (flagship)** — optional second-stage `ms-marco-MiniLM-L6`
+  rerank over the top fused candidates, gated to high-RAM devices. (engine + app)
+- **Pure-Kotlin tokenizers** — BPE (EmbeddingGemma) and BERT WordPiece (reranker),
+  reading the HuggingFace `tokenizer.json`, validated bit-for-bit against the reference
+  `transformers` tokenizer. No native tokenizer lib, KMP-portable. (engine)
+- **Task-aware embeddings** — `EmbeddingEngine` now distinguishes query vs document
+  (instruction prefixes), required for EmbeddingGemma's asymmetric retrieval. (engine)
+
+### Changed
+- **Retrieval precision** — added a **per-document cap** so one large source can't fill
+  every top-k slot (the "answered from the wrong PDF" failure), plus wider candidate
+  pools and a larger grounding budget. Ships independent of the embedder upgrade. (engine)
+- **Backup/sync** — backups now carry chunk embeddings from every embedder dim and tag
+  each chunk with its dim; cross-embedder restores re-index from the included text
+  instead of being rejected (backup schema v2). (app)
+
+### Migration
+- Existing projects re-index from stored chunk text into the active embedder's index on
+  next open when the embedder changes — no re-import/OCR needed; the USE-Lite index is
+  kept as a fallback.
+
 ## [0.9.0] — 2026-06-05
 
 ### Added

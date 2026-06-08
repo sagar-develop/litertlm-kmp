@@ -1,5 +1,20 @@
 # NativeLM — EmbeddingGemma on-device RAG embedder (implementation plan)
 
+> **Status (2026-06-08): IMPLEMENTED** on branch `feat/embedding-gemma` (issue #30).
+> Deviations from the plan below, decided during build:
+> - **Full 3-tier matrix + reranker** built now (not deferred): USE-Lite@100 (entry) /
+>   EmbeddingGemma@256 (mid) / @512 + `ms-marco-MiniLM-L6` cross-encoder reranker
+>   (flagship), chosen by a device-RAM **recommendation engine**. One Matryoshka model
+>   serves all Gemma tiers; per-dim ObjectBox HNSW entities (128/256/512) added.
+> - **Tokenizer: pure-Kotlin**, not onnxruntime-extensions (its `gen_processing_models`
+>   doesn't support GemmaTokenizer) nor a Rust/DJL native lib. BPE (embedder) + BERT
+>   WordPiece (reranker), both validated bit-for-bit vs HF `transformers`. No extra .so.
+> - **Companion download** through the catalogue (graph + `model.onnx_data` + tokenizer);
+>   the external-data blob keeps its original name so ORT resolves it.
+> - Quick-win **per-document cap** shipped in the retriever (the wrong-PDF fix).
+> See `CHANGELOG.md` [Unreleased] and `_session/material/blog-embeddinggemma-rag.md`.
+
+
 _Branch: `claude/analysis-KV4t2`. Goal: replace the 2018-era Universal Sentence
 Encoder (USE-Lite, 100-dim) with **EmbeddingGemma 300M** as the default RAG
 embedder, lifting retrieval quality for both chat answers and every Studio
