@@ -100,7 +100,7 @@ In your **app module's `build.gradle.kts`**:
 
 ```kotlin
 dependencies {
-    implementation("com.github.sagar-develop:litertlm-kmp:v0.8.0")
+    implementation("com.github.sagar-develop:litertlm-kmp:v0.10.0")
 }
 ```
 
@@ -393,7 +393,7 @@ Typical engagements:
 - **Future** — iOS native engine via LiteRT-LM's Swift Metal-accelerated APIs; a benchmark suite (tokens/sec, RAM ceiling, battery drain) across a device matrix.
 
 > The **engine library** (`com.sagar:litertlm-kmp`) and the **NativeLM** app
-> share one version line; the latest release is **v0.8.0** (see
+> share one version line; the latest release is **v0.10.0** (see
 > [`lib/build.gradle.kts`](lib/build.gradle.kts) and
 > [`CHANGELOG.md`](CHANGELOG.md) for the full history).
 
