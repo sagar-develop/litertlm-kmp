@@ -51,8 +51,14 @@ Android, total vs effective RAM, cores, abi), battery %, charging, thermal statu
 
 For measured runs: wireless adb (`adb tcpip`) so devices run on battery (unplugged) per methodology.
 
+## Done
+- LLM matrix (load / TTFT / decode / peak RAM) across 3 models on 2 devices.
+- **RAG: embedding throughput + end-to-end retrieve() latency** — temp project + ingest + retrieve,
+  USE-Lite auto-fetched if absent, temp project deleted after. Measured on both devices.
+- `BENCHMARKS.md` + raw JSON exports under `benchmarks/`.
+
 ## Next phase (documented, not silently dropped)
-- **Embedding throughput** + **end-to-end RAG retrieve() latency** (needs the embedder + an indexed
-  project; `RagHolder.retrieve` is the entry point).
 - **Energy / sustained thermal soak** (decode tok/s over 5–10 min; battery drain per 1k tokens).
-- `BENCHMARKS.md` generated from the JSON + README "Performance" section + urjalabs results page.
+- **Prefill tok/s** as a first-class number; **EmbeddingGemma 256-dim + reranker** RAG numbers.
+- README "Performance" section + urjalabs results page (public framing — user decides).
+- GPU/NPU backends (#31) — harness reusable against this CPU baseline.

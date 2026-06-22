@@ -14,9 +14,9 @@
         "abi": "arm64-v8a"
     },
     "run": {
-        "startedAtEpochMs": 1782149912744,
-        "startedAtIso": "2026-06-22T23:08:32+0530",
-        "batteryPct": 98,
+        "startedAtEpochMs": 1782157028849,
+        "startedAtIso": "2026-06-23T01:07:08+0530",
+        "batteryPct": 100,
         "charging": true,
         "thermalStatus": "none"
     },
@@ -35,25 +35,25 @@
             "sizeBytes": 614236160,
             "format": "LITERTLM",
             "supportsVision": false,
-            "loadTimeMs": 1066,
-            "loadedPssMb": 1120,
-            "peakPssMb": 1705,
+            "loadTimeMs": 807,
+            "loadedPssMb": 1280,
+            "peakPssMb": 1701,
             "engineReported": false,
             "prompts": [
                 {
                     "name": "short",
                     "promptChars": 59,
-                    "ttftMsMedian": 3472.051717,
-                    "ttftMsP90": 4091.678488,
-                    "decodeTpsMedian": 3.1649158458611177,
-                    "decodeTpsP90": 3.1939447104146175,
+                    "ttftMsMedian": 3081.568696,
+                    "ttftMsP90": 3098.781509,
+                    "decodeTpsMedian": 3.283334927771221,
+                    "decodeTpsP90": 3.2994000204073872,
                     "tokensMean": 129.0,
                     "runs": [
                         {
-                            "ttftMs": 3201.863384,
-                            "decodeTps": 3.1939447104146175,
+                            "ttftMs": 3063.61302,
+                            "decodeTps": 3.2994000204073872,
                             "decodeTokens": 129,
-                            "totalMs": 43277.698004,
+                            "totalMs": 41858.545192,
                             "engineTtftSec": null,
                             "enginePrefillTps": null,
                             "engineDecodeTps": null,
@@ -61,10 +61,10 @@
                             "engineDecodeTokens": null
                         },
                         {
-                            "ttftMs": 3472.051717,
-                            "decodeTps": 3.1649158458611177,
+                            "ttftMs": 3081.568696,
+                            "decodeTps": 3.283334927771221,
                             "decodeTokens": 129,
-                            "totalMs": 43915.465139,
+                            "totalMs": 42066.321338,
                             "engineTtftSec": null,
                             "enginePrefillTps": null,
                             "engineDecodeTps": null,
@@ -72,10 +72,10 @@
                             "engineDecodeTokens": null
                         },
                         {
-                            "ttftMs": 4091.678488,
-                            "decodeTps": 3.1067580490666895,
+                            "ttftMs": 3098.781509,
+                            "decodeTps": 3.2773466321371147,
                             "decodeTokens": 129,
-                            "totalMs": 45292.183316,
+                            "totalMs": 42154.766233,
                             "engineTtftSec": null,
                             "enginePrefillTps": null,
                             "engineDecodeTps": null,
@@ -87,17 +87,17 @@
                 {
                     "name": "general",
                     "promptChars": 86,
-                    "ttftMsMedian": 3862.750884,
-                    "ttftMsP90": 4076.384373,
-                    "decodeTpsMedian": 3.058022594113452,
-                    "decodeTpsP90": 3.064363610882722,
+                    "ttftMsMedian": 3144.039114,
+                    "ttftMsP90": 3300.401665,
+                    "decodeTpsMedian": 3.2615551878785594,
+                    "decodeTpsP90": 3.2803575578277284,
                     "tokensMean": 129.0,
                     "runs": [
                         {
-                            "ttftMs": 3738.858279,
-                            "decodeTps": 3.064363610882722,
+                            "ttftMs": 3300.401665,
+                            "decodeTps": 3.2615551878785594,
                             "decodeTokens": 129,
-                            "totalMs": 45509.358211,
+                            "totalMs": 42545.483421,
                             "engineTtftSec": null,
                             "enginePrefillTps": null,
                             "engineDecodeTps": null,
@@ -105,10 +105,10 @@
                             "engineDecodeTokens": null
                         },
                         {
-                            "ttftMs": 4076.384373,
-                            "decodeTps": 3.009117797010624,
+                            "ttftMs": 3144.039114,
+                            "decodeTps": 3.2803575578277284,
                             "decodeTokens": 129,
-                            "totalMs": 46613.768628,
+                            "totalMs": 42164.175713,
                             "engineTtftSec": null,
                             "enginePrefillTps": null,
                             "engineDecodeTps": null,
@@ -116,10 +116,10 @@
                             "engineDecodeTokens": null
                         },
                         {
-                            "ttftMs": 3862.750884,
-                            "decodeTps": 3.058022594113452,
+                            "ttftMs": 3082.612759,
+                            "decodeTps": 3.2577214811686486,
                             "decodeTokens": 129,
-                            "totalMs": 45719.864774,
+                            "totalMs": 42373.878369,
                             "engineTtftSec": null,
                             "enginePrefillTps": null,
                             "engineDecodeTps": null,
@@ -131,17 +131,17 @@
                 {
                     "name": "long_context",
                     "promptChars": 2044,
-                    "ttftMsMedian": 15085.880776,
-                    "ttftMsP90": 15570.488224,
-                    "decodeTpsMedian": 3.0417864835967157,
-                    "decodeTpsP90": 3.06315767194754,
+                    "ttftMsMedian": 11508.156089,
+                    "ttftMsP90": 12347.152547,
+                    "decodeTpsMedian": 3.261208173698237,
+                    "decodeTpsP90": 3.2662936064133383,
                     "tokensMean": 129.0,
                     "runs": [
                         {
-                            "ttftMs": 14714.744473,
-                            "decodeTps": 3.06315767194754,
+                            "ttftMs": 12347.152547,
+                            "decodeTps": 3.249922045224367,
                             "decodeTokens": 129,
-                            "totalMs": 56501.689093,
+                            "totalMs": 51732.712637,
                             "engineTtftSec": null,
                             "enginePrefillTps": null,
                             "engineDecodeTps": null,
@@ -149,10 +149,10 @@
                             "engineDecodeTokens": null
                         },
                         {
-                            "ttftMs": 15085.880776,
-                            "decodeTps": 3.0417864835967157,
+                            "ttftMs": 11480.036975,
+                            "decodeTps": 3.2662936064133383,
                             "decodeTokens": 129,
-                            "totalMs": 57166.414926,
+                            "totalMs": 50668.185814,
                             "engineTtftSec": null,
                             "enginePrefillTps": null,
                             "engineDecodeTps": null,
@@ -160,10 +160,10 @@
                             "engineDecodeTokens": null
                         },
                         {
-                            "ttftMs": 15570.488224,
-                            "decodeTps": 3.0061157293459315,
+                            "ttftMs": 11508.156089,
+                            "decodeTps": 3.261208173698237,
                             "decodeTokens": 129,
-                            "totalMs": 58150.352582,
+                            "totalMs": 50757.413782,
                             "engineTtftSec": null,
                             "enginePrefillTps": null,
                             "engineDecodeTps": null,
@@ -182,25 +182,25 @@
             "sizeBytes": 2588000000,
             "format": "LITERTLM",
             "supportsVision": true,
-            "loadTimeMs": 1814,
-            "loadedPssMb": 624,
-            "peakPssMb": 2025,
+            "loadTimeMs": 1227,
+            "loadedPssMb": 612,
+            "peakPssMb": 2005,
             "engineReported": false,
             "prompts": [
                 {
                     "name": "short",
                     "promptChars": 59,
-                    "ttftMsMedian": 1686.385833,
-                    "ttftMsP90": 1691.755364,
+                    "ttftMsMedian": 1271.847968,
+                    "ttftMsP90": 1275.176406,
                     "decodeTpsMedian": 0.0,
                     "decodeTpsP90": 0.0,
                     "tokensMean": 1.0,
                     "runs": [
                         {
-                            "ttftMs": 1670.706145,
+                            "ttftMs": 1275.176406,
                             "decodeTps": 0.0,
                             "decodeTokens": 1,
-                            "totalMs": 1670.706145,
+                            "totalMs": 1275.176406,
                             "engineTtftSec": null,
                             "enginePrefillTps": null,
                             "engineDecodeTps": null,
@@ -208,10 +208,10 @@
                             "engineDecodeTokens": null
                         },
                         {
-                            "ttftMs": 1686.385833,
+                            "ttftMs": 1271.847968,
                             "decodeTps": 0.0,
                             "decodeTokens": 1,
-                            "totalMs": 1686.385833,
+                            "totalMs": 1271.847968,
                             "engineTtftSec": null,
                             "enginePrefillTps": null,
                             "engineDecodeTps": null,
@@ -219,10 +219,10 @@
                             "engineDecodeTokens": null
                         },
                         {
-                            "ttftMs": 1691.755364,
+                            "ttftMs": 1263.932344,
                             "decodeTps": 0.0,
                             "decodeTokens": 1,
-                            "totalMs": 1691.755364,
+                            "totalMs": 1263.932344,
                             "engineTtftSec": null,
                             "enginePrefillTps": null,
                             "engineDecodeTps": null,
@@ -234,17 +234,17 @@
                 {
                     "name": "general",
                     "promptChars": 86,
-                    "ttftMsMedian": 1708.492968,
-                    "ttftMsP90": 1748.484166,
-                    "decodeTpsMedian": 5.754577167211882,
-                    "decodeTpsP90": 5.766472008382959,
+                    "ttftMsMedian": 1278.129219,
+                    "ttftMsP90": 1332.187916,
+                    "decodeTpsMedian": 7.023974754526112,
+                    "decodeTpsP90": 7.033660600159909,
                     "tokensMean": 97.33333333333333,
                     "runs": [
                         {
-                            "ttftMs": 1748.484166,
-                            "decodeTps": 5.754577167211882,
+                            "ttftMs": 1332.187916,
+                            "decodeTps": 6.985176832479864,
                             "decodeTokens": 94,
-                            "totalMs": 17909.532545,
+                            "totalMs": 14646.095671,
                             "engineTtftSec": null,
                             "enginePrefillTps": null,
                             "engineDecodeTps": null,
@@ -252,10 +252,10 @@
                             "engineDecodeTokens": null
                         },
                         {
-                            "ttftMs": 1708.492968,
-                            "decodeTps": 5.766472008382959,
+                            "ttftMs": 1278.129219,
+                            "decodeTps": 7.033660600159909,
                             "decodeTokens": 93,
-                            "totalMs": 17662.788743,
+                            "totalMs": 14358.089318,
                             "engineTtftSec": null,
                             "enginePrefillTps": null,
                             "engineDecodeTps": null,
@@ -263,10 +263,10 @@
                             "engineDecodeTokens": null
                         },
                         {
-                            "ttftMs": 1703.970937,
-                            "decodeTps": 5.654402128539658,
+                            "ttftMs": 1249.794478,
+                            "decodeTps": 7.023974754526112,
                             "decodeTokens": 105,
-                            "totalMs": 20096.720097,
+                            "totalMs": 16056.225827,
                             "engineTtftSec": null,
                             "enginePrefillTps": null,
                             "engineDecodeTps": null,
@@ -278,17 +278,17 @@
                 {
                     "name": "long_context",
                     "promptChars": 2044,
-                    "ttftMsMedian": 15011.260931,
-                    "ttftMsP90": 15025.999265,
-                    "decodeTpsMedian": 5.5942142134608535,
-                    "decodeTpsP90": 5.651157394297533,
+                    "ttftMsMedian": 11001.008693,
+                    "ttftMsP90": 11094.775933,
+                    "decodeTpsMedian": 7.005726578655884,
+                    "decodeTpsP90": 7.087511748334022,
                     "tokensMean": 84.0,
                     "runs": [
                         {
-                            "ttftMs": 14915.176661,
-                            "decodeTps": 5.5942142134608535,
+                            "ttftMs": 11001.008693,
+                            "decodeTps": 7.005726578655884,
                             "decodeTokens": 86,
-                            "totalMs": 30109.446447,
+                            "totalMs": 23133.940095,
                             "engineTtftSec": null,
                             "enginePrefillTps": null,
                             "engineDecodeTps": null,
@@ -296,10 +296,10 @@
                             "engineDecodeTokens": null
                         },
                         {
-                            "ttftMs": 15011.260931,
-                            "decodeTps": 5.583782750483254,
+                            "ttftMs": 10976.91135,
+                            "decodeTps": 7.087511748334022,
                             "decodeTokens": 83,
-                            "totalMs": 29696.64603,
+                            "totalMs": 22546.557075,
                             "engineTtftSec": null,
                             "enginePrefillTps": null,
                             "engineDecodeTps": null,
@@ -307,10 +307,10 @@
                             "engineDecodeTokens": null
                         },
                         {
-                            "ttftMs": 15025.999265,
-                            "decodeTps": 5.651157394297533,
+                            "ttftMs": 11094.775933,
+                            "decodeTps": 6.984735449607333,
                             "decodeTokens": 83,
-                            "totalMs": 29536.301187,
+                            "totalMs": 22834.662231,
                             "engineTtftSec": null,
                             "enginePrefillTps": null,
                             "engineDecodeTps": null,
@@ -322,5 +322,24 @@
             ],
             "error": null
         }
-    ]
+    ],
+    "rag": {
+        "embedderId": "universal-sentence-encoder",
+        "embedderDim": 100,
+        "reranker": false,
+        "embedTextsPerSec": 28.70016737471235,
+        "embedCharsPerSec": 1849.3670352080271,
+        "embedSampleCount": 48,
+        "indexedChunks": 5,
+        "retrieveMsMedian": 35.451458,
+        "retrieveMsP90": 46.852396,
+        "retrieveRuns": [
+            30.59375,
+            46.852396,
+            32.400833,
+            42.324062,
+            35.451458
+        ],
+        "error": null
+    }
 }

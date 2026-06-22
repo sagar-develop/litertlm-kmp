@@ -27,11 +27,38 @@ data class BenchmarkReport(
     val run: RunInfo,
     val config: BenchConfig,
     val models: List<ModelResult>,
+    /** RAG pipeline timing (embedding throughput + end-to-end retrieve latency); null if not measured. */
+    val rag: RagResult? = null,
 ) {
     companion object {
         const val SCHEMA_VERSION = 1
     }
 }
+
+/**
+ * RAG pipeline performance: how fast the active embedder turns text into vectors, and
+ * how long an end-to-end `retrieve()` (embed query + HNSW vector search + optional rerank
+ * + format) takes against a freshly-indexed corpus. `error` is set (and the rest left at
+ * zero) when no embedder is downloaded.
+ */
+@Serializable
+data class RagResult(
+    val embedderId: String,
+    val embedderDim: Int,
+    val reranker: Boolean,
+    /** Texts embedded per second (single-text calls, the pipeline's real path). */
+    val embedTextsPerSec: Double,
+    /** Characters embedded per second — a length-normalised throughput view. */
+    val embedCharsPerSec: Double,
+    val embedSampleCount: Int,
+    /** Chunks the benchmark corpus indexed into the vector store. */
+    val indexedChunks: Int,
+    /** End-to-end retrieve() latency, ms. */
+    val retrieveMsMedian: Double,
+    val retrieveMsP90: Double,
+    val retrieveRuns: List<Double>,
+    val error: String? = null,
+)
 
 @Serializable
 data class DeviceInfo(
@@ -123,7 +150,7 @@ data class BenchPrompt(val name: String, val text: String)
  * copyright) so the set is freely reproducible.
  */
 object BenchmarkPrompts {
-    private val PASSAGE = """
+    val PASSAGE = """
         On-device language models move inference from a remote data centre onto the phone or tablet
         in the user's hand. The shift changes the engineering problem in three ways. First, memory
         is scarce and shared: a handset must hold the operating system, the foreground app, and the
@@ -159,6 +186,37 @@ object BenchmarkPrompts {
             "$PASSAGE\n\nSummarize the passage above in exactly three sentences.",
         ),
     )
+}
+
+/**
+ * Inputs for the RAG benchmark. [EMBED_TEXTS] are varied-length sentences embedded to
+ * measure throughput; [CORPUS] is indexed into a temp project and [QUERY] retrieved
+ * against it to measure end-to-end latency.
+ */
+object RagBenchmark {
+    val EMBED_TEXTS: List<String> = listOf(
+        "Paris is the capital of France.",
+        "Quantisation stores model weights as low-bit integers to fit on a phone.",
+        "Time to first token grows with the length of the prompt.",
+        "Decode throughput is roughly constant for a given model and device.",
+        "A vector index lets the app find the passages most similar to a question.",
+        "On-device inference keeps private documents on the user's hardware.",
+        "Thermal throttling lowers sustained speed after a minute of heavy load.",
+        "Retrieval-augmented generation grounds answers in the user's own files.",
+        "The key-value cache is reused across decode steps to avoid recomputation.",
+        "Embedding turns a sentence into a fixed-length list of numbers.",
+        "Cosine similarity ranks how close two embedding vectors point.",
+        "A cross-encoder reranker re-scores the top candidates for precision.",
+        "Cold load time is how long the model takes to become ready in memory.",
+        "Peak memory must stay within the device's RAM budget beside the OS.",
+        "Prefill reads the whole prompt; decode emits one token at a time.",
+        "Smaller models are not always faster on a given runtime.",
+    )
+
+    /** Indexed corpus = the same passage the long-context prompt uses. */
+    val CORPUS: String get() = BenchmarkPrompts.PASSAGE
+
+    const val QUERY = "How does time to first token change with the length of the input prompt?"
 }
 
 /** Median of a non-empty list; 0.0 for an empty list. */
@@ -212,6 +270,14 @@ fun BenchmarkReport.toCsv(): String {
                     "${m.engineReported}\n",
             )
         }
+    }
+    rag?.let { r ->
+        sb.append("\n# RAG\nembedder,dim,reranker,embed_texts_per_sec,embed_chars_per_sec,indexed_chunks,retrieve_ms_median,retrieve_ms_p90,error\n")
+        sb.append(
+            "${r.embedderId.csv()},${r.embedderDim},${r.reranker},${r.embedTextsPerSec.r(2)}," +
+                "${r.embedCharsPerSec.r(1)},${r.indexedChunks},${r.retrieveMsMedian.r(1)}," +
+                "${r.retrieveMsP90.r(1)},${r.error?.csv() ?: ""}\n",
+        )
     }
     return sb.toString()
 }

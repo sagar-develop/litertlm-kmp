@@ -141,6 +141,19 @@ class RagHolder(private val app: Application, private val engineHolder: EngineHo
     suspend fun retrieve(projectId: Long, query: String): RetrievedContext =
         (retriever ?: return RetrievedContext.EMPTY).retrieve(projectId, query)
 
+    /** Active embedding vector dimension (0 until an embedder is configured). */
+    val activeEmbeddingDim: Int get() = activeDim
+
+    /** Whether a cross-encoder reranker is attached to the active retriever. */
+    val hasReranker: Boolean get() = reranker != null
+
+    /**
+     * Embed one text with the active embedder, returning its vector (or null if no
+     * embedder is ready). For the benchmark harness to measure embedding throughput.
+     */
+    suspend fun embedProbe(text: String): FloatArray? =
+        embeddingEngine?.embed(text, EmbeddingTask.QUERY, null)
+
     /**
      * Whether [projectId] needs re-indexing into the active embedder's dim. Checked
      * per-DOCUMENT, not per-project: returns true if ANY document has chunks under a

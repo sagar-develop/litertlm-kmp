@@ -47,8 +47,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.nativelm.app.benchmark.BenchmarkReport
 import com.nativelm.app.benchmark.BenchmarkUiState
 import com.nativelm.app.benchmark.ModelResult
+import com.nativelm.app.benchmark.RagResult
 import com.nativelm.app.llm.ModelStatus
 import com.nativelm.app.llm.NativeLmViewModel
 import com.nativelm.app.ui.theme.JetBrainsMono
@@ -118,7 +120,7 @@ fun BenchmarkScreen(vm: NativeLmViewModel, onBack: () -> Unit) {
                 when (val s = state) {
                     is BenchmarkUiState.Running -> RunningBlock(s, onCancel = vm::cancelBenchmark)
                     is BenchmarkUiState.Done -> ResultsBlock(
-                        models = s.report.models,
+                        report = s.report,
                         onRunAgain = vm::dismissBenchmarkResult,
                         onExportJson = vm::exportBenchmarkJson,
                         onExportCsv = vm::exportBenchmarkCsv,
@@ -254,7 +256,7 @@ private fun RunningBlock(s: BenchmarkUiState.Running, onCancel: () -> Unit) {
 
 @Composable
 private fun ResultsBlock(
-    models: List<ModelResult>,
+    report: BenchmarkReport,
     onRunAgain: () -> Unit,
     onExportJson: (android.net.Uri) -> Unit,
     onExportCsv: (android.net.Uri) -> Unit,
@@ -268,7 +270,8 @@ private fun ResultsBlock(
     ) { uri -> if (uri != null) onExportCsv(uri) }
 
     SectionLabel("Results")
-    models.forEach { ResultCard(it) }
+    report.models.forEach { ResultCard(it) }
+    report.rag?.let { RagCard(it) }
 
     Spacer(Modifier.height(16.dp))
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -321,6 +324,26 @@ private fun ResultCard(m: ModelResult) {
             modifier = Modifier.padding(top = 2.dp),
         )
     }
+    HorizontalDivider(Modifier.padding(top = 8.dp), color = MaterialTheme.colorScheme.outline)
+}
+
+@Composable
+private fun RagCard(rag: RagResult) {
+    Spacer(Modifier.height(12.dp))
+    Text("RAG · ${rag.embedderId}", style = MaterialTheme.typography.titleSmall)
+    if (rag.error != null) {
+        Text(
+            rag.error,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 2.dp),
+        )
+        return
+    }
+    StatRow("Embedding dim", "${rag.embedderDim}${if (rag.reranker) " + reranker" else ""}")
+    StatRow("Embed throughput", "%.1f texts/s".format(rag.embedTextsPerSec))
+    StatRow("Indexed chunks", "${rag.indexedChunks}")
+    StatRow("Retrieve latency", "%.0f ms".format(rag.retrieveMsMedian))
     HorizontalDivider(Modifier.padding(top = 8.dp), color = MaterialTheme.colorScheme.outline)
 }
 

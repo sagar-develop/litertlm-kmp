@@ -74,6 +74,9 @@ class BenchmarkRunner(
         appVersionName: String,
         appVersionCode: Int,
         onProgress: (label: String, modelIndex: Int, modelCount: Int, liveTps: Float) -> Unit,
+        /** Optional RAG measurement (embedding throughput + retrieve latency), supplied by
+         *  the ViewModel since it owns the RAG holder + project store. Runs after the models. */
+        ragProbe: (suspend () -> RagResult?)? = null,
     ): BenchmarkReport {
         val descriptors = modelIds
             .mapNotNull { catalog.byId(it) }
@@ -86,6 +89,10 @@ class BenchmarkRunner(
             results += benchmarkModel(d, index, descriptors.size, config, onProgress)
         }
 
+        // RAG runs on the separate embedding engine, after the LLM model loop.
+        currentCoroutineContext().ensureActive()
+        val rag = ragProbe?.invoke()
+
         return BenchmarkReport(
             appVersionName = appVersionName,
             appVersionCode = appVersionCode,
@@ -93,6 +100,7 @@ class BenchmarkRunner(
             run = readRunInfo(),
             config = config,
             models = results,
+            rag = rag,
         )
     }
 

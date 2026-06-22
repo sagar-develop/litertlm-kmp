@@ -28,6 +28,10 @@ import com.nativelm.app.benchmark.BenchConfig
 import com.nativelm.app.benchmark.BenchmarkReport
 import com.nativelm.app.benchmark.BenchmarkRunner
 import com.nativelm.app.benchmark.BenchmarkUiState
+import com.nativelm.app.benchmark.RagBenchmark
+import com.nativelm.app.benchmark.RagResult
+import com.nativelm.app.benchmark.median
+import com.nativelm.app.benchmark.p90
 import com.nativelm.app.benchmark.toCsv
 import com.nativelm.app.benchmark.toJson
 import com.nativelm.app.data.AppPreferences
@@ -587,9 +591,17 @@ class NativeLmViewModel(app: Application) : ViewModel() {
                     ),
                     appVersionName = BuildConfig.VERSION_NAME,
                     appVersionCode = BuildConfig.VERSION_CODE,
-                ) { label, idx, count, tps ->
-                    _benchmarkState.value = BenchmarkUiState.Running(label, idx, count, tps)
-                }
+                    onProgress = { label, idx, count, tps ->
+                        _benchmarkState.value = BenchmarkUiState.Running(label, idx, count, tps)
+                    },
+                    ragProbe = {
+                        measureRag { label ->
+                            _benchmarkState.value = BenchmarkUiState.Running(
+                                label, (modelIds.size - 1).coerceAtLeast(0), modelIds.size, 0f,
+                            )
+                        }
+                    },
+                )
                 lastBenchmarkReport = report
                 _benchmarkState.value = BenchmarkUiState.Done(report)
             } catch (_: CancellationException) {
@@ -657,6 +669,83 @@ class NativeLmViewModel(app: Application) : ViewModel() {
         )
         _engineLoad.value = load
         if (load is EngineLoad.Ready) openSession(_chat.value.messages)
+    }
+
+    /**
+     * Measure the RAG pipeline: embedding throughput (texts/sec over canonical sentences)
+     * and end-to-end retrieve() latency against a freshly-indexed temp corpus. Uses the
+     * separate embedding engine (independent of the LLM engine), and deletes the temp
+     * project afterward so it never pollutes the user's notebooks.
+     */
+    private suspend fun measureRag(onProgress: (String) -> Unit): RagResult {
+        onProgress("RAG · preparing embedder")
+        resolveAndConfigureEmbedder()
+        var ready = runCatching { ragHolder.ensureEmbeddingReady() }.getOrDefault(false)
+        // Self-provision the tiny ungated USE-Lite embedder (~6 MB) if nothing is present,
+        // so the RAG benchmark works on a device that has never done document chat.
+        if (!ready && _activeEmbedderId.value == RagHolder.USE_MODEL_ID) {
+            onProgress("RAG · downloading embedder (USE-Lite ~6 MB)")
+            if (runCatching { downloadEmbeddingModel() }.getOrDefault(false)) {
+                ready = runCatching { ragHolder.ensureEmbeddingReady() }.getOrDefault(false)
+            }
+        }
+        val embedderId = _activeEmbedderId.value ?: "unknown"
+        if (!ready) {
+            return RagResult(
+                embedderId = embedderId, embedderDim = 0, reranker = false,
+                embedTextsPerSec = 0.0, embedCharsPerSec = 0.0, embedSampleCount = 0,
+                indexedChunks = 0, retrieveMsMedian = 0.0, retrieveMsP90 = 0.0, retrieveRuns = emptyList(),
+                error = "Embedder unavailable (network needed to fetch USE-Lite, or add one in Models).",
+            )
+        }
+        val dim = ragHolder.activeEmbeddingDim
+        val hasReranker = ragHolder.hasReranker
+
+        // 1. Embedding throughput.
+        onProgress("RAG · embedding throughput")
+        runCatching { ragHolder.embedProbe(RagBenchmark.EMBED_TEXTS.first()) } // warm-up
+        var chars = 0L
+        var count = 0
+        val embedStart = System.nanoTime()
+        repeat(3) {
+            for (text in RagBenchmark.EMBED_TEXTS) {
+                ragHolder.embedProbe(text)
+                count++
+                chars += text.length
+            }
+        }
+        val embedSec = (System.nanoTime() - embedStart) / 1_000_000_000.0
+        val textsPerSec = if (embedSec > 0) count / embedSec else 0.0
+        val charsPerSec = if (embedSec > 0) chars / embedSec else 0.0
+
+        // 2. End-to-end retrieve() latency against a temp corpus.
+        onProgress("RAG · indexing corpus")
+        val projectId = projectRepo.create("__benchmark__", System.currentTimeMillis())
+        var indexedChunks = 0
+        val retrieveRuns = mutableListOf<Double>()
+        try {
+            ragHolder.ingestText(projectId, "Benchmark corpus", RagBenchmark.CORPUS).collect { st ->
+                if (st is IngestState.Done) indexedChunks = st.chunkCount
+            }
+            runCatching { ragHolder.retrieve(projectId, RagBenchmark.QUERY) } // warm-up
+            onProgress("RAG · retrieve latency")
+            repeat(5) {
+                val r0 = System.nanoTime()
+                ragHolder.retrieve(projectId, RagBenchmark.QUERY)
+                retrieveRuns += (System.nanoTime() - r0) / 1_000_000.0
+            }
+        } finally {
+            runCatching { ragHolder.deleteDocumentsOfProject(projectId) }
+            runCatching { projectRepo.delete(projectId) }
+        }
+
+        return RagResult(
+            embedderId = embedderId, embedderDim = dim, reranker = hasReranker,
+            embedTextsPerSec = textsPerSec, embedCharsPerSec = charsPerSec, embedSampleCount = count,
+            indexedChunks = indexedChunks,
+            retrieveMsMedian = median(retrieveRuns), retrieveMsP90 = p90(retrieveRuns),
+            retrieveRuns = retrieveRuns,
+        )
     }
 
     // ---- Token ----
