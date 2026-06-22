@@ -11,9 +11,11 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.nativelm.app.llm.NativeLmViewModel
+import com.nativelm.app.llm.ROUTE_BENCHMARK
 import com.nativelm.app.llm.ROUTE_ONBOARDING
 import com.nativelm.app.llm.ROUTE_PDF_VIEWER
 import com.nativelm.app.llm.ROUTE_SPLASH
+import com.nativelm.app.ui.benchmark.BenchmarkScreen
 import com.nativelm.app.ui.onboarding.OnboardingScreen
 import com.nativelm.app.ui.pdf.PdfViewerScreen
 import com.nativelm.app.ui.splash.SplashScreen
@@ -76,6 +78,7 @@ fun NativeLmApp(vm: NativeLmViewModel, startRoute: String) {
                 vm = vm,
                 initial = if (start == "models") Destination.Models else Destination.Chat,
                 onOpenPdf = { nav.navigate(ROUTE_PDF_VIEWER) },
+                onOpenBenchmark = { nav.navigate(ROUTE_BENCHMARK) },
             )
         }
         composable(ROUTE_PDF_VIEWER) {
@@ -86,6 +89,9 @@ fun NativeLmApp(vm: NativeLmViewModel, startRoute: String) {
                     nav.popBackStack()
                 },
             )
+        }
+        composable(ROUTE_BENCHMARK) {
+            BenchmarkScreen(vm = vm, onBack = { nav.popBackStack() })
         }
     }
 }
