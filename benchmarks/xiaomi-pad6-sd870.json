@@ -1,0 +1,345 @@
+{
+    "schemaVersion": 1,
+    "appVersionName": "0.10.0",
+    "appVersionCode": 8,
+    "device": {
+        "manufacturer": "Xiaomi",
+        "model": "23043RP34I",
+        "soc": "QTI SM8250",
+        "androidRelease": "14",
+        "sdkInt": 34,
+        "totalRamMb": 7610,
+        "effectiveRamMb": 7610,
+        "cores": 8,
+        "abi": "arm64-v8a"
+    },
+    "run": {
+        "startedAtEpochMs": 1782158471989,
+        "startedAtIso": "2026-06-23T01:31:11+0530",
+        "batteryPct": 97,
+        "charging": true,
+        "thermalStatus": "none"
+    },
+    "config": {
+        "warmups": 1,
+        "repeats": 3,
+        "maxTokens": 128,
+        "temperature": 0.0,
+        "seed": 12345
+    },
+    "models": [
+        {
+            "modelId": "qwen3-0_6b-litertlm",
+            "displayName": "Qwen3 0.6B",
+            "fileName": "Qwen3-0.6B.litertlm",
+            "sizeBytes": 614236160,
+            "format": "LITERTLM",
+            "supportsVision": false,
+            "loadTimeMs": 772,
+            "loadedPssMb": 1202,
+            "peakPssMb": 1799,
+            "engineReported": false,
+            "prompts": [
+                {
+                    "name": "short",
+                    "promptChars": 59,
+                    "ttftMsMedian": 2418.250832,
+                    "ttftMsP90": 2489.039843,
+                    "decodeTpsMedian": 4.879325444647453,
+                    "decodeTpsP90": 4.913359221681045,
+                    "tokensMean": 129.0,
+                    "runs": [
+                        {
+                            "ttftMs": 2365.060884,
+                            "decodeTps": 4.913359221681045,
+                            "decodeTokens": 129,
+                            "totalMs": 28416.483999,
+                            "engineTtftSec": null,
+                            "enginePrefillTps": null,
+                            "engineDecodeTps": null,
+                            "enginePrefillTokens": null,
+                            "engineDecodeTokens": null
+                        },
+                        {
+                            "ttftMs": 2418.250832,
+                            "decodeTps": 4.879325444647453,
+                            "decodeTokens": 129,
+                            "totalMs": 28651.385197,
+                            "engineTtftSec": null,
+                            "enginePrefillTps": null,
+                            "engineDecodeTps": null,
+                            "enginePrefillTokens": null,
+                            "engineDecodeTokens": null
+                        },
+                        {
+                            "ttftMs": 2489.039843,
+                            "decodeTps": 4.837442991630971,
+                            "decodeTokens": 129,
+                            "totalMs": 28949.299989,
+                            "engineTtftSec": null,
+                            "enginePrefillTps": null,
+                            "engineDecodeTps": null,
+                            "enginePrefillTokens": null,
+                            "engineDecodeTokens": null
+                        }
+                    ]
+                },
+                {
+                    "name": "general",
+                    "promptChars": 86,
+                    "ttftMsMedian": 2570.159426,
+                    "ttftMsP90": 2591.343853,
+                    "decodeTpsMedian": 4.85912624864627,
+                    "decodeTpsP90": 4.8625072283985835,
+                    "tokensMean": 129.0,
+                    "runs": [
+                        {
+                            "ttftMs": 2570.159426,
+                            "decodeTps": 4.84972371720537,
+                            "decodeTokens": 129,
+                            "totalMs": 28963.415509,
+                            "engineTtftSec": null,
+                            "enginePrefillTps": null,
+                            "engineDecodeTps": null,
+                            "enginePrefillTokens": null,
+                            "engineDecodeTokens": null
+                        },
+                        {
+                            "ttftMs": 2591.343853,
+                            "decodeTps": 4.8625072283985835,
+                            "decodeTokens": 129,
+                            "totalMs": 28915.212176,
+                            "engineTtftSec": null,
+                            "enginePrefillTps": null,
+                            "engineDecodeTps": null,
+                            "enginePrefillTokens": null,
+                            "engineDecodeTokens": null
+                        },
+                        {
+                            "ttftMs": 2565.733228,
+                            "decodeTps": 4.85912624864627,
+                            "decodeTokens": 129,
+                            "totalMs": 28907.917697,
+                            "engineTtftSec": null,
+                            "enginePrefillTps": null,
+                            "engineDecodeTps": null,
+                            "enginePrefillTokens": null,
+                            "engineDecodeTokens": null
+                        }
+                    ]
+                },
+                {
+                    "name": "long_context",
+                    "promptChars": 2044,
+                    "ttftMsMedian": 9725.740101,
+                    "ttftMsP90": 10026.424006,
+                    "decodeTpsMedian": 4.836505358742045,
+                    "decodeTpsP90": 4.839415814960451,
+                    "tokensMean": 129.0,
+                    "runs": [
+                        {
+                            "ttftMs": 9678.524841,
+                            "decodeTps": 4.836505358742045,
+                            "decodeTokens": 129,
+                            "totalMs": 36143.914726,
+                            "engineTtftSec": null,
+                            "enginePrefillTps": null,
+                            "engineDecodeTps": null,
+                            "enginePrefillTokens": null,
+                            "engineDecodeTokens": null
+                        },
+                        {
+                            "ttftMs": 9725.740101,
+                            "decodeTps": 4.839415814960451,
+                            "decodeTokens": 129,
+                            "totalMs": 36175.213528,
+                            "engineTtftSec": null,
+                            "enginePrefillTps": null,
+                            "engineDecodeTps": null,
+                            "enginePrefillTokens": null,
+                            "engineDecodeTokens": null
+                        },
+                        {
+                            "ttftMs": 10026.424006,
+                            "decodeTps": 4.835706328376294,
+                            "decodeTokens": 129,
+                            "totalMs": 36496.186913,
+                            "engineTtftSec": null,
+                            "enginePrefillTps": null,
+                            "engineDecodeTps": null,
+                            "enginePrefillTokens": null,
+                            "engineDecodeTokens": null
+                        }
+                    ]
+                }
+            ],
+            "error": null
+        },
+        {
+            "modelId": "deepseek-r1-distill-qwen-1_5b-litertlm",
+            "displayName": "DeepSeek-R1 Distill 1.5B",
+            "fileName": "DeepSeek-R1-Distill-Qwen-1.5B_multi-prefill-seq_q8_ekv4096.litertlm",
+            "sizeBytes": 1833451520,
+            "format": "LITERTLM",
+            "supportsVision": false,
+            "loadTimeMs": 1103,
+            "loadedPssMb": 1250,
+            "peakPssMb": 2170,
+            "engineReported": false,
+            "prompts": [
+                {
+                    "name": "short",
+                    "promptChars": 59,
+                    "ttftMsMedian": 818.580885,
+                    "ttftMsP90": 818.894323,
+                    "decodeTpsMedian": 7.052374051045699,
+                    "decodeTpsP90": 7.060672994687338,
+                    "tokensMean": 75.33333333333333,
+                    "runs": [
+                        {
+                            "ttftMs": 814.27276,
+                            "decodeTps": 7.060672994687338,
+                            "decodeTokens": 75,
+                            "totalMs": 11294.8601,
+                            "engineTtftSec": null,
+                            "enginePrefillTps": null,
+                            "engineDecodeTps": null,
+                            "enginePrefillTokens": null,
+                            "engineDecodeTokens": null
+                        },
+                        {
+                            "ttftMs": 818.580885,
+                            "decodeTps": 7.016950430816665,
+                            "decodeTokens": 76,
+                            "totalMs": 11506.984735,
+                            "engineTtftSec": null,
+                            "enginePrefillTps": null,
+                            "engineDecodeTps": null,
+                            "enginePrefillTokens": null,
+                            "engineDecodeTokens": null
+                        },
+                        {
+                            "ttftMs": 818.894323,
+                            "decodeTps": 7.052374051045699,
+                            "decodeTokens": 75,
+                            "totalMs": 11311.814787,
+                            "engineTtftSec": null,
+                            "enginePrefillTps": null,
+                            "engineDecodeTps": null,
+                            "enginePrefillTokens": null,
+                            "engineDecodeTokens": null
+                        }
+                    ]
+                },
+                {
+                    "name": "general",
+                    "promptChars": 86,
+                    "ttftMsMedian": 2650.46026,
+                    "ttftMsP90": 2730.996821,
+                    "decodeTpsMedian": 7.027228474253181,
+                    "decodeTpsP90": 7.139699505005505,
+                    "tokensMean": 109.0,
+                    "runs": [
+                        {
+                            "ttftMs": 2650.46026,
+                            "decodeTps": 7.027228474253181,
+                            "decodeTokens": 129,
+                            "totalMs": 20865.322701,
+                            "engineTtftSec": null,
+                            "enginePrefillTps": null,
+                            "engineDecodeTps": null,
+                            "enginePrefillTokens": null,
+                            "engineDecodeTokens": null
+                        },
+                        {
+                            "ttftMs": 2640.121614,
+                            "decodeTps": 6.973646339160636,
+                            "decodeTokens": 129,
+                            "totalMs": 20994.938273,
+                            "engineTtftSec": null,
+                            "enginePrefillTps": null,
+                            "engineDecodeTps": null,
+                            "enginePrefillTokens": null,
+                            "engineDecodeTokens": null
+                        },
+                        {
+                            "ttftMs": 2730.996821,
+                            "decodeTps": 7.139699505005505,
+                            "decodeTokens": 69,
+                            "totalMs": 12255.207182,
+                            "engineTtftSec": null,
+                            "enginePrefillTps": null,
+                            "engineDecodeTps": null,
+                            "enginePrefillTokens": null,
+                            "engineDecodeTokens": null
+                        }
+                    ]
+                },
+                {
+                    "name": "long_context",
+                    "promptChars": 2044,
+                    "ttftMsMedian": 10805.41859,
+                    "ttftMsP90": 10880.826767,
+                    "decodeTpsMedian": 7.041224354143228,
+                    "decodeTpsP90": 7.083002925841702,
+                    "tokensMean": 129.0,
+                    "runs": [
+                        {
+                            "ttftMs": 10465.698121,
+                            "decodeTps": 7.083002925841702,
+                            "decodeTokens": 129,
+                            "totalMs": 28537.129312,
+                            "engineTtftSec": null,
+                            "enginePrefillTps": null,
+                            "engineDecodeTps": null,
+                            "enginePrefillTokens": null,
+                            "engineDecodeTokens": null
+                        },
+                        {
+                            "ttftMs": 10880.826767,
+                            "decodeTps": 6.949228494366911,
+                            "decodeTokens": 129,
+                            "totalMs": 29300.137645,
+                            "engineTtftSec": null,
+                            "enginePrefillTps": null,
+                            "engineDecodeTps": null,
+                            "enginePrefillTokens": null,
+                            "engineDecodeTokens": null
+                        },
+                        {
+                            "ttftMs": 10805.41859,
+                            "decodeTps": 7.041224354143228,
+                            "decodeTokens": 129,
+                            "totalMs": 28984.07525,
+                            "engineTtftSec": null,
+                            "enginePrefillTps": null,
+                            "engineDecodeTps": null,
+                            "enginePrefillTokens": null,
+                            "engineDecodeTokens": null
+                        }
+                    ]
+                }
+            ],
+            "error": null
+        }
+    ],
+    "rag": {
+        "embedderId": "universal-sentence-encoder",
+        "embedderDim": 100,
+        "reranker": false,
+        "embedTextsPerSec": 28.509868451303337,
+        "embedCharsPerSec": 1837.1046483308587,
+        "embedSampleCount": 48,
+        "indexedChunks": 5,
+        "retrieveMsMedian": 39.709375,
+        "retrieveMsP90": 45.716927,
+        "retrieveRuns": [
+            39.709375,
+            39.558854,
+            45.716927,
+            39.374219,
+            42.965625
+        ],
+        "error": null
+    }
+}

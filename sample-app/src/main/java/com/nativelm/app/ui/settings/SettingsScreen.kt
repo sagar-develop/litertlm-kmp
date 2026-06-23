@@ -61,6 +61,7 @@ fun SettingsScreen(
     vm: NativeLmViewModel,
     onBack: () -> Unit,
     onOpenModels: () -> Unit,
+    onOpenBenchmark: () -> Unit = {},
     showBack: Boolean = true,
 ) {
     val themeMode by vm.themeMode.collectAsState()
@@ -218,6 +219,31 @@ fun SettingsScreen(
                     context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(PRIVACY_URL)))
                 }
             }
+
+            Section("Developer")
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onOpenBenchmark)
+                    .padding(vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Column(Modifier.weight(1f).padding(end = 12.dp)) {
+                    Text("Benchmark", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        "Measure decode tok/s, TTFT, load time, and peak RAM on this device.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Icon(
+                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
             Spacer(Modifier.height(8.dp))
             Text(
                 "No telemetry · No account · No upload",

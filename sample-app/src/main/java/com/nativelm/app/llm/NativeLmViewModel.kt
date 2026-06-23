@@ -5,6 +5,7 @@
 package com.nativelm.app.llm
 
 import android.app.Application
+import android.content.Intent
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -23,6 +24,16 @@ import com.sagar.aicore.ModelRole
 import com.sagar.aicore.SessionState
 import com.sagar.aicore.TurnRole
 import com.nativelm.app.BuildConfig
+import com.nativelm.app.benchmark.BenchConfig
+import com.nativelm.app.benchmark.BenchmarkReport
+import com.nativelm.app.benchmark.BenchmarkRunner
+import com.nativelm.app.benchmark.BenchmarkUiState
+import com.nativelm.app.benchmark.RagBenchmark
+import com.nativelm.app.benchmark.RagResult
+import com.nativelm.app.benchmark.median
+import com.nativelm.app.benchmark.p90
+import com.nativelm.app.benchmark.toCsv
+import com.nativelm.app.benchmark.toJson
 import com.nativelm.app.data.AppPreferences
 import com.nativelm.app.data.SecureStore
 import com.nativelm.app.data.ThemeMode
@@ -55,7 +66,10 @@ import com.sagar.aicore.studio.sanitizeStudioMarkdown
 import com.sagar.aicore.studio.stripForSpeech
 import io.github.aakira.napier.Napier
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -88,6 +102,7 @@ const val ROUTE_SETTINGS = "settings"
 const val ROUTE_DOCUMENTS = "documents"
 const val ROUTE_PDF_VIEWER = "pdf_viewer"
 const val ROUTE_STUDIO = "studio"
+const val ROUTE_BENCHMARK = "benchmark"
 
 /** Grace window before the app re-locks after going to the background (avoids
  *  re-prompting on quick returns like the system file picker). */
@@ -251,6 +266,20 @@ class NativeLmViewModel(app: Application) : ViewModel() {
 
     private val _engineLoad = MutableStateFlow<EngineLoad>(EngineLoad.Idle)
     val engineLoad: StateFlow<EngineLoad> = _engineLoad.asStateFlow()
+
+    // ---- Benchmark (developer tool; issue #38) ----
+    private val benchmarkRunner by lazy {
+        // Peak PSS comes from the already-running MetricsRepository (cheap cached read) —
+        // never an inline Debug.getMemoryInfo() smaps walk, which would skew decode timing.
+        BenchmarkRunner(
+            appContext, engineHolder, catalog, ::displayName, deviceRamMb,
+            currentPssMb = { metrics.snapshot.value.memory.totalPssMb },
+        )
+    }
+    private val _benchmarkState = MutableStateFlow<BenchmarkUiState>(BenchmarkUiState.Idle)
+    val benchmarkState: StateFlow<BenchmarkUiState> = _benchmarkState.asStateFlow()
+    private var benchmarkJob: Job? = null
+    private var lastBenchmarkReport: BenchmarkReport? = null
 
     private val _chat = MutableStateFlow(ChatState())
     val chat: StateFlow<ChatState> = _chat.asStateFlow()
@@ -536,6 +565,187 @@ class NativeLmViewModel(app: Application) : ViewModel() {
 
     fun completeOnboarding() {
         viewModelScope.launch { prefs.setOnboardingCompleted(true) }
+    }
+
+    // ---- Benchmark (developer tool; issue #38) ----
+
+    /**
+     * Run the on-device benchmark matrix over the given downloaded LLMs. Takes over the
+     * engine (releasing + reloading each model), so chat is unavailable until it finishes
+     * — we restore the user's active model in `finally`. Cancel via [cancelBenchmark].
+     */
+    fun runBenchmark(modelIds: List<String>, repeats: Int, maxTokens: Int) {
+        if (benchmarkJob?.isActive == true || modelIds.isEmpty()) return
+        benchmarkJob = viewModelScope.launch(Dispatchers.Default) {
+            _benchmarkState.value = BenchmarkUiState.Running("Starting…", 0, modelIds.size, 0f)
+            _engineLoad.value = EngineLoad.Loading // chat is unavailable while the benchmark owns the engine
+            try {
+                val report = benchmarkRunner.run(
+                    modelIds = modelIds,
+                    config = BenchConfig(
+                        warmups = 1,
+                        repeats = repeats,
+                        maxTokens = maxTokens,
+                        temperature = 0f,
+                        seed = 12345L,
+                    ),
+                    appVersionName = BuildConfig.VERSION_NAME,
+                    appVersionCode = BuildConfig.VERSION_CODE,
+                    onProgress = { label, idx, count, tps ->
+                        _benchmarkState.value = BenchmarkUiState.Running(label, idx, count, tps)
+                    },
+                    ragProbe = {
+                        measureRag { label ->
+                            _benchmarkState.value = BenchmarkUiState.Running(
+                                label, (modelIds.size - 1).coerceAtLeast(0), modelIds.size, 0f,
+                            )
+                        }
+                    },
+                )
+                lastBenchmarkReport = report
+                _benchmarkState.value = BenchmarkUiState.Done(report)
+            } catch (_: CancellationException) {
+                _benchmarkState.value = BenchmarkUiState.Idle
+            } catch (e: Throwable) {
+                Napier.e(tag = TAG, throwable = e) { "Benchmark failed" }
+                _benchmarkState.value = BenchmarkUiState.Failed(e.message ?: "Benchmark failed")
+            } finally {
+                // Reload the user's model even if cancelled, so chat works again afterward.
+                withContext(NonCancellable) { restoreActiveModelAfterBenchmark() }
+            }
+        }
+    }
+
+    fun cancelBenchmark() {
+        benchmarkJob?.cancel()
+    }
+
+    fun dismissBenchmarkResult() {
+        if (benchmarkJob?.isActive == true) return
+        _benchmarkState.value = BenchmarkUiState.Idle
+    }
+
+    /** Write the last report to a SAF document as JSON. No-op if nothing has run. */
+    fun exportBenchmarkJson(uri: Uri) = writeBenchmark(uri) { it.toJson() }
+
+    /** Write the last report to a SAF document as CSV (one row per model × prompt). */
+    fun exportBenchmarkCsv(uri: Uri) = writeBenchmark(uri) { it.toCsv() }
+
+    private fun writeBenchmark(uri: Uri, render: (BenchmarkReport) -> String) {
+        val report = lastBenchmarkReport ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                appContext.contentResolver.openOutputStream(uri)?.use {
+                    it.write(render(report).toByteArray())
+                }
+            }.onFailure { Napier.e(tag = TAG, throwable = it) { "Benchmark export failed" } }
+        }
+    }
+
+    /** Share the last report's JSON via the system share sheet. */
+    fun shareBenchmarkJson() {
+        val report = lastBenchmarkReport ?: return
+        val send = Intent(Intent.ACTION_SEND).apply {
+            type = "application/json"
+            putExtra(Intent.EXTRA_TEXT, report.toJson())
+        }
+        runCatching {
+            appContext.startActivity(
+                Intent.createChooser(send, "Share benchmark results")
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+        }.onFailure { Napier.e(tag = TAG, throwable = it) { "Benchmark share failed" } }
+    }
+
+    private suspend fun restoreActiveModelAfterBenchmark() {
+        val descriptor = _activeModelId.value?.let { catalog.byId(it) }
+        if (descriptor == null) {
+            _engineLoad.value = EngineLoad.Idle
+            return
+        }
+        engineHolder.release()
+        val load = toEngineLoad(
+            engineHolder.initializeEngine(engineHolder.modelPath(descriptor.fileName), descriptor.supportsVision),
+        )
+        _engineLoad.value = load
+        if (load is EngineLoad.Ready) openSession(_chat.value.messages)
+    }
+
+    /**
+     * Measure the RAG pipeline: embedding throughput (texts/sec over canonical sentences)
+     * and end-to-end retrieve() latency against a freshly-indexed temp corpus. Uses the
+     * separate embedding engine (independent of the LLM engine), and deletes the temp
+     * project afterward so it never pollutes the user's notebooks.
+     */
+    private suspend fun measureRag(onProgress: (String) -> Unit): RagResult {
+        onProgress("RAG · preparing embedder")
+        resolveAndConfigureEmbedder()
+        var ready = runCatching { ragHolder.ensureEmbeddingReady() }.getOrDefault(false)
+        // Self-provision the tiny ungated USE-Lite embedder (~6 MB) if nothing is present,
+        // so the RAG benchmark works on a device that has never done document chat.
+        if (!ready && _activeEmbedderId.value == RagHolder.USE_MODEL_ID) {
+            onProgress("RAG · downloading embedder (USE-Lite ~6 MB)")
+            if (runCatching { downloadEmbeddingModel() }.getOrDefault(false)) {
+                ready = runCatching { ragHolder.ensureEmbeddingReady() }.getOrDefault(false)
+            }
+        }
+        val embedderId = _activeEmbedderId.value ?: "unknown"
+        if (!ready) {
+            return RagResult(
+                embedderId = embedderId, embedderDim = 0, reranker = false,
+                embedTextsPerSec = 0.0, embedCharsPerSec = 0.0, embedSampleCount = 0,
+                indexedChunks = 0, retrieveMsMedian = 0.0, retrieveMsP90 = 0.0, retrieveRuns = emptyList(),
+                error = "Embedder unavailable (network needed to fetch USE-Lite, or add one in Models).",
+            )
+        }
+        val dim = ragHolder.activeEmbeddingDim
+        val hasReranker = ragHolder.hasReranker
+
+        // 1. Embedding throughput.
+        onProgress("RAG · embedding throughput")
+        runCatching { ragHolder.embedProbe(RagBenchmark.EMBED_TEXTS.first()) } // warm-up
+        var chars = 0L
+        var count = 0
+        val embedStart = System.nanoTime()
+        repeat(3) {
+            for (text in RagBenchmark.EMBED_TEXTS) {
+                ragHolder.embedProbe(text)
+                count++
+                chars += text.length
+            }
+        }
+        val embedSec = (System.nanoTime() - embedStart) / 1_000_000_000.0
+        val textsPerSec = if (embedSec > 0) count / embedSec else 0.0
+        val charsPerSec = if (embedSec > 0) chars / embedSec else 0.0
+
+        // 2. End-to-end retrieve() latency against a temp corpus.
+        onProgress("RAG · indexing corpus")
+        val projectId = projectRepo.create("__benchmark__", System.currentTimeMillis())
+        var indexedChunks = 0
+        val retrieveRuns = mutableListOf<Double>()
+        try {
+            ragHolder.ingestText(projectId, "Benchmark corpus", RagBenchmark.CORPUS).collect { st ->
+                if (st is IngestState.Done) indexedChunks = st.chunkCount
+            }
+            runCatching { ragHolder.retrieve(projectId, RagBenchmark.QUERY) } // warm-up
+            onProgress("RAG · retrieve latency")
+            repeat(5) {
+                val r0 = System.nanoTime()
+                ragHolder.retrieve(projectId, RagBenchmark.QUERY)
+                retrieveRuns += (System.nanoTime() - r0) / 1_000_000.0
+            }
+        } finally {
+            runCatching { ragHolder.deleteDocumentsOfProject(projectId) }
+            runCatching { projectRepo.delete(projectId) }
+        }
+
+        return RagResult(
+            embedderId = embedderId, embedderDim = dim, reranker = hasReranker,
+            embedTextsPerSec = textsPerSec, embedCharsPerSec = charsPerSec, embedSampleCount = count,
+            indexedChunks = indexedChunks,
+            retrieveMsMedian = median(retrieveRuns), retrieveMsP90 = p90(retrieveRuns),
+            retrieveRuns = retrieveRuns,
+        )
     }
 
     // ---- Token ----

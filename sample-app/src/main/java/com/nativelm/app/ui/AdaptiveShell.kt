@@ -57,6 +57,7 @@ fun AdaptiveShell(
     vm: NativeLmViewModel,
     initial: Destination,
     onOpenPdf: () -> Unit,
+    onOpenBenchmark: () -> Unit,
 ) {
     var selected by rememberSaveable { mutableStateOf(initial) }
 
@@ -124,6 +125,7 @@ fun AdaptiveShell(
                 showBack = isCompact,
                 onBack = { selected = Destination.Chat },
                 onOpenModels = { selected = Destination.Models },
+                onOpenBenchmark = onOpenBenchmark,
             )
         }
     }
