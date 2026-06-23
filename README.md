@@ -100,7 +100,7 @@ In your **app module's `build.gradle.kts`**:
 
 ```kotlin
 dependencies {
-    implementation("com.github.sagar-develop:litertlm-kmp:v0.10.0")
+    implementation("com.github.sagar-develop:litertlm-kmp:v0.11.0")
 }
 ```
 
@@ -388,10 +388,11 @@ Typical engagements:
 - **v0.4.0** — **on-device document chat**: fully local **document RAG** in the NativeLM app — import a PDF/text source, and the app extracts → chunks → embeds (MediaPipe USE-Lite) → stores in an ObjectBox **HNSW** vector index → retrieves project-scoped, relevance-gated context → answers grounded with **citations**. **Projects** (notebooks) keep each chat scoped to its own sources; default chat stays general. Engine: `consumer-rules.pro` now keeps the MediaPipe text-embedder + Flogger + protobuf so RAG embedding survives R8 minification.
 - **v0.5.0** — **on-device OCR** (scanned PDFs + images) and **hybrid keyword + vector retrieval** in NativeLM; tap-to-open-source citations with in-page highlight and pinch-to-zoom in the PDF viewer.
 - **v0.6.0** — **NativeLM Studio**: an on-device document studio that turns a project's sources into artifacts via a map-reduce pass — Briefing, FAQ, Key Topics, Study Guide, Timeline, Mind Map, plus **Audio Overview** and **Podcast** rendered with on-device Text-to-Speech.
-- **Future** — iOS native engine via LiteRT-LM's Swift Metal-accelerated APIs; a benchmark suite (tokens/sec, RAM ceiling, battery drain) across a device matrix.
+- **v0.11.0** — **on-device benchmark suite**: a reproducible in-app harness (Settings → Developer → Benchmark) that measures cold load, time-to-first-token, decode tok/s, peak RAM, embedding throughput, and end-to-end RAG latency, exporting JSON/CSV. First published numbers on a Snapdragon 7 Gen 1 phone + Snapdragon 870 tablet live in [`BENCHMARKS.md`](BENCHMARKS.md) + [`benchmarks/`](benchmarks/).
+- **Future** — iOS native engine via LiteRT-LM's Swift Metal-accelerated APIs; GPU/NPU backends and energy / sustained-thermal benchmarking on top of the CPU baseline.
 
 > The **engine library** (`com.sagar:litertlm-kmp`) and the **NativeLM** app
-> share one version line; the latest release is **v0.10.0** (see
+> share one version line; the latest release is **v0.11.0** (see
 > [`lib/build.gradle.kts`](lib/build.gradle.kts) and
 > [`CHANGELOG.md`](CHANGELOG.md) for the full history).
 

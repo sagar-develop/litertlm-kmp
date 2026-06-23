@@ -38,8 +38,8 @@ android {
         applicationId = "com.nativelm.app"
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
-        versionCode = 8
-        versionName = "0.10.0"
+        versionCode = 9
+        versionName = "0.11.0"
 
         // Only arm64-v8a: every device with the RAM to run a 2.6 GB LLM is
         // 64-bit, and the LiteRT-LM / MediaPipe .so dominate APK size.

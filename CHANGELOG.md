@@ -9,7 +9,26 @@ and the project loosely follows [Semantic Versioning](https://semver.org/).
 > `com.sagar:litertlm-kmp`) and the **showcase app** (`sample-app/`, NativeLM)
 > live in one repo and share a single version line. Entries below note which
 > surface a change lands on. The engine library version in
-> `lib/build.gradle.kts` tracks the latest release (`0.10.0`).
+> `lib/build.gradle.kts` tracks the latest release (`0.11.0`).
+
+## [0.11.0] — 2026-06-23
+
+### Added
+- **On-device benchmark suite** — a reproducible, in-app benchmark harness
+  (Settings → Developer → Benchmark) that loads each downloaded model into the real
+  LiteRT-LM engine and measures, on-device: cold load time, time-to-first-token
+  (prefill latency), steady-state decode tok/s, and peak process RAM, across a fixed
+  short / general / long-context prompt set (1 warm-up + N runs → median + p90,
+  temperature 0, fixed seed). Results export to **JSON/CSV** via SAF. (app)
+- **RAG performance measurement** — embedding throughput (texts/sec) and end-to-end
+  `retrieve()` latency against a freshly-indexed, throwaway corpus (deleted afterward);
+  the ungated USE-Lite embedder is auto-fetched if none is present. (app)
+- **First published numbers** — `BENCHMARKS.md` + raw per-device JSON under
+  `benchmarks/` for a Snapdragon 7 Gen 1 phone and a Snapdragon 870 tablet (CPU
+  backend). Headline: Gemma 4 E2B ~7 tok/s; the smaller Qwen3 0.6B is *slower*;
+  long-context TTFT ~10–11 s; RAG retrieve ~35–40 ms. Closes the README "benchmark
+  suite" roadmap item ([#38](https://github.com/sagar-develop/litertlm-kmp/issues/38));
+  CPU baseline for the GPU/NPU work ([#31](https://github.com/sagar-develop/litertlm-kmp/issues/31)).
 
 ## [0.10.0] — 2026-06-09
 
